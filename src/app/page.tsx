@@ -1,204 +1,165 @@
+// src/app/page.tsx
 "use client";
 
-import React, { useState } from 'react';
-import { 
-  Users, 
-  Settings2, 
-  CalendarPlus, 
-  UserPlus, 
-  Trash2, 
-  Stethoscope,
-  ChevronRight
-} from 'lucide-react';
+import { useState } from "react";
 
-// 初期データ：15名の医師（デモ用）
-const INITIAL_DOCTORS = [
-  "佐藤 健太郎", "鈴木 一郎", "高橋 怜奈", "田中 裕介", "伊藤 純子",
-  "渡辺 徹", "山本 舞", "中村 昭夫", "小林 直樹", "加藤 恵子",
-  "吉田 誠", "山田 花子", "佐々木 亮", "山口 智子", "松本 孝"
-];
+export default function DashboardPage() {
+  const [year, setYear] = useState<number>(2024);
+  const [month, setMonth] = useState<number>(4);
+  const [schedule, setSchedule] = useState<any[]>([]);
+  const [scores, setScores] = useState<any>({});
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
-export default function OncallDashboard() {
-  const [doctors, setDoctors] = useState<string[]>(INITIAL_DOCTORS);
-  const [newDoctorName, setNewDoctorName] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
+  const handleGenerate = async () => {
+    setIsLoading(true);
+    setError("");
+    setSchedule([]);
+    setScores({});
 
-  // ルール設定の状態（MVP用）
-  const [rules, setRules] = useState({
-    fourDayInterval: true,
-    noConsecutiveHolidays: true,
-    saturdayLimit: true,
-  });
+    try {
+      // FastAPIの最適化エンドポイントを叩く
+      const res = await fetch("http://127.0.0.1:8000/api/optimize/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year: year,
+          month: month,
+          num_doctors: 10, // テスト用: 医師10人
+          holidays: [29],  // テスト用: 29日を祝日とする
+          unavailable: { "0": [1, 2, 3], "1": [29, 30] }, // テスト用: 休み希望
+        }),
+      });
 
-  // 医師の追加
-  const addDoctor = () => {
-    if (newDoctorName.trim()) {
-      setDoctors([...doctors, newDoctorName.trim()]);
-      setNewDoctorName("");
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "最適化に失敗しました");
+      }
+
+      const data = await res.json();
+      setSchedule(data.schedule);
+      setScores(data.scores);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // 医師の削除
-  const removeDoctor = (index: number) => {
-    setDoctors(doctors.filter((_, i) => i !== index));
-  };
-
-  // 生成シミュレーション
-  const handleGenerate = () => {
-    setIsGenerating(true);
-    // TODO: ここでバックエンド（FastAPI）の最適化エンジンを叩く
-    setTimeout(() => {
-      setIsGenerating(false);
-      alert("当直表の生成リクエストを送信しました（MVP開発中）");
-    }, 1500);
+  // 曜日を計算するヘルパー関数
+  const getWeekday = (year: number, month: number, day: number) => {
+    const weekdays = ["日", "月", "火", "水", "木", "金", "土"];
+    const date = new Date(year, month - 1, day);
+    return weekdays[date.getDay()];
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6 md:p-12">
-      <div className="max-w-5xl mx-auto">
-        
-        {/* ヘッダー */}
-        <header className="mb-8 flex items-center justify-between">
+    <div className="min-h-screen bg-gray-50 p-8 font-sans">
+      <main className="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-8">
+        <h1 className="text-3xl font-bold text-gray-800 mb-8 border-b pb-4">
+          🏥 当直表 自動生成ダッシュボード
+        </h1>
+
+        {/* コントロールパネル */}
+        <div className="flex items-end gap-4 mb-8 bg-blue-50 p-6 rounded-lg border border-blue-100">
           <div>
-            <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
-              <Stethoscope className="text-blue-600" />
-              当直表最適化アシスタント
-            </h1>
-            <p className="text-slate-500 mt-2">内科部門：月間スケジュール作成</p>
+            <label className="block text-sm font-bold text-gray-700 mb-2">年</label>
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="border border-gray-300 rounded p-2 w-24 text-center"
+            />
           </div>
-          <div className="bg-white px-4 py-2 rounded-lg shadow-sm border border-slate-200">
-            <span className="text-sm font-medium text-slate-600">対象医師: {doctors.length}名</span>
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">月</label>
+            <input
+              type="number"
+              value={month}
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="border border-gray-300 rounded p-2 w-20 text-center"
+            />
           </div>
-        </header>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          
-          {/* 左カラム：医師名簿管理 */}
-          <section className="md:col-span-2 space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                <h2 className="font-semibold text-slate-700 flex items-center gap-2">
-                  <Users size={18} /> 医師名簿
-                </h2>
-              </div>
-              
-              <div className="p-4">
-                <div className="flex gap-2 mb-4">
-                  <input 
-                    type="text" 
-                    value={newDoctorName}
-                    onChange={(e) => setNewDoctorName(e.target.value)}
-                    placeholder="新しい医師名を入力"
-                    className="flex-1 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                  <button 
-                    onClick={addDoctor}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center gap-1 text-sm transition-colors"
-                  >
-                    <UserPlus size={16} /> 追加
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {doctors.map((doc, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100 group">
-                      <span className="text-slate-700 text-sm">{doc}</span>
-                      <button 
-                        onClick={() => removeDoctor(index)}
-                        className="text-slate-400 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 右カラム：ルール設定 ＆ 実行 */}
-          <section className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-              <h2 className="font-semibold text-slate-700 flex items-center gap-2 mb-4">
-                <Settings2 size={18} /> 基本ルール設定
-              </h2>
-              
-              <div className="space-y-4">
-                <label className="flex items-start gap-3 cursor-pointer group">
-                  <input 
-                    type="checkbox" 
-                    checked={rules.fourDayInterval}
-                    onChange={() => setRules({...rules, fourDayInterval: !rules.fourDayInterval})}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-                    <strong>4日間隔ルール</strong><br/>
-                    <span className="text-xs text-slate-400">当直後、最低4日は空ける</span>
-                  </span>
-                </label>
-
-                <label className="flex items-start gap-3 cursor-pointer group">
-                  <input 
-                    type="checkbox" 
-                    checked={rules.saturdayLimit}
-                    onChange={() => setRules({...rules, saturdayLimit: !rules.saturdayLimit})}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-                    <strong>土曜当直制限</strong><br/>
-                    <span className="text-xs text-slate-400">土曜当直は月1回まで</span>
-                  </span>
-                </label>
-
-                <label className="flex items-start gap-3 cursor-pointer group">
-                  <input 
-                    type="checkbox" 
-                    checked={rules.noConsecutiveHolidays}
-                    onChange={() => setRules({...rules, noConsecutiveHolidays: !rules.noConsecutiveHolidays})}
-                    className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-                    <strong>日祝兼務禁止</strong><br/>
-                    <span className="text-xs text-slate-400">同一日の日直と当直を禁止</span>
-                  </span>
-                </label>
-              </div>
-
-              <div className="mt-8">
-                <button 
-                  onClick={handleGenerate}
-                  disabled={isGenerating || doctors.length === 0}
-                  className={`w-full py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all ${
-                    isGenerating 
-                    ? "bg-slate-400 cursor-not-allowed" 
-                    : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-95"
-                  }`}
-                >
-                  {isGenerating ? (
-                    <span className="animate-pulse">最適化中...</span>
-                  ) : (
-                    <>
-                      当直表を自動生成する
-                      <ChevronRight size={20} />
-                    </>
-                  )}
-                </button>
-                <p className="text-[10px] text-center text-slate-400 mt-3">
-                  ※ Google OR-Toolsによる最適化エンジンが起動します
-                </p>
-              </div>
-            </div>
-
-            {/* ヒント */}
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-              <p className="text-xs text-blue-700 leading-relaxed">
-                💡 <strong>Tips:</strong> 医師名の横の削除ボタンでメンバーを調整できます。不可日の入力は次のステップで実施します。
-              </p>
-            </div>
-          </section>
-
+          <button
+            onClick={handleGenerate}
+            disabled={isLoading}
+            className={`px-8 py-2 rounded font-bold text-white transition ${
+              isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700 shadow"
+            }`}
+          >
+            {isLoading ? "AIが神シフトを計算中..." : "✨ シフトを自動生成する"}
+          </button>
         </div>
-      </div>
-    </main>
+
+        {/* エラー表示 */}
+        {error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-8 rounded">
+            <p className="font-bold">エラーが発生しました</p>
+            <p>{error}</p>
+          </div>
+        )}
+
+        {/* 結果表示エリア */}
+        {schedule.length > 0 && (
+          <div className="animate-fade-in">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">{year}年 {month}月 当直表</h2>
+            
+            <div className="overflow-hidden rounded-lg border border-gray-200 shadow-sm mb-8">
+              <table className="min-w-full bg-white text-center">
+                <thead className="bg-gray-100 text-gray-700">
+                  <tr>
+                    <th className="py-3 px-4 border-b">日付</th>
+                    <th className="py-3 px-4 border-b">曜日</th>
+                    <th className="py-3 px-4 border-b bg-orange-50">日直 (日祝のみ)</th>
+                    <th className="py-3 px-4 border-b bg-indigo-50">当直</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {schedule.map((row) => {
+                    const weekday = getWeekday(year, month, row.day);
+                    const isWeekend = weekday === "土" || weekday === "日" || row.is_holiday;
+                    
+                    return (
+                      <tr key={row.day} className={`border-b ${row.is_holiday || weekday === "日" ? "bg-red-50" : weekday === "土" ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                        <td className="py-2 px-4 font-semibold">{row.day}日 {row.is_holiday && <span className="text-red-500 text-xs ml-1">[祝]</span>}</td>
+                        <td className={`py-2 px-4 font-bold ${weekday === "日" ? "text-red-500" : weekday === "土" ? "text-blue-500" : ""}`}>{weekday}</td>
+                        <td className="py-2 px-4">
+                          {row.day_shift !== null ? (
+                            <span className="inline-block bg-orange-100 text-orange-800 px-3 py-1 rounded-full font-bold">医師 {row.day_shift}</span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2 px-4">
+                          {row.night_shift !== null ? (
+                            <span className="inline-block bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full font-bold">医師 {row.night_shift}</span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* スコア（負担）の表示 */}
+            <div className="bg-gray-50 p-6 rounded-lg border border-gray-200">
+              <h3 className="text-lg font-bold text-gray-700 mb-3">⚖️ 負担スコア（全員が平等になるよう調整済）</h3>
+              <div className="flex flex-wrap gap-4">
+                {Object.entries(scores).map(([docId, score]) => (
+                  <div key={docId} className="bg-white px-4 py-2 rounded border border-gray-200 shadow-sm flex flex-col items-center">
+                    <span className="text-sm text-gray-500">医師 {docId}</span>
+                    <span className="text-lg font-bold text-gray-800">{String(score)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
