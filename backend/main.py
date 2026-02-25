@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
-from routers import health
+from routers import health, optimize
 
 
 settings = get_settings()
@@ -20,6 +20,7 @@ app.add_middleware(
 
 # ルーターを登録
 app.include_router(health.router)
+app.include_router(optimize.router)
 
 
 @app.get("/")
