@@ -17,9 +17,17 @@ export default function DashboardPage() {
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
   const objectiveWeights = {
+    // 既存互換用
     month_fairness: 100,
     past_sat_gap: 10,
     past_sunhol_gap: 5,
+    // 統合版：新規追加（※バックエンドに合わせて整数化）
+    gap5: 100,          // 最大級（勤務後5日目を強く避ける）
+    pre_clinic: 100,    // 最大級（外来前日当直を強く避ける）
+    sat_consec: 80,     // 次点（2ヶ月連続土曜を避ける）
+    gap6: 50,           // 次点（勤務後6日目を避ける）
+    score_balance: 30,  // 中（全体スコアの公平性）
+    target: 10,         // 弱（個別ターゲット）
   };
 
   // シフト結果・状態管理
@@ -35,53 +43,55 @@ export default function DashboardPage() {
   const [unavailableMap, setUnavailableMap] = useState<Record<number, number[]>>({});
 
   // ✅ 固定不可曜日（毎週固定）
-  // doctorIndex -> [weekday 0=Mon..6=Sun]  ← Python datetime.weekday() と一致させる
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<number, number[]>>({});
 
   // ✅ 月跨ぎ4日間隔（前月末勤務）
-  // prev_month_last_day: 前月最終日(28/29/30/31)
-  // prev_month_worked_days: doctorIndex -> [前月の日付]
   const calcPrevMonthLastDay = (y: number, m: number) => {
-    // m は 1..12
-    // new Date(y, m-1, 0) は「前月の最終日」
     return new Date(y, m - 1, 0).getDate();
   };
   const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2024, 4));
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
 
-  // 医師リストの初期取得
-  useEffect(() => {
-    const fetchDoctors = async () => {
-      try {
-        const res = await fetch("http://127.0.0.1:8000/api/doctors/");
-        if (res.ok) {
-          const data = await res.json();
-          setDoctors(data);
-          setNumDoctors(data.length);
-        }
-      } catch (err) {
-        console.error("医師リストの取得に失敗:", err);
-      }
-    };
-    fetchDoctors();
-  }, []);
+  // ✨ 【追加】個別スコア・条件設定用 State
+  const [minScoreMap, setMinScoreMap] = useState<Record<number, number>>({});
+  const [maxScoreMap, setMaxScoreMap] = useState<Record<number, number>>({});
+  const [targetScoreMap, setTargetScoreMap] = useState<Record<number, number>>({});
+  const [satPrevMap, setSatPrevMap] = useState<Record<number, boolean>>({});
 
-  // 年月が変わったら「前月最終日」を自動更新（選択はクリア）
+// 医師リストの初期取得
+useEffect(() => {
+  const fetchDoctors = async () => {
+    try {
+      // ✅ 環境変数からURLを取得。設定されていなければローカルのURLを使う
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/doctors/`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        setDoctors(data);
+        setNumDoctors(data.length);
+      }
+    } catch (err) {
+      console.error("医師リストの取得に失敗:", err);
+    }
+  };
+  fetchDoctors();
+}, []);
+
+  // 年月が変わったら「前月最終日」を自動更新
   useEffect(() => {
     const last = calcPrevMonthLastDay(year, month);
     setPrevMonthLastDay(last);
     setPrevMonthWorkedDaysMap({});
   }, [year, month]);
 
-  // ヘルパー関数（表示用：JS基準）
+  // ヘルパー関数
   const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"]; // JS getDay(): 0=日..6=土
+  const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"]; 
   const getWeekday = (y: number, m: number, day: number) => {
     return weekdaysJp[new Date(y, m - 1, day).getDay()];
   };
-
-  // ✅ Python weekday 用（バックエンドと合わせる：0=月..6=日）
-  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日"]; // Python weekday(): 0=月..6=日
+  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日"]; 
   const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
 
   // 共通祝日の切り替え
@@ -91,7 +101,7 @@ export default function DashboardPage() {
     );
   };
 
-  // 医師個別の休み（日付）を切り替える
+  // 個別休みの切り替え
   const toggleUnavailable = (docIdx: number, day: number) => {
     setUnavailableMap((prev) => {
       const currentDays = prev[docIdx] || [];
@@ -102,7 +112,7 @@ export default function DashboardPage() {
     });
   };
 
-  // 固定不可曜日を切り替える（Python基準 weekday を保持）
+  // 固定不可曜日の切り替え
   const toggleFixedWeekday = (docIdx: number, weekdayPy: number) => {
     setFixedUnavailableWeekdaysMap((prev) => {
       const current = prev[docIdx] || [];
@@ -113,7 +123,7 @@ export default function DashboardPage() {
     });
   };
 
-  // ✅ 前月末勤務日を切り替える（前月の日付を保持）
+  // 前月末勤務日の切り替え
   const togglePrevMonthWorkedDay = (docIdx: number, prevDay: number) => {
     setPrevMonthWorkedDaysMap((prev) => {
       const current = prev[docIdx] || [];
@@ -122,6 +132,11 @@ export default function DashboardPage() {
         : [...current, prevDay].sort((a, b) => a - b);
       return { ...prev, [docIdx]: next };
     });
+  };
+
+  // ✨ 【追加】前月土曜当直フラグの切り替え
+  const toggleSatPrev = (docIdx: number) => {
+    setSatPrevMap((prev) => ({ ...prev, [docIdx]: !prev[docIdx] }));
   };
 
   // ✨ シフト自動生成
@@ -135,7 +150,27 @@ export default function DashboardPage() {
     try {
       const validHolidays = holidays.filter((d) => d <= getDaysInMonth(year, month));
 
-      const res = await fetch("http://127.0.0.1:8000/api/optimize/", {
+      // ✅ 辞書のキーを明示的に文字列化
+      const formattedUnavailable: Record<string, number[]> = {};
+      const formattedFixedWeekdays: Record<string, number[]> = {};
+      const formattedPrevMonthWorked: Record<string, number[]> = {};
+      
+      const formattedMinScore: Record<string, number> = {};
+      const formattedMaxScore: Record<string, number> = {};
+      const formattedTargetScore: Record<string, number> = {};
+      const formattedSatPrev: Record<string, boolean> = {};
+      
+      Object.entries(unavailableMap).forEach(([k, v]) => { formattedUnavailable[String(k)] = v; });
+      Object.entries(fixedUnavailableWeekdaysMap).forEach(([k, v]) => { formattedFixedWeekdays[String(k)] = v; });
+      Object.entries(prevMonthWorkedDaysMap).forEach(([k, v]) => { formattedPrevMonthWorked[String(k)] = v; });
+      
+      Object.entries(minScoreMap).forEach(([k, v]) => { formattedMinScore[String(k)] = v; });
+      Object.entries(maxScoreMap).forEach(([k, v]) => { formattedMaxScore[String(k)] = v; });
+      Object.entries(targetScoreMap).forEach(([k, v]) => { formattedTargetScore[String(k)] = v; });
+      Object.entries(satPrevMap).forEach(([k, v]) => { formattedSatPrev[String(k)] = v; });
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/optimize/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -144,22 +179,24 @@ export default function DashboardPage() {
           num_doctors: numDoctors,
           holidays: validHolidays,
 
-          // 個別不可日
-          unavailable: unavailableMap,
-
-          // 固定不可曜日（Python基準で送る）
-          fixed_unavailable_weekdays: fixedUnavailableWeekdaysMap,
-
-          // ✅ 月跨ぎ4日間隔
+          unavailable: formattedUnavailable,
+          fixed_unavailable_weekdays: formattedFixedWeekdays,
           prev_month_last_day: prevMonthLastDay,
-          prev_month_worked_days: prevMonthWorkedDaysMap,
-
-          // 主要条件
+          prev_month_worked_days: formattedPrevMonthWorked,
           score_min: scoreMin,
           score_max: scoreMax,
-          objective_weights: objectiveWeights,
 
-          // NOTE: 過去補正入力はUI未対応（MVP最小）
+          // ✨ 【追加】個別設定データを送信
+          min_score_by_doctor: formattedMinScore,
+          max_score_by_doctor: formattedMaxScore,
+          target_score_by_doctor: formattedTargetScore,
+          sat_prev: formattedSatPrev,
+
+          past_sat_counts: new Array(numDoctors).fill(0),
+          past_sunhol_counts: new Array(numDoctors).fill(0),
+          past_total_scores: {},
+
+          objective_weights: objectiveWeights,
         }),
       });
 
@@ -185,7 +222,8 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/schedule/save", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"; // ← これを追加
+      const res = await fetch(`${apiUrl}/api/schedule/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -211,7 +249,6 @@ export default function DashboardPage() {
     }
   };
 
-  // 前月末（入力UI用に末日近辺だけ出す：last-3..last）
   const prevMonthTailDays = (() => {
     const last = prevMonthLastDay;
     const start = Math.max(1, last - 3);
@@ -549,11 +586,70 @@ export default function DashboardPage() {
 
           {/* --- 右側：結果表示エリア --- */}
           <div className="col-span-2">
+            
+            {/* ✨ 【追加】医師個別のスコア・条件設定テーブル */}
+            <div className="bg-orange-50 p-6 rounded-lg border border-orange-100 shadow-sm mb-6">
+              <h3 className="text-md font-bold text-orange-800 mb-3 flex items-center gap-2">
+                <span>🎯 医師別 スコア＆条件設定</span>
+                <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定({scoreMin}〜{scoreMax})を適用</span>
+              </h3>
+              
+              <div className="overflow-x-auto bg-white border rounded-lg">
+                <table className="min-w-full text-center text-[12px]">
+                  <thead className="bg-gray-100 text-gray-600">
+                    <tr>
+                      <th className="py-2 px-2 border-b text-left">医師名</th>
+                      <th className="py-2 px-2 border-b">Min</th>
+                      <th className="py-2 px-2 border-b">Max</th>
+                      <th className="py-2 px-2 border-b">目標(Target)</th>
+                      <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {doctors.map((doc, idx) => (
+                      <tr key={doc.id} className="border-b hover:bg-gray-50">
+                        <td className="py-1 px-2 text-left font-bold text-gray-700">{doc.name}</td>
+                        <td className="py-1 px-2">
+                          <input type="number" step="0.5" className="w-14 border rounded p-1 text-center"
+                            value={minScoreMap[idx] === undefined ? "" : minScoreMap[idx]} 
+                            onChange={(e) => setMinScoreMap({...minScoreMap, [idx]: parseFloat(e.target.value)})} 
+                            placeholder={String(scoreMin)} 
+                          />
+                        </td>
+                        <td className="py-1 px-2">
+                          <input type="number" step="0.5" className="w-14 border rounded p-1 text-center"
+                            value={maxScoreMap[idx] === undefined ? "" : maxScoreMap[idx]} 
+                            onChange={(e) => setMaxScoreMap({...maxScoreMap, [idx]: parseFloat(e.target.value)})} 
+                            placeholder={String(scoreMax)} 
+                          />
+                        </td>
+                        <td className="py-1 px-2">
+                          <input type="number" step="0.5" className="w-16 border rounded p-1 text-center bg-blue-50"
+                            value={targetScoreMap[idx] === undefined ? "" : targetScoreMap[idx]} 
+                            onChange={(e) => setTargetScoreMap({...targetScoreMap, [idx]: parseFloat(e.target.value)})} 
+                            placeholder="任意" 
+                          />
+                        </td>
+                        <td className="py-1 px-2">
+                          <button 
+                            onClick={() => toggleSatPrev(idx)} 
+                            className={`px-3 py-1 rounded text-[10px] font-bold border ${satPrevMap[idx] ? 'bg-orange-500 text-white border-orange-600' : 'bg-white text-gray-400 border-gray-200'}`}
+                          >
+                            {satPrevMap[idx] ? "はい (連続回避)" : "いいえ"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             {error && <div className="bg-red-100 text-red-700 p-4 mb-6 rounded border-l-4 border-red-500">{error}</div>}
 
             {!schedule.length && !isLoading && !error && (
               <div className="flex items-center justify-center h-full min-h-[400px] border-2 border-dashed border-gray-300 rounded-lg text-gray-400 bg-gray-50">
-                生成ボタンを押してください
+                左下の「生成ボタン」を押してください
               </div>
             )}
 

@@ -14,6 +14,16 @@ async def generate_schedule(req: OptimizeRequest):
         formatted_unavailable = {int(k): v for k, v in req.unavailable.items()}
         formatted_fixed_weekdays = {int(k): v for k, v in req.fixed_unavailable_weekdays.items()}
         formatted_prev_month = {int(k): v for k, v in req.prev_month_worked_days.items()}
+        
+        # --- 統合版仕様：追加パラメータのキーを int に変換 ---
+        formatted_min_score = {int(k): v for k, v in req.min_score_by_doctor.items()}
+        formatted_max_score = {int(k): v for k, v in req.max_score_by_doctor.items()}
+        formatted_target_score = {int(k): v for k, v in req.target_score_by_doctor.items()}
+        formatted_past_total_scores = {int(k): v for k, v in req.past_total_scores.items()}
+        formatted_sat_prev = {int(k): v for k, v in req.sat_prev.items()}
+
+        # 目的関数の重み（Pydanticモデルから辞書に変換。v1/v2両対応）
+        weights_dict = req.objective_weights.model_dump() if hasattr(req.objective_weights, 'model_dump') else req.objective_weights.dict()
 
         optimizer = OnCallOptimizer(
             num_doctors=req.num_doctors,
@@ -28,7 +38,13 @@ async def generate_schedule(req: OptimizeRequest):
             score_max=req.score_max,
             past_sat_counts=req.past_sat_counts,
             past_sunhol_counts=req.past_sunhol_counts,
-            objective_weights=req.objective_weights,
+            # --- 統合版仕様：追加パラメータをOptimizerに渡す ---
+            min_score_by_doctor=formatted_min_score,
+            max_score_by_doctor=formatted_max_score,
+            target_score_by_doctor=formatted_target_score,
+            past_total_scores=formatted_past_total_scores,
+            sat_prev=formatted_sat_prev,
+            objective_weights=weights_dict,
         )
 
         optimizer.build_model()
