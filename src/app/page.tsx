@@ -34,9 +34,20 @@ export default function DashboardPage() {
   const [selectedDocIndex, setSelectedDocIndex] = useState<number>(0);
   const [unavailableMap, setUnavailableMap] = useState<Record<number, number[]>>({});
 
-  // ✅ 医師ごとの固定不可曜日（毎週固定）
+  // ✅ 固定不可曜日（毎週固定）
   // doctorIndex -> [weekday 0=Mon..6=Sun]  ← Python datetime.weekday() と一致させる
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<number, number[]>>({});
+
+  // ✅ 月跨ぎ4日間隔（前月末勤務）
+  // prev_month_last_day: 前月最終日(28/29/30/31)
+  // prev_month_worked_days: doctorIndex -> [前月の日付]
+  const calcPrevMonthLastDay = (y: number, m: number) => {
+    // m は 1..12
+    // new Date(y, m-1, 0) は「前月の最終日」
+    return new Date(y, m - 1, 0).getDate();
+  };
+  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2024, 4));
+  const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
 
   // 医師リストの初期取得
   useEffect(() => {
@@ -54,6 +65,13 @@ export default function DashboardPage() {
     };
     fetchDoctors();
   }, []);
+
+  // 年月が変わったら「前月最終日」を自動更新（選択はクリア）
+  useEffect(() => {
+    const last = calcPrevMonthLastDay(year, month);
+    setPrevMonthLastDay(last);
+    setPrevMonthWorkedDaysMap({});
+  }, [year, month]);
 
   // ヘルパー関数（表示用：JS基準）
   const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
@@ -95,6 +113,17 @@ export default function DashboardPage() {
     });
   };
 
+  // ✅ 前月末勤務日を切り替える（前月の日付を保持）
+  const togglePrevMonthWorkedDay = (docIdx: number, prevDay: number) => {
+    setPrevMonthWorkedDaysMap((prev) => {
+      const current = prev[docIdx] || [];
+      const next = current.includes(prevDay)
+        ? current.filter((d) => d !== prevDay)
+        : [...current, prevDay].sort((a, b) => a - b);
+      return { ...prev, [docIdx]: next };
+    });
+  };
+
   // ✨ シフト自動生成
   const handleGenerate = async () => {
     setIsLoading(true);
@@ -121,12 +150,16 @@ export default function DashboardPage() {
           // 固定不可曜日（Python基準で送る）
           fixed_unavailable_weekdays: fixedUnavailableWeekdaysMap,
 
+          // ✅ 月跨ぎ4日間隔
+          prev_month_last_day: prevMonthLastDay,
+          prev_month_worked_days: prevMonthWorkedDaysMap,
+
           // 主要条件
           score_min: scoreMin,
           score_max: scoreMax,
           objective_weights: objectiveWeights,
 
-          // NOTE: 月跨ぎ4日間隔・過去補正はUI未対応（MVP最小）
+          // NOTE: 過去補正入力はUI未対応（MVP最小）
         }),
       });
 
@@ -178,6 +211,15 @@ export default function DashboardPage() {
     }
   };
 
+  // 前月末（入力UI用に末日近辺だけ出す：last-3..last）
+  const prevMonthTailDays = (() => {
+    const last = prevMonthLastDay;
+    const start = Math.max(1, last - 3);
+    const days: number[] = [];
+    for (let d = start; d <= last; d++) days.push(d);
+    return days;
+  })();
+
   return (
     <div className="min-h-screen bg-gray-50 p-8 font-sans">
       <main className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-8">
@@ -195,7 +237,7 @@ export default function DashboardPage() {
               <ul className="text-xs text-gray-700 space-y-1">
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700">ハード</span>
-                  <span>4日間隔（勤務後4日禁止） / 土曜当直は月1回まで / 日祝同日兼務禁止</span>
+                  <span>4日間隔（勤務後4日禁止） / 月跨ぎ4日間隔 / 土曜当直は月1回まで / 日祝同日兼務禁止</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700">スコア</span>
@@ -210,7 +252,6 @@ export default function DashboardPage() {
                     {objectiveWeights.past_sunhol_gap}
                   </span>
                 </li>
-                <li className="text-[10px] text-gray-500">※月跨ぎ4日間隔・過去補正入力はUI未対応（現状0扱い）</li>
               </ul>
 
               <div className="mt-3 grid grid-cols-2 gap-3">
@@ -241,21 +282,11 @@ export default function DashboardPage() {
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  className="border rounded p-2 w-full"
-                />
+                <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="border rounded p-2 w-full" />
               </div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">月</label>
-                <input
-                  type="number"
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                  className="border rounded p-2 w-full"
-                />
+                <input type="number" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="border rounded p-2 w-full" />
               </div>
             </div>
 
@@ -272,10 +303,7 @@ export default function DashboardPage() {
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {doctors.map((doc) => (
-                  <span
-                    key={doc.id}
-                    className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200"
-                  >
+                  <span key={doc.id} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
                     {doc.name}
                   </span>
                 ))}
@@ -342,63 +370,178 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 固定不可曜日（毎週固定） */}
+            {/* ✅ 固定不可曜日（毎週固定）：全医師×曜日で一括入力 */}
             <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日（毎週）</label>
+              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日（毎週） 一括入力</label>
 
               <div className="text-[10px] text-gray-500 text-center mb-3">
-                選択中の医師に対して、毎週この曜日は勤務に入りません。
+                各医師の「毎週入れない曜日」をチェックしてください（バックエンドと一致：0=月..6=日）。
               </div>
 
-              <div className="flex items-center justify-center gap-2 flex-wrap">
-                {pyWeekdays.map((pyWd) => {
-                  const label = pyWeekdaysJp[pyWd];
-                  const selected = (fixedUnavailableWeekdaysMap[selectedDocIndex] || []).includes(pyWd);
-                  const isSun = pyWd === 6; // Python: 6=日
-                  const isSat = pyWd === 5; // Python: 5=土
+              <div className="overflow-x-auto">
+                <div className="min-w-[520px]">
+                  <div className="grid grid-cols-[180px_repeat(7,1fr)] gap-1 items-center mb-2">
+                    <div className="text-[11px] font-bold text-gray-600">医師</div>
+                    {pyWeekdays.map((pyWd) => {
+                      const label = pyWeekdaysJp[pyWd];
+                      const isSun = pyWd === 6;
+                      const isSat = pyWd === 5;
+                      return (
+                        <div
+                          key={pyWd}
+                          className={`text-[11px] font-bold text-center rounded py-1 border ${
+                            isSun
+                              ? "bg-red-50 text-red-500 border-red-100"
+                              : isSat
+                              ? "bg-blue-50 text-blue-600 border-blue-100"
+                              : "bg-gray-50 text-gray-700 border-gray-100"
+                          }`}
+                        >
+                          {label}
+                        </div>
+                      );
+                    })}
+                  </div>
 
-                  return (
-                    <button
-                      key={pyWd}
-                      type="button"
-                      onClick={() => toggleFixedWeekday(selectedDocIndex, pyWd)}
-                      className={`w-9 h-9 rounded-full text-[11px] font-bold border transition-all ${
-                        selected
-                          ? isSun
-                            ? "bg-red-500 text-white border-red-600"
-                            : isSat
-                            ? "bg-blue-600 text-white border-blue-700"
-                            : "bg-gray-800 text-white border-gray-900"
-                          : isSun
-                          ? "bg-red-50 text-red-400 border-red-200"
-                          : isSat
-                          ? "bg-blue-50 text-blue-500 border-blue-200"
-                          : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-                      }`}
-                      title={`${doctors[selectedDocIndex]?.name || "医師"}：${label}曜日を固定不可にする`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
+                  <div className="space-y-1">
+                    {doctors.map((doc, docIdx) => (
+                      <div key={doc.id} className="grid grid-cols-[180px_repeat(7,1fr)] gap-1 items-center">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDocIndex(docIdx)}
+                          className={`text-left text-[11px] font-bold px-2 py-2 rounded border truncate transition ${
+                            selectedDocIndex === docIdx
+                              ? "bg-blue-600 text-white border-blue-700"
+                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                          }`}
+                          title="クリックで個別休み希望の対象を切り替え"
+                        >
+                          {doc.name}
+                        </button>
+
+                        {pyWeekdays.map((pyWd) => {
+                          const selected = (fixedUnavailableWeekdaysMap[docIdx] || []).includes(pyWd);
+                          const isSun = pyWd === 6;
+                          const isSat = pyWd === 5;
+
+                          return (
+                            <button
+                              key={`${doc.id}-${pyWd}`}
+                              type="button"
+                              onClick={() => toggleFixedWeekday(docIdx, pyWd)}
+                              className={`h-9 rounded border text-[12px] font-bold transition ${
+                                selected
+                                  ? isSun
+                                    ? "bg-red-500 text-white border-red-600"
+                                    : isSat
+                                    ? "bg-blue-600 text-white border-blue-700"
+                                    : "bg-gray-900 text-white border-gray-900"
+                                  : isSun
+                                  ? "bg-red-50 text-red-400 border-red-200 hover:bg-red-100"
+                                  : isSat
+                                  ? "bg-blue-50 text-blue-500 border-blue-200 hover:bg-blue-100"
+                                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                              }`}
+                              title={`${doc.name}：${pyWeekdaysJp[pyWd]}曜日を固定不可にする`}
+                            >
+                              {selected ? "×" : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-3 text-[9px] text-center text-gray-500">
-                固定不可:{" "}
-                {(fixedUnavailableWeekdaysMap[selectedDocIndex] || [])
-                  .slice()
-                  .sort((a, b) => a - b)
-                  .map((wd) => pyWeekdaysJp[wd])}
-                {(fixedUnavailableWeekdaysMap[selectedDocIndex] || []).length === 0 ? "なし" : ""}
+              <div className="mt-3 text-[10px] text-center text-gray-500">
+                個別休み希望の対象:{" "}
+                <span className="font-bold text-gray-700">{doctors[selectedDocIndex]?.name || "未選択"}</span>{" "}
+                ／ 固定不可:{" "}
+                {(fixedUnavailableWeekdaysMap[selectedDocIndex] || []).length === 0
+                  ? "なし"
+                  : (fixedUnavailableWeekdaysMap[selectedDocIndex] || [])
+                      .slice()
+                      .sort((a, b) => a - b)
+                      .map((wd) => pyWeekdaysJp[wd])
+                      .join(" / ")}
+              </div>
+            </div>
+
+            {/* ✅ 月跨ぎ4日間隔：前月末勤務入力（最小） */}
+            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 月跨ぎ4日間隔：前月末勤務</label>
+
+              <div className="text-[10px] text-gray-500 text-center mb-3">
+                前月末に勤務がある医師は、当月初日〜数日が自動で禁止になります（厳密な月跨ぎ4日間隔）。
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日（28/29/30/31）</label>
+                  <input
+                    type="number"
+                    value={prevMonthLastDay}
+                    onChange={(e) => setPrevMonthLastDay(Number(e.target.value))}
+                    className="border rounded p-2 w-full text-sm"
+                  />
+                </div>
+                <div className="text-[10px] text-gray-500 flex items-end">
+                  ※年月変更時は自動計算し直し＆選択クリアされます
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <div className="min-w-[520px]">
+                  <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-1 items-center mb-2">
+                    <div className="text-[11px] font-bold text-gray-600">医師</div>
+                    {prevMonthTailDays.map((d) => (
+                      <div key={d} className="text-[11px] font-bold text-center rounded py-1 border bg-gray-50 text-gray-700 border-gray-100">
+                        {d}日
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-1">
+                    {doctors.map((doc, docIdx) => (
+                      <div key={doc.id} className="grid grid-cols-[180px_repeat(4,1fr)] gap-1 items-center">
+                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">
+                          {doc.name}
+                        </div>
+
+                        {prevMonthTailDays.map((d) => {
+                          const selected = (prevMonthWorkedDaysMap[docIdx] || []).includes(d);
+                          return (
+                            <button
+                              key={`${doc.id}-prev-${d}`}
+                              type="button"
+                              onClick={() => togglePrevMonthWorkedDay(docIdx, d)}
+                              className={`h-9 rounded border text-[12px] font-bold transition ${
+                                selected
+                                  ? "bg-gray-900 text-white border-gray-900"
+                                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                              }`}
+                              title={`${doc.name}：前月${d}日に勤務した`}
+                            >
+                              {selected ? "×" : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-3 text-[10px] text-center text-gray-500">
+                ※ここは「前月末の勤務があった日」だけを入力する簡易版です（必要最小）
               </div>
             </div>
 
             <button
               onClick={handleGenerate}
               disabled={isLoading || numDoctors === 0}
-              className={`w-full py-3 rounded font-bold text-white shadow-md ${
-                isLoading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-              }`}
+              className={`w-full py-3 rounded font-bold text-white shadow-md ${isLoading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
             >
               {isLoading ? "AIが計算中..." : "✨ シフトを自動生成"}
             </button>
@@ -447,9 +590,7 @@ export default function DashboardPage() {
                         return (
                           <tr key={row.day} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
                             <td className="py-2 px-3">{row.day}日</td>
-                            <td className={`py-2 px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>
-                              {wd}
-                            </td>
+                            <td className={`py-2 px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
                             <td className="py-2 px-3">
                               {row.day_shift !== null && row.day_shift !== undefined ? (
                                 <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold">
