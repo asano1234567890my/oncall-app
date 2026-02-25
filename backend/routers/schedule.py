@@ -80,3 +80,45 @@ async def save_schedule(req: SaveScheduleRequest, db: AsyncSession = Depends(get
         await db.rollback() # await を追加！
         print(f"DEBUG Error: {str(e)}") # ログにエラー内容を出力
         raise HTTPException(status_code=500, detail=str(e))
+
+        # backend/routers/schedule.py の末尾に追記
+
+from sqlalchemy.orm import selectinload
+
+@router.get("/{year}/{month}")
+async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
+    try:
+        start_date = datetime.date(year, month, 1)
+        if month == 12:
+            end_date = datetime.date(year + 1, 1, 1)
+        else:
+            end_date = datetime.date(year, month + 1, 1)
+
+        # シフトデータを取得し、紐付いている医師情報(Doctor)も一緒に読み込む
+        result = await db.execute(
+            select(ShiftAssignment)
+            .options(selectinload(ShiftAssignment.doctor))
+            .where(
+                ShiftAssignment.date >= start_date,
+                ShiftAssignment.date < end_date
+            )
+            .order_by(ShiftAssignment.date)
+        )
+        assignments = result.scalars().all()
+
+        # フロントエンドが扱いやすい形に整形
+        formatted_data = {}
+        for a in assignments:
+            day = a.date.day
+            if day not in formatted_data:
+                formatted_data[day] = {"day": day, "day_shift": None, "night_shift": None}
+            
+            if a.shift_type == "日直":
+                formatted_data[day]["day_shift"] = a.doctor.name
+            else:
+                formatted_data[day]["night_shift"] = a.doctor.name
+
+        return sorted(formatted_data.values(), key=lambda x: x["day"])
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
