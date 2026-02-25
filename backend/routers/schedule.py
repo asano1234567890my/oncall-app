@@ -1,0 +1,82 @@
+# backend/routers/schedule.py
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from pydantic import BaseModel
+from typing import List, Optional
+import datetime
+import uuid
+
+from core.db import get_db
+from models.doctor import Doctor
+from models.shift import ShiftAssignment
+
+router = APIRouter(prefix="/api/schedule", tags=["Schedule"])
+
+class ShiftData(BaseModel):
+    day: int
+    day_shift: Optional[int] = None
+    night_shift: Optional[int] = None
+
+class SaveScheduleRequest(BaseModel):
+    year: int
+    month: int
+    num_doctors: int
+    schedule: List[ShiftData]
+
+@router.post("/save")
+async def save_schedule(req: SaveScheduleRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        # 1. 医師データの確認と生成
+        # select() を使って医師一覧を取得
+        result = await db.execute(select(Doctor).order_by(Doctor.name))
+        doctors = result.scalars().all()
+        
+        if len(doctors) < req.num_doctors:
+            for i in range(len(doctors), req.num_doctors):
+                new_doc = Doctor(name=f"テスト医師 {i}")
+                db.add(new_doc)
+            await db.commit()
+            # 再取得
+            result = await db.execute(select(Doctor).order_by(Doctor.name))
+            doctors = result.scalars().all()
+        
+        doc_map = {i: doctors[i].id for i in range(req.num_doctors)}
+
+        # 2. 既存シフトの削除
+        start_date = datetime.date(req.year, req.month, 1)
+        if req.month == 12:
+            end_date = datetime.date(req.year + 1, 1, 1)
+        else:
+            end_date = datetime.date(req.year, req.month + 1, 1)
+            
+        await db.execute(
+            delete(ShiftAssignment).where(
+                ShiftAssignment.date >= start_date,
+                ShiftAssignment.date < end_date
+            )
+        )
+
+        # 3. 新しいシフトの保存
+        new_assignments = []
+        for item in req.schedule:
+            current_date = datetime.date(req.year, req.month, item.day)
+            
+            if item.day_shift is not None:
+                new_assignments.append(
+                    ShiftAssignment(date=current_date, doctor_id=doc_map[item.day_shift], shift_type="日直")
+                )
+            if item.night_shift is not None:
+                new_assignments.append(
+                    ShiftAssignment(date=current_date, doctor_id=doc_map[item.night_shift], shift_type="当直")
+                )
+        
+        db.add_all(new_assignments)
+        await db.commit() # await を追加！
+        
+        return {"success": True, "message": "神シフトをデータベースに保存しました！", "saved_count": len(new_assignments)}
+        
+    except Exception as e:
+        await db.rollback() # await を追加！
+        print(f"DEBUG Error: {str(e)}") # ログにエラー内容を出力
+        raise HTTPException(status_code=500, detail=str(e))

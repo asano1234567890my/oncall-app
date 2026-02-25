@@ -17,6 +17,8 @@ export default function DashboardPage() {
   const [scores, setScores] = useState<any>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveMessage, setSaveMessage] = useState<string>("");
 
   // 指定した月の日数を取得する関数（例：4月なら30）
   const getDaysInMonth = (year: number, month: number) => {
@@ -80,6 +82,41 @@ export default function DashboardPage() {
       setError(err.message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveToDB = async () => {
+    setIsSaving(true);
+    setSaveMessage("");
+    setError("");
+
+    try {
+      const res = await fetch("http://127.0.0.1:8000/api/schedule/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          year,
+          month,
+          num_doctors: numDoctors,
+          schedule: schedule.map(s => ({
+            day: s.day,
+            day_shift: s.day_shift,
+            night_shift: s.night_shift
+          }))
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "保存に失敗しました");
+      }
+
+      const data = await res.json();
+      setSaveMessage(data.message); // 「神シフトをデータベースに保存しました！」
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -220,6 +257,23 @@ export default function DashboardPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+                <div className="mt-6 flex flex-col items-center">
+                  <button
+                    onClick={handleSaveToDB}
+                    disabled={isSaving}
+                    className={`px-8 py-3 rounded-full font-bold text-white shadow-lg transition-transform transform hover:scale-105 ${
+                      isSaving ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"
+                    }`}
+                  >
+                    {isSaving ? "データベースに書き込み中..." : "💾 このシフトをデータベースに確定・保存する"}
+                  </button>
+                  
+                  {saveMessage && (
+                    <div className="mt-4 px-6 py-2 bg-green-100 text-green-800 font-bold rounded-lg border border-green-300 animate-fade-in">
+                      🎉 {saveMessage}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

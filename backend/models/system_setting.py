@@ -7,7 +7,7 @@ from sqlalchemy import String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from backend.core.db import Base
+from core.db import Base
 
 
 class SystemSetting(Base):

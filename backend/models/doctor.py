@@ -6,7 +6,7 @@ from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.core.db import Base
+from core.db import Base
 
 
 class Doctor(Base):

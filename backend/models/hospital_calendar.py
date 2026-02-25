@@ -8,7 +8,7 @@ from sqlalchemy import Date, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from backend.core.db import Base
+from core.db import Base
 
 
 class HospitalCalendar(Base):
