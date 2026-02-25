@@ -1,24 +1,24 @@
-from __future__ import annotations
-
+# backend/schemas/unavailable_day.py
 from datetime import date
-from uuid import UUID
+from typing import Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 
 class UnavailableDayBase(BaseModel):
-    date: date | None = None
-    day_of_week: int | None = None  # 0=月曜〜6=日曜
-    is_fixed: bool
+    # ✅ Python3.10 + Pydantic で確実に評価できる書き方に統一
+    date: Optional[date] = None
 
 
 class UnavailableDayCreate(UnavailableDayBase):
-    doctor_id: UUID
+    doctor_id: int
+    year: int
+    month: int
+    day: int
 
 
-class UnavailableDayRead(UnavailableDayBase):
-    id: UUID
-    doctor_id: UUID
+class UnavailableDayRead(UnavailableDayCreate):
+    id: int
 
-    model_config = ConfigDict(from_attributes=True)
-
+    class Config:
+        from_attributes = True
