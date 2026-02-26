@@ -2,8 +2,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-// 💡 追加: 画像として保存するためのライブラリ
-import html2canvas from "html2canvas";
+// ✅ 変更: html2canvasを削除し、最新のCSSに対応したmodern-screenshotをインポート
+import { domToPng } from "modern-screenshot";
 
 export default function ViewSchedulePage() {
   const [year, setYear] = useState(2026);
@@ -12,7 +12,7 @@ export default function ViewSchedulePage() {
   const [loading, setLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   
-  // 💡 追加: 画像化する対象の要素を紐付けるためのRef
+  // 画像化する対象の要素を紐付けるためのRef
   const tableRef = useRef<HTMLDivElement>(null);
 
   // データ取得関数
@@ -41,45 +41,35 @@ export default function ViewSchedulePage() {
     return ["日", "月", "火", "水", "木", "金", "土"][new Date(y, m - 1, d).getDay()];
   };
 
-// 💡 修正版: 当直表を画像としてダウンロードする関数
-const handleDownloadImage = async () => {
-  if (!tableRef.current) return;
-  setIsDownloading(true);
-  try {
-    const canvas = await html2canvas(tableRef.current, {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      // ✨ 追加: 保存用コピーを作成する時に、未対応の色指定を無視させる設定
-      onclone: (clonedDoc) => {
-        // lab() や oklch() を使っている要素があれば、標準的な色に強制上書きする
-        // (エラーの原因となるスタイルを無効化するためのガードです)
-        const elements = clonedDoc.getElementsByTagName("*");
-        for (let i = 0; i < elements.length; i++) {
-          const el = elements[i] as HTMLElement;
-          // 必要に応じて、ここで特定のスタイルを微調整できます
-          // 今回のエラーはこれだけで回避できる可能性が高いです
-        }
-      },
-      // ✨ 追加: これを入れると、一部のブラウザでの色解析エラーを回避しやすくなります
-      logging: false,
-      useCORS: true,
-    });
+  // ✅ 修正版: modern-screenshot を使った画像保存関数
+  const handleDownloadImage = async () => {
+    // Refが無い、または保存処理中ならブロック
+    if (!tableRef.current || isDownloading) return;
+    
+    setIsDownloading(true);
+    try {
+      // 💡 domToPng を使って直接画像URLを生成（最新CSSもバッチリ対応）
+      const dataUrl = await domToPng(tableRef.current, {
+        scale: 3, // 高画質化（スマホで拡大しても綺麗に見えるレベル）
+        backgroundColor: "#ffffff",
+        quality: 1.0,
+        fontTimeout: 2000, // Webフォントの読み込み待機時間
+      });
 
-    const image = canvas.toDataURL("image/png");
-    const link = document.createElement("a");
-    link.href = image;
-    link.download = `当直表_${year}年${month}月.png`;
-    link.click();
-  } catch (error) {
-    console.error("画像の保存に失敗しました", error);
-    alert("保存に失敗しました。ブラウザの『色補正機能』や『拡張機能』が干渉している可能性があります。");
-  } finally {
-    setIsDownloading(false);
-  }
-};
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = `当直表_${year}年${month}月.png`;
+      link.click();
+    } catch (error) {
+      console.error("画像の保存に失敗しました", error);
+      alert("画像の保存に失敗しました。");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
-    // 💡 修正: スマホ時は余白を極限まで削る
+    // スマホ時は余白を極限まで削る
     <div className="min-h-screen bg-slate-50 p-1 md:p-8">
       <div className="max-w-3xl mx-auto">
         <header className="flex flex-wrap items-center justify-between mb-2 md:mb-6 gap-2">
@@ -102,7 +92,7 @@ const handleDownloadImage = async () => {
               </select>
             </div>
 
-            {/* 💡 追加: ダウンロードボタン */}
+            {/* ダウンロードボタン */}
             <button 
               onClick={handleDownloadImage}
               disabled={isDownloading || schedule.length === 0}
@@ -120,17 +110,15 @@ const handleDownloadImage = async () => {
             この月のシフトはまだ登録されていません
           </div>
         ) : (
-          // 💡 追加: ref={tableRef} を付与して画像化の対象にする
+          // ref={tableRef} を付与して画像化の対象にする
           <div ref={tableRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* 💡 修正: 画像化されたときにタイトルが入るように、テーブル内にもヘッダーを追加 */}
+            {/* 画像化されたときにタイトルが入るようにヘッダーを追加 */}
             <div className="p-2 text-center font-bold text-lg bg-slate-50 border-b border-slate-200">
               {year}年 {month}月 当直表
             </div>
-            {/* 💡 修正: 縦幅を限界まで圧縮するためのクラス調整 */}
             <table className="w-full text-left border-collapse text-xs md:text-sm">
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  {/* 💡 修正: パディング (p-4 -> py-1.5 px-2) を大幅削減 */}
                   <th className="py-1.5 px-2 font-semibold w-16 text-center">日付</th>
                   <th className="py-1.5 px-2 font-semibold bg-orange-600/10 text-orange-800">日直</th>
                   <th className="py-1.5 px-2 font-semibold bg-indigo-600/10 text-indigo-800">当直</th>
@@ -144,21 +132,21 @@ const handleDownloadImage = async () => {
 
                   return (
                     <tr key={day.day} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      {/* 💡 修正: パディング削減、テキスト中央揃え */}
                       <td className={`py-1.5 px-2 font-medium text-center ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-slate-600'}`}>
                         {day.day} <span className="text-[10px] md:text-xs">({wd})</span>
                       </td>
                       <td className="py-1.5 px-1">
                         {day.day_shift && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold bg-orange-100 text-orange-800 whitespace-nowrap">
-                            👤 {day.day_shift.split(' ')[0]} {/* 苗字だけ表示して幅節約 */}
+                            {/* 💡 全角・半角スペースどちらでも苗字だけを切り取れるように正規表現を使用 */}
+                            👤 {day.day_shift.split(/[\s　]+/)[0]}
                           </span>
                         )}
                       </td>
                       <td className="py-1.5 px-1">
                         {day.night_shift && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold bg-indigo-100 text-indigo-800 whitespace-nowrap">
-                            🌙 {day.night_shift.split(' ')[0]} {/* 苗字だけ表示して幅節約 */}
+                            🌙 {day.night_shift.split(/[\s　]+/)[0]}
                           </span>
                         )}
                       </td>

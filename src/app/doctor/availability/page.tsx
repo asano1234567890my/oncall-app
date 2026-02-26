@@ -48,45 +48,71 @@ export default function DoctorManagerPage() {
   };
 
   return (
-    // 💡 修正: スマホ時は p-4 にして余白を減らす
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* 💡 修正: スマホ時は p-4 に */}
       <div className="max-w-2xl mx-auto bg-white p-4 md:p-8 rounded-xl shadow-md">
         <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 border-b pb-2">👨‍⚕️ 医師マスタ管理</h1>
 
-        {/* 新規追加 */}
-        {/* 💡 修正: flex-wrap を追加し、ボタンがはみ出さないように調整 */}
-        <div className="flex flex-wrap md:flex-nowrap gap-2 mb-6 bg-blue-50 p-3 md:p-4 rounded-lg">
+        {/* 新規追加エリア */}
+        {/* ✅ 修正: スマホは縦並び(flex-col)、PCは横並び(md:flex-row)に完全分離 */}
+        <div className="flex flex-col md:flex-row gap-2 md:gap-3 mb-6 bg-blue-50 p-3 md:p-4 rounded-lg">
           <input
-            type="text" placeholder="新しい医師の氏名" value={newName}
+            type="text" 
+            placeholder="新しい医師の氏名" 
+            value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            className="flex-1 min-w-[150px] p-2 border rounded"
+            className="w-full md:flex-1 p-2 border rounded"
           />
-          <button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold whitespace-nowrap transition-colors">追加</button>
+          {/* ✅ 修正: スマホではボタンも幅いっぱい(w-full)にして押しやすく */}
+          <button 
+            onClick={handleAdd} 
+            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-bold transition-colors"
+          >
+            追加
+          </button>
         </div>
 
-        {/* 一覧 */}
+        {/* 一覧エリア */}
         <div className="space-y-2 md:space-y-3">
           {doctors.map((doc) => (
-            // 💡 修正: スマホ用に flex-wrap を追加、余白を調整
-            <div key={doc.id} className="flex flex-wrap items-center justify-between p-2 md:p-3 border rounded hover:bg-gray-50 gap-2">
+            // ✅ 修正: スマホ時は縦に並べて、要素同士がぶつからないように
+            <div key={doc.id} className="flex flex-col md:flex-row md:items-center justify-between p-3 border rounded hover:bg-gray-50 gap-2 md:gap-4">
+              
               {editingId === doc.id ? (
                 <input
-                  type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                  className="flex-1 min-w-[120px] p-1 border rounded"
+                  type="text" 
+                  value={editName} 
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full md:flex-1 p-2 border rounded"
                 />
               ) : (
-                <span className="font-medium text-gray-700 text-sm md:text-base">{doc.name}</span>
+                <span className="font-bold text-gray-700 text-base">{doc.name}</span>
               )}
 
-              <div className="flex gap-2 shrink-0">
+              {/* ✅ 修正: ボタン群もスマホ時は幅いっぱい(w-full)に広がり、半分ずつの大きさ(flex-1)になるように調整 */}
+              <div className="flex gap-2 w-full md:w-auto shrink-0 mt-1 md:mt-0">
                 {editingId === doc.id ? (
-                  <button onClick={() => handleUpdate(doc.id)} className="text-green-600 text-sm font-bold bg-green-50 px-2 py-1 rounded">保存</button>
+                  <button 
+                    onClick={() => handleUpdate(doc.id)} 
+                    className="flex-1 md:flex-none text-green-700 font-bold bg-green-100 hover:bg-green-200 px-4 py-2 rounded transition-colors"
+                  >
+                    保存
+                  </button>
                 ) : (
-                  <button onClick={() => { setEditingId(doc.id); setEditName(doc.name); }} className="text-blue-600 text-sm bg-blue-50 px-2 py-1 rounded">編集</button>
+                  <button 
+                    onClick={() => { setEditingId(doc.id); setEditName(doc.name); }} 
+                    className="flex-1 md:flex-none text-blue-700 font-bold bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded transition-colors"
+                  >
+                    編集
+                  </button>
                 )}
-                <button onClick={() => handleDelete(doc.id)} className="text-red-500 text-sm bg-red-50 px-2 py-1 rounded">削除</button>
+                <button 
+                  onClick={() => handleDelete(doc.id)} 
+                  className="flex-1 md:flex-none text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors"
+                >
+                  削除
+                </button>
               </div>
+
             </div>
           ))}
         </div>
