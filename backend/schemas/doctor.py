@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 
 class UnavailableDayBase(BaseModel):
-    date: date | None = None
-    day_of_week: int | None = None  # 0=月曜〜6=日曜
+    # 1日単位の不可日（任意）
+    date: Optional[date] = None
+
+    # 固定不可曜日（任意）: 0=月曜〜6=日曜
+    # ※ `int | None` だと環境によってPydanticが評価で落ちることがあるので Optional[int] に統一
+    day_of_week: Optional[int] = None
+
+    # 固定設定かどうか（必須）
     is_fixed: bool
 
 
@@ -39,4 +45,3 @@ class DoctorRead(DoctorBase):
     unavailable_days: List[UnavailableDayRead] = []
 
     model_config = ConfigDict(from_attributes=True)
-
