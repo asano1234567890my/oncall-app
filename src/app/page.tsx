@@ -27,7 +27,8 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/doctors/");
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${apiUrl}/api/doctors/`);
         if (res.ok) {
           const data = await res.json();
           setDoctors(data);
@@ -75,7 +76,8 @@ export default function DashboardPage() {
     try {
       const validHolidays = holidays.filter(d => d <= getDaysInMonth(year, month));
 
-      const res = await fetch("http://127.0.0.1:8000/api/optimize/", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/doctors/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -109,7 +111,8 @@ export default function DashboardPage() {
     setError("");
 
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/schedule/save", {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/doctors/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

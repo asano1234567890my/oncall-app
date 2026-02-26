@@ -10,7 +10,8 @@ export default function DoctorManagerPage() {
   const [editName, setEditName] = useState("");
 
   const fetchDoctors = async () => {
-    const res = await fetch("http://127.0.0.1:8000/api/doctors/");
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const res = await fetch(`${apiUrl}/api/doctors/`);
     if (res.ok) setDoctors(await res.json());
   };
 
@@ -18,7 +19,8 @@ export default function DoctorManagerPage() {
 
   const handleAdd = async () => {
     if (!newName) return;
-    await fetch("http://127.0.0.1:8000/api/doctors/", {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    await fetch(`${apiUrl}/api/doctors/`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName }),
