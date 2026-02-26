@@ -291,12 +291,11 @@ useEffect(() => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-4 md:mb-8">
           
           {/* --- 左側：条件設定フォーム --- */}
-          {/* ✅ 青い箱の内側余白をスマホ時は狭く(p-3) */}
-          <div className="bg-blue-50 p-3 md:p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
-            <h2 className="text-lg md:text-xl font-bold text-blue-800 mb-3 md:mb-4">⚙️ 生成条件</h2>
+          <div className="bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
+            <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
 
             {/* 主要条件表示 */}
-            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-2 text-center">📌 適用中の主要条件</div>
 
               <ul className="text-xs text-gray-700 space-y-1.5">
@@ -307,13 +306,13 @@ useEffect(() => {
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700 shrink-0">スコア</span>
                   <span>
-                    共通範囲: {scoreMin} 〜 {scoreMax} <span className="text-[10px] text-orange-600">(個別優先)</span>
+                    共通範囲: {scoreMin} 〜 {scoreMax} <span className="text-[10px] text-orange-600">(個別設定優先)</span>
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-bold text-blue-700 shrink-0">ソフト</span>
+                  <span className="font-bold text-blue-700 shrink-0">目的</span>
                   <span>
-                    5日間隔・外来前日({objectiveWeights.gap5}) ＞ 連月土曜({objectiveWeights.sat_consec}) ＞ 6日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
+                    ５日間隔・外来前日({objectiveWeights.gap5}) ＞ 連続土曜({objectiveWeights.sat_consec}) ＞ ６日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
                   </span>
                 </li>
               </ul>
