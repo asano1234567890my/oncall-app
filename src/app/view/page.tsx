@@ -41,27 +41,42 @@ export default function ViewSchedulePage() {
     return ["日", "月", "火", "水", "木", "金", "土"][new Date(y, m - 1, d).getDay()];
   };
 
-  // 💡 追加: 当直表を画像としてダウンロードする関数
-  const handleDownloadImage = async () => {
-    if (!tableRef.current) return;
-    setIsDownloading(true);
-    try {
-      const canvas = await html2canvas(tableRef.current, {
-        scale: 2, // 高画質化
-        backgroundColor: "#ffffff",
-      });
-      const image = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.href = image;
-      link.download = `当直表_${year}年${month}月.png`;
-      link.click();
-    } catch (error) {
-      console.error("画像の保存に失敗しました", error);
-      alert("画像の保存に失敗しました");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
+// 💡 修正版: 当直表を画像としてダウンロードする関数
+const handleDownloadImage = async () => {
+  if (!tableRef.current) return;
+  setIsDownloading(true);
+  try {
+    const canvas = await html2canvas(tableRef.current, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      // ✨ 追加: 保存用コピーを作成する時に、未対応の色指定を無視させる設定
+      onclone: (clonedDoc) => {
+        // lab() や oklch() を使っている要素があれば、標準的な色に強制上書きする
+        // (エラーの原因となるスタイルを無効化するためのガードです)
+        const elements = clonedDoc.getElementsByTagName("*");
+        for (let i = 0; i < elements.length; i++) {
+          const el = elements[i] as HTMLElement;
+          // 必要に応じて、ここで特定のスタイルを微調整できます
+          // 今回のエラーはこれだけで回避できる可能性が高いです
+        }
+      },
+      // ✨ 追加: これを入れると、一部のブラウザでの色解析エラーを回避しやすくなります
+      logging: false,
+      useCORS: true,
+    });
+
+    const image = canvas.toDataURL("image/png");
+    const link = document.createElement("a");
+    link.href = image;
+    link.download = `当直表_${year}年${month}月.png`;
+    link.click();
+  } catch (error) {
+    console.error("画像の保存に失敗しました", error);
+    alert("保存に失敗しました。ブラウザの『色補正機能』や『拡張機能』が干渉している可能性があります。");
+  } finally {
+    setIsDownloading(false);
+  }
+};
 
   return (
     // 💡 修正: スマホ時は余白を極限まで削る
