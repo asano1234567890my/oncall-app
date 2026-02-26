@@ -53,7 +53,6 @@ export default function ViewSchedulePage() {
         scale: 3, // 高画質化（スマホで拡大しても綺麗に見えるレベル）
         backgroundColor: "#ffffff",
         quality: 1.0,
-        fontTimeout: 2000, // Webフォントの読み込み待機時間
       });
 
       const link = document.createElement("a");
