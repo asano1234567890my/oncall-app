@@ -1,160 +1,96 @@
+// src/app/admin/doctors/page.tsx
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { DayPicker } from "react-day-picker";
-import { format, addMonths, startOfMonth, endOfMonth } from "date-fns";
-import { ja } from "date-fns/locale";
-import { Calendar, Send, Loader2 } from "lucide-react";
-import "react-day-picker/style.css";
+import { useState, useEffect } from "react";
 
-// 曜日ラベル（0:日 ～ 6:土）
-const DAYS_OF_WEEK = [
-  { value: 0, label: "日" },
-  { value: 1, label: "月" },
-  { value: 2, label: "火" },
-  { value: 3, label: "水" },
-  { value: 4, label: "木" },
-  { value: 5, label: "金" },
-  { value: 6, label: "土" },
-] as const;
+export default function DoctorManagerPage() {
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [newName, setNewName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
 
-export default function DoctorAvailabilityPage() {
-  const [unavailableDaysOfWeek, setUnavailableDaysOfWeek] = useState<number[]>([]);
-  const [selectedDates, setSelectedDates] = useState<Date[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // 表示対象は「来月」（月初で統一）
-  const nextMonth = useMemo(
-    () => startOfMonth(addMonths(new Date(), 1)),
-    []
-  );
-
-  const toggleDayOfWeek = (day: number) => {
-    setUnavailableDaysOfWeek((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
-    );
+  const fetchDoctors = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const res = await fetch(`${apiUrl}/api/doctors/`);
+    if (res.ok) setDoctors(await res.json());
   };
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("不可日提出データ:", {
-      selectedDates: selectedDates.map((d) => format(d, "yyyy-MM-dd", { locale: ja })),
-      unavailableDaysOfWeek,
+  useEffect(() => { fetchDoctors(); }, []);
+
+  const handleAdd = async () => {
+    if (!newName) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    await fetch(`${apiUrl}/api/doctors/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName }),
     });
-    alert("不可日を提出しました。");
-    setIsSubmitting(false);
+    setNewName("");
+    fetchDoctors();
+  };
+
+  const handleUpdate = async (id: string) => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    await fetch(`${apiUrl}/api/doctors/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editName }),
+    });
+    setEditingId(null);
+    fetchDoctors();
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("本当に削除しますか？")) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    await fetch(`${apiUrl}/api/doctors/${id}`, { method: "DELETE" });
+    fetchDoctors();
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-24">
-      <div className="max-w-md mx-auto px-4 py-6">
-        {/* 1. ページヘッダー */}
-        <header className="mb-8">
-          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Calendar className="text-blue-600" size={24} />
-            来月の不可日入力
-          </h1>
-          <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-            当直に入れない日と、毎週固定で入れない曜日を選択して提出してください。
-          </p>
-        </header>
+    // 💡 修正: スマホ時は p-4 にして余白を減らす
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      {/* 💡 修正: スマホ時は p-4 に */}
+      <div className="max-w-2xl mx-auto bg-white p-4 md:p-8 rounded-xl shadow-md">
+        <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 border-b pb-2">👨‍⚕️ 医師マスタ管理</h1>
 
-        {/* 2. 毎週固定の不可曜日 */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3">
-            毎週固定の不可曜日
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {DAYS_OF_WEEK.map(({ value, label }) => {
-              const isSelected = unavailableDaysOfWeek.includes(value);
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => toggleDayOfWeek(value)}
-                  className={`
-                    min-w-[2.75rem] py-2.5 px-3 rounded-xl text-sm font-medium
-                    border-2 transition-colors touch-manipulation
-                    ${isSelected
-                      ? "bg-blue-100 text-blue-700 border-blue-500"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                    }
-                  `}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        {/* 新規追加 */}
+        {/* 💡 修正: flex-wrap を追加し、ボタンがはみ出さないように調整 */}
+        <div className="flex flex-wrap md:flex-nowrap gap-2 mb-6 bg-blue-50 p-3 md:p-4 rounded-lg">
+          <input
+            type="text" placeholder="新しい医師の氏名" value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            className="flex-1 min-w-[150px] p-2 border rounded"
+          />
+          <button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold whitespace-nowrap transition-colors">追加</button>
+        </div>
 
-        {/* 3. 個別不可日カレンダー */}
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-            個別の不可日指定
-          </h2>
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-            <DayPicker
-              mode="multiple"
-              selected={selectedDates}
-              onSelect={(dates) => setSelectedDates(dates ?? [])}
-              defaultMonth={nextMonth}
-              locale={ja}
-              disabled={{ before: nextMonth, after: endOfMonth(nextMonth) }}
-              classNames={{
-                root: "rdp-root",
-                month: "rdp-month",
-                month_caption: "rdp-caption flex justify-center mb-3 text-slate-700 font-semibold",
-                weekdays: "rdp-weekdays",
-                weekday: "rdp-weekday text-slate-500 text-xs",
-                week: "rdp-week",
-                day: "rdp-day",
-                day_button:
-                  "w-10 h-10 sm:w-12 sm:h-12 rounded-xl text-sm font-medium transition-colors touch-manipulation hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2",
-                selected:
-                  "!bg-orange-500 !text-white hover:!bg-orange-600 focus:!ring-orange-400",
-                today: "bg-slate-100 text-slate-900",
-                outside: "text-slate-300",
-                disabled: "text-slate-300 cursor-not-allowed hover:!bg-transparent",
-                hidden: "invisible",
-              }}
-            />
-          </div>
-        </section>
-
-        {/* 4. 提出ボタン（フッター固定風） */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-slate-50/95 border-t border-slate-200 safe-area-pb">
-          <div className="max-w-md mx-auto">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className={`
-                w-full py-4 rounded-xl font-bold text-white shadow-lg
-                flex items-center justify-center gap-2 transition-all touch-manipulation
-                disabled:opacity-70 disabled:cursor-not-allowed
-                ${isSubmitting
-                  ? "bg-slate-400"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.98]"
-                }
-              `}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="animate-spin" size={20} />
-                  送信中...
-                </>
+        {/* 一覧 */}
+        <div className="space-y-2 md:space-y-3">
+          {doctors.map((doc) => (
+            // 💡 修正: スマホ用に flex-wrap を追加、余白を調整
+            <div key={doc.id} className="flex flex-wrap items-center justify-between p-2 md:p-3 border rounded hover:bg-gray-50 gap-2">
+              {editingId === doc.id ? (
+                <input
+                  type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                  className="flex-1 min-w-[120px] p-1 border rounded"
+                />
               ) : (
-                <>
-                  不可日を提出する
-                  <Send size={20} />
-                </>
+                <span className="font-medium text-gray-700 text-sm md:text-base">{doc.name}</span>
               )}
-            </button>
-          </div>
+
+              <div className="flex gap-2 shrink-0">
+                {editingId === doc.id ? (
+                  <button onClick={() => handleUpdate(doc.id)} className="text-green-600 text-sm font-bold bg-green-50 px-2 py-1 rounded">保存</button>
+                ) : (
+                  <button onClick={() => { setEditingId(doc.id); setEditName(doc.name); }} className="text-blue-600 text-sm bg-blue-50 px-2 py-1 rounded">編集</button>
+                )}
+                <button onClick={() => handleDelete(doc.id)} className="text-red-500 text-sm bg-red-50 px-2 py-1 rounded">削除</button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
-    </main>
+    </div>
   );
 }

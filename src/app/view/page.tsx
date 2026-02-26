@@ -1,19 +1,26 @@
 // src/app/view/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+// 💡 追加: 画像として保存するためのライブラリ
+import html2canvas from "html2canvas";
 
 export default function ViewSchedulePage() {
-  const [year, setYear] = useState(2024);
+  const [year, setYear] = useState(2026);
   const [month, setMonth] = useState(4);
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  
+  // 💡 追加: 画像化する対象の要素を紐付けるためのRef
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // データ取得関数
   const fetchSchedule = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/schedule/${year}/${month}`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`);
       if (res.ok) {
         const data = await res.json();
         setSchedule(data);
@@ -34,26 +41,60 @@ export default function ViewSchedulePage() {
     return ["日", "月", "火", "水", "木", "金", "土"][new Date(y, m - 1, d).getDay()];
   };
 
+  // 💡 追加: 当直表を画像としてダウンロードする関数
+  const handleDownloadImage = async () => {
+    if (!tableRef.current) return;
+    setIsDownloading(true);
+    try {
+      const canvas = await html2canvas(tableRef.current, {
+        scale: 2, // 高画質化
+        backgroundColor: "#ffffff",
+      });
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `当直表_${year}年${month}月.png`;
+      link.click();
+    } catch (error) {
+      console.error("画像の保存に失敗しました", error);
+      alert("画像の保存に失敗しました");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+    // 💡 修正: スマホ時は余白を極限まで削る
+    <div className="min-h-screen bg-slate-50 p-1 md:p-8">
       <div className="max-w-3xl mx-auto">
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-          <h1 className="text-2xl font-bold text-slate-800">🗓️ 勤務カレンダー</h1>
+        <header className="flex flex-wrap items-center justify-between mb-2 md:mb-6 gap-2">
+          <h1 className="text-lg md:text-2xl font-bold text-slate-800">🗓️ 勤務カレンダー</h1>
           
-          <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border border-slate-200">
-            <input 
-              type="number" value={year} onChange={(e) => setYear(Number(e.target.value))}
-              className="w-20 p-1 border-none focus:ring-0 text-center font-bold"
-            />
-            <span>年</span>
-            <select 
-              value={month} onChange={(e) => setMonth(Number(e.target.value))}
-              className="p-1 border-none focus:ring-0 font-bold bg-transparent"
+          <div className="flex gap-2 w-full md:w-auto justify-between">
+            <div className="flex items-center gap-1 bg-white p-1.5 rounded-lg shadow-sm border border-slate-200">
+              <input 
+                type="number" value={year} onChange={(e) => setYear(Number(e.target.value))}
+                className="w-16 p-0 border-none focus:ring-0 text-center font-bold text-sm"
+              />
+              <span className="text-sm">年</span>
+              <select 
+                value={month} onChange={(e) => setMonth(Number(e.target.value))}
+                className="p-0 pl-1 border-none focus:ring-0 font-bold bg-transparent text-sm"
+              >
+                {[...Array(12)].map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}月</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 💡 追加: ダウンロードボタン */}
+            <button 
+              onClick={handleDownloadImage}
+              disabled={isDownloading || schedule.length === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 transition-colors disabled:opacity-50"
             >
-              {[...Array(12)].map((_, i) => (
-                <option key={i+1} value={i+1}>{i+1}月</option>
-              ))}
-            </select>
+              {isDownloading ? "保存中..." : "📥 画像保存"}
+            </button>
           </div>
         </header>
 
@@ -64,13 +105,20 @@ export default function ViewSchedulePage() {
             この月のシフトはまだ登録されていません
           </div>
         ) : (
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <table className="w-full text-left border-collapse">
+          // 💡 追加: ref={tableRef} を付与して画像化の対象にする
+          <div ref={tableRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            {/* 💡 修正: 画像化されたときにタイトルが入るように、テーブル内にもヘッダーを追加 */}
+            <div className="p-2 text-center font-bold text-lg bg-slate-50 border-b border-slate-200">
+              {year}年 {month}月 当直表
+            </div>
+            {/* 💡 修正: 縦幅を限界まで圧縮するためのクラス調整 */}
+            <table className="w-full text-left border-collapse text-xs md:text-sm">
               <thead>
                 <tr className="bg-slate-800 text-white">
-                  <th className="p-4 font-semibold w-24">日付</th>
-                  <th className="p-4 font-semibold bg-orange-600/10 text-orange-800">日直</th>
-                  <th className="p-4 font-semibold bg-indigo-600/10 text-indigo-800">当直</th>
+                  {/* 💡 修正: パディング (p-4 -> py-1.5 px-2) を大幅削減 */}
+                  <th className="py-1.5 px-2 font-semibold w-16 text-center">日付</th>
+                  <th className="py-1.5 px-2 font-semibold bg-orange-600/10 text-orange-800">日直</th>
+                  <th className="py-1.5 px-2 font-semibold bg-indigo-600/10 text-indigo-800">当直</th>
                 </tr>
               </thead>
               <tbody>
@@ -81,20 +129,21 @@ export default function ViewSchedulePage() {
 
                   return (
                     <tr key={day.day} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className={`p-4 font-medium ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-slate-600'}`}>
-                        {day.day}日 ({wd})
+                      {/* 💡 修正: パディング削減、テキスト中央揃え */}
+                      <td className={`py-1.5 px-2 font-medium text-center ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-slate-600'}`}>
+                        {day.day} <span className="text-[10px] md:text-xs">({wd})</span>
                       </td>
-                      <td className="p-4">
+                      <td className="py-1.5 px-1">
                         {day.day_shift && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
-                            👤 {day.day_shift}
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold bg-orange-100 text-orange-800 whitespace-nowrap">
+                            👤 {day.day_shift.split(' ')[0]} {/* 苗字だけ表示して幅節約 */}
                           </span>
                         )}
                       </td>
-                      <td className="p-4">
+                      <td className="py-1.5 px-1">
                         {day.night_shift && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-indigo-100 text-indigo-800">
-                            🌙 {day.night_shift}
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold bg-indigo-100 text-indigo-800 whitespace-nowrap">
+                            🌙 {day.night_shift.split(' ')[0]} {/* 苗字だけ表示して幅節約 */}
                           </span>
                         )}
                       </td>

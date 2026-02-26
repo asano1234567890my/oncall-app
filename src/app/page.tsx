@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 type Doctor = { id: string; name: string };
 
 export default function DashboardPage() {
-  const [year, setYear] = useState<number>(2024);
+  const [year, setYear] = useState<number>(2026);
   const [month, setMonth] = useState<number>(4);
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const calcPrevMonthLastDay = (y: number, m: number) => {
     return new Date(y, m - 1, 0).getDate();
   };
-  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2024, 4));
+  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2026, 4));
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
 
   // ✨ 【追加】個別スコア・条件設定用 State
@@ -109,6 +109,26 @@ useEffect(() => {
         ? currentDays.filter((d) => d !== day)
         : [...currentDays, day].sort((a, b) => a - b);
       return { ...prev, [docIdx]: newDays };
+    });
+  };
+
+  // =========================================================================
+  // ✨ 新規追加：対象医師の不可日を一括操作する関数（1日でもあればクリア、なければ全選択）
+  // =========================================================================
+  const toggleAllUnavailable = () => {
+    setUnavailableMap((prev) => {
+      const currentDays = prev[selectedDocIndex] || [];
+      const daysInMonth = getDaysInMonth(year, month);
+      
+      let newDays: number[] = [];
+      if (currentDays.length > 0) {
+        // 1日でも入力があれば：すべてクリア
+        newDays = [];
+      } else {
+        // 1回も不可日がなければ：その月のすべての日付を不可日に
+        newDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+      }
+      return { ...prev, [selectedDocIndex]: newDays };
     });
   };
 
@@ -223,7 +243,7 @@ useEffect(() => {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"; // ← これを追加
-      const res = await fetch(`${apiUrl}/api/schedule/save`, {
+      const res = await fetch(`${apiUrl}/api/schedule/save/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -258,40 +278,47 @@ useEffect(() => {
   })();
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8 font-sans">
-      <main className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-8 border-b pb-4">🏥 当直表 自動生成ダッシュボード</h1>
+    // ✅ スマホ時は外側の余白を最小限(p-2)に
+    <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
+      {/* ✅ スマホ時は画面幅いっぱい(w-full)に使い、内側の余白も小さく(p-4) */}
+      <main className="w-full max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-4 md:p-8">
+        
+        <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-8 border-b pb-4">
+          🏥 当直表 自動生成ダッシュボード
+        </h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+        {/* ✅ 左右のカラム間の隙間もスマホ時は狭く(gap-4) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-4 md:mb-8">
+          
           {/* --- 左側：条件設定フォーム --- */}
-          <div className="bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
-            <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
+          {/* ✅ 青い箱の内側余白をスマホ時は狭く(p-3) */}
+          <div className="bg-blue-50 p-3 md:p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
+            <h2 className="text-lg md:text-xl font-bold text-blue-800 mb-3 md:mb-4">⚙️ 生成条件</h2>
 
             {/* 主要条件表示 */}
-            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-2 text-center">📌 適用中の主要条件</div>
 
-              <ul className="text-xs text-gray-700 space-y-1">
+              <ul className="text-xs text-gray-700 space-y-1.5">
                 <li className="flex gap-2">
-                  <span className="font-bold text-blue-700">ハード</span>
-                  <span>4日間隔（勤務後4日禁止） / 月跨ぎ4日間隔 / 土曜当直は月1回まで / 日祝同日兼務禁止</span>
+                  <span className="font-bold text-blue-700 shrink-0">ハード</span>
+                  <span>4日間隔(月跨ぎ含) / 土曜月1回 / 日祝同日禁止 / 日直上限2回 / 研究日・前日禁止</span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-bold text-blue-700">スコア</span>
+                  <span className="font-bold text-blue-700 shrink-0">スコア</span>
                   <span>
-                    月間スコア範囲: {scoreMin} 〜 {scoreMax}
+                    共通範囲: {scoreMin} 〜 {scoreMax} <span className="text-[10px] text-orange-600">(個別優先)</span>
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-bold text-blue-700">目的</span>
+                  <span className="font-bold text-blue-700 shrink-0">ソフト</span>
                   <span>
-                    当月公平 : 過去土曜 : 過去日祝 = {objectiveWeights.month_fairness}:{objectiveWeights.past_sat_gap}:
-                    {objectiveWeights.past_sunhol_gap}
+                    5日間隔・外来前日({objectiveWeights.gap5}) ＞ 連月土曜({objectiveWeights.sat_consec}) ＞ 6日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
                   </span>
                 </li>
               </ul>
 
-              <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">score_min</label>
                   <input
@@ -316,7 +343,7 @@ useEffect(() => {
               <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
                 <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="border rounded p-2 w-full" />
@@ -347,7 +374,7 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="mb-6">
+            <div className="mb-4 md:mb-6">
               <label className="block text-sm font-bold text-gray-700 mb-2">共通の祝日設定</label>
               <div className="flex flex-wrap gap-2">
                 {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
@@ -371,8 +398,21 @@ useEffect(() => {
             </div>
 
             {/* 個別休み希望 */}
-            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">👨‍⚕️ 個別休み希望</label>
+            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm relative">
+              
+              {/* ✨ ラベルと誤爆防止クリアボタンを並べる */}
+              <div className="flex justify-between items-center mb-3">
+                <label className="text-sm font-bold text-gray-700 text-center flex-grow pl-10">👨‍⚕️ 個別休み希望</label>
+                <button
+                  type="button"
+                  onClick={toggleAllUnavailable}
+                  className="text-[10px] text-gray-400 hover:text-red-600 border border-transparent hover:border-red-200 rounded px-1.5 py-1 transition-all"
+                  title="1日でも不可日があればクリア、なければ月間すべて不可日にします"
+                >
+                  ↺ 一括クリア/一括選択
+                </button>
+              </div>
+
               <select
                 value={selectedDocIndex}
                 onChange={(e) => setSelectedDocIndex(Number(e.target.value))}
@@ -402,17 +442,19 @@ useEffect(() => {
                   );
                 })}
               </div>
-              <div className="mt-2 text-[9px] text-center text-indigo-500 font-bold">
-                選択中: {unavailableMap[selectedDocIndex]?.length || 0} 日
+              <div className="mt-2 flex justify-between items-center text-[9px]">
+                <span className="text-transparent">ダミー</span>
+                <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDocIndex]?.length || 0} 日</span>
+                <span className="text-transparent">ダミー</span>
               </div>
             </div>
 
-            {/* ✅ 固定不可曜日（毎週固定）：全医師×曜日で一括入力 */}
-            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日（毎週） 一括入力</label>
+            {/* ✅ 固定不可曜日（毎週固定） */}
+            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日 一括入力</label>
 
               <div className="text-[10px] text-gray-500 text-center mb-3">
-                各医師の「毎週入れない曜日」をチェックしてください（バックエンドと一致：0=月..6=日）。
+                各医師の「毎週入れない曜日」をチェックしてください。
               </div>
 
               <div className="overflow-x-auto">
@@ -451,7 +493,6 @@ useEffect(() => {
                               ? "bg-blue-600 text-white border-blue-700"
                               : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                           }`}
-                          title="クリックで個別休み希望の対象を切り替え"
                         >
                           {doc.name}
                         </button>
@@ -479,7 +520,6 @@ useEffect(() => {
                                   ? "bg-blue-50 text-blue-500 border-blue-200 hover:bg-blue-100"
                                   : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                               }`}
-                              title={`${doc.name}：${pyWeekdaysJp[pyWd]}曜日を固定不可にする`}
                             >
                               {selected ? "×" : ""}
                             </button>
@@ -492,7 +532,7 @@ useEffect(() => {
               </div>
 
               <div className="mt-3 text-[10px] text-center text-gray-500">
-                個別休み希望の対象:{" "}
+                選択中:{" "}
                 <span className="font-bold text-gray-700">{doctors[selectedDocIndex]?.name || "未選択"}</span>{" "}
                 ／ 固定不可:{" "}
                 {(fixedUnavailableWeekdaysMap[selectedDocIndex] || []).length === 0
@@ -505,17 +545,13 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* ✅ 月跨ぎ4日間隔：前月末勤務入力（最小） */}
-            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 月跨ぎ4日間隔：前月末勤務</label>
-
-              <div className="text-[10px] text-gray-500 text-center mb-3">
-                前月末に勤務がある医師は、当月初日〜数日が自動で禁止になります（厳密な月跨ぎ4日間隔）。
-              </div>
+            {/* ✅ 月跨ぎ4日間隔 */}
+            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
+              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 前月末勤務</label>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日（28/29/30/31）</label>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日</label>
                   <input
                     type="number"
                     value={prevMonthLastDay}
@@ -524,7 +560,7 @@ useEffect(() => {
                   />
                 </div>
                 <div className="text-[10px] text-gray-500 flex items-end">
-                  ※年月変更時は自動計算し直し＆選択クリアされます
+                  ※年月変更時は自動計算されます
                 </div>
               </div>
 
@@ -558,7 +594,6 @@ useEffect(() => {
                                   ? "bg-gray-900 text-white border-gray-900"
                                   : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                               }`}
-                              title={`${doc.name}：前月${d}日に勤務した`}
                             >
                               {selected ? "×" : ""}
                             </button>
@@ -568,10 +603,6 @@ useEffect(() => {
                     ))}
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-3 text-[10px] text-center text-gray-500">
-                ※ここは「前月末の勤務があった日」だけを入力する簡易版です（必要最小）
               </div>
             </div>
 
@@ -585,13 +616,13 @@ useEffect(() => {
           </div>
 
           {/* --- 右側：結果表示エリア --- */}
-          <div className="col-span-2">
+          <div className="col-span-1 md:col-span-2">
             
-            {/* ✨ 【追加】医師個別のスコア・条件設定テーブル */}
-            <div className="bg-orange-50 p-6 rounded-lg border border-orange-100 shadow-sm mb-6">
-              <h3 className="text-md font-bold text-orange-800 mb-3 flex items-center gap-2">
-                <span>🎯 医師別 スコア＆条件設定</span>
-                <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定({scoreMin}〜{scoreMax})を適用</span>
+            {/* ✨ 医師個別のスコア・条件設定テーブル */}
+            <div className="bg-orange-50 p-3 md:p-6 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-6">
+              <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
+                <span>🎯 医師別 スコア設定</span>
+                <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
               </h3>
               
               <div className="overflow-x-auto bg-white border rounded-lg">
@@ -601,30 +632,30 @@ useEffect(() => {
                       <th className="py-2 px-2 border-b text-left">医師名</th>
                       <th className="py-2 px-2 border-b">Min</th>
                       <th className="py-2 px-2 border-b">Max</th>
-                      <th className="py-2 px-2 border-b">目標(Target)</th>
+                      <th className="py-2 px-2 border-b">目標</th>
                       <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
                     </tr>
                   </thead>
                   <tbody>
                     {doctors.map((doc, idx) => (
                       <tr key={doc.id} className="border-b hover:bg-gray-50">
-                        <td className="py-1 px-2 text-left font-bold text-gray-700">{doc.name}</td>
+                        <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-14 border rounded p-1 text-center"
+                          <input type="number" step="0.5" className="w-12 md:w-14 border rounded p-1 text-center"
                             value={minScoreMap[idx] === undefined ? "" : minScoreMap[idx]} 
                             onChange={(e) => setMinScoreMap({...minScoreMap, [idx]: parseFloat(e.target.value)})} 
                             placeholder={String(scoreMin)} 
                           />
                         </td>
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-14 border rounded p-1 text-center"
+                          <input type="number" step="0.5" className="w-12 md:w-14 border rounded p-1 text-center"
                             value={maxScoreMap[idx] === undefined ? "" : maxScoreMap[idx]} 
                             onChange={(e) => setMaxScoreMap({...maxScoreMap, [idx]: parseFloat(e.target.value)})} 
                             placeholder={String(scoreMax)} 
                           />
                         </td>
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-16 border rounded p-1 text-center bg-blue-50"
+                          <input type="number" step="0.5" className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
                             value={targetScoreMap[idx] === undefined ? "" : targetScoreMap[idx]} 
                             onChange={(e) => setTargetScoreMap({...targetScoreMap, [idx]: parseFloat(e.target.value)})} 
                             placeholder="任意" 
@@ -633,9 +664,9 @@ useEffect(() => {
                         <td className="py-1 px-2">
                           <button 
                             onClick={() => toggleSatPrev(idx)} 
-                            className={`px-3 py-1 rounded text-[10px] font-bold border ${satPrevMap[idx] ? 'bg-orange-500 text-white border-orange-600' : 'bg-white text-gray-400 border-gray-200'}`}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border ${satPrevMap[idx] ? 'bg-orange-500 text-white border-orange-600' : 'bg-white text-gray-400 border-gray-200'}`}
                           >
-                            {satPrevMap[idx] ? "はい (連続回避)" : "いいえ"}
+                            {satPrevMap[idx] ? "連続回避" : "なし"}
                           </button>
                         </td>
                       </tr>
@@ -645,36 +676,36 @@ useEffect(() => {
               </div>
             </div>
 
-            {error && <div className="bg-red-100 text-red-700 p-4 mb-6 rounded border-l-4 border-red-500">{error}</div>}
+            {error && <div className="bg-red-100 text-red-700 p-3 mb-4 md:mb-6 rounded border-l-4 border-red-500">{error}</div>}
 
             {!schedule.length && !isLoading && !error && (
-              <div className="flex items-center justify-center h-full min-h-[400px] border-2 border-dashed border-gray-300 rounded-lg text-gray-400 bg-gray-50">
+              <div className="flex items-center justify-center h-full min-h-[400px] border-2 border-dashed border-gray-300 rounded-lg text-gray-400 bg-gray-50 p-4 text-center">
                 左下の「生成ボタン」を押してください
               </div>
             )}
 
             {schedule.length > 0 && (
               <div className="animate-fade-in">
-                <div className="bg-gray-50 p-4 rounded-lg border mb-6">
+                <div className="bg-gray-50 p-3 md:p-4 rounded-lg border mb-4 md:mb-6">
                   <h3 className="text-sm font-bold text-gray-700 mb-2">⚖️ 負担スコア</h3>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(scores).map(([docId, score]) => (
-                      <div key={docId} className="bg-white px-3 py-1 rounded border text-xs shadow-sm">
-                        <span className="text-gray-500 mr-2">{doctors[Number(docId)]?.name || `医${docId}`}</span>
+                      <div key={docId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
+                        <span className="text-gray-500 mr-1 md:mr-2">{doctors[Number(docId)]?.name || `医${docId}`}</span>
                         <span className="font-bold">{String(score)}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border shadow-sm">
+                <div className="overflow-x-auto rounded-lg border shadow-sm">
                   <table className="min-w-full bg-white text-center text-sm">
-                    <thead className="bg-gray-100">
+                    <thead className="bg-gray-100 whitespace-nowrap">
                       <tr>
-                        <th className="py-2 px-3 border-b">日付</th>
-                        <th className="py-2 px-3 border-b">曜日</th>
-                        <th className="py-2 px-3 border-b bg-orange-50">日直</th>
-                        <th className="py-2 px-3 border-b bg-indigo-50">当直</th>
+                        <th className="py-2 px-2 md:px-3 border-b">日付</th>
+                        <th className="py-2 px-2 md:px-3 border-b">曜日</th>
+                        <th className="py-2 px-2 md:px-3 border-b bg-orange-50">日直</th>
+                        <th className="py-2 px-2 md:px-3 border-b bg-indigo-50">当直</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -682,23 +713,23 @@ useEffect(() => {
                         const wd = getWeekday(year, month, row.day);
                         const isSun = wd === "日";
                         const isSat = wd === "土";
-                        const isHolidayLike = row.is_holiday || isSun; // 旧レスポンス互換
+                        const isHolidayLike = row.is_holiday || isSun;
                         return (
                           <tr key={row.day} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
-                            <td className="py-2 px-3">{row.day}日</td>
-                            <td className={`py-2 px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
+                            <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
+                            <td className="py-2 px-2 md:px-3">
                               {row.day_shift !== null && row.day_shift !== undefined ? (
-                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold">
+                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
                                   {doctors[row.day_shift]?.name}
                                 </span>
                               ) : (
                                 "-"
                               )}
                             </td>
-                            <td className="py-2 px-3">
+                            <td className="py-2 px-2 md:px-3">
                               {row.night_shift !== null && row.night_shift !== undefined ? (
-                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold">
+                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
                                   {doctors[row.night_shift]?.name}
                                 </span>
                               ) : (
@@ -716,7 +747,7 @@ useEffect(() => {
                   <button
                     onClick={handleSaveToDB}
                     disabled={isSaving}
-                    className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-lg transform hover:scale-105 transition"
+                    className="px-6 py-3 md:px-8 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-lg transform hover:scale-105 transition w-full md:w-auto"
                   >
                     {isSaving ? "保存中..." : "💾 このシフトを確定・保存する"}
                   </button>
