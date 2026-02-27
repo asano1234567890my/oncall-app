@@ -20,6 +20,7 @@ class ObjectiveWeights:
     sat_consec: int = 80
     score_balance: int = 30
     target: int = 10
+    sunhol_3rd: int = 80
 
 class OnCallOptimizer:
     """
@@ -105,6 +106,7 @@ class OnCallOptimizer:
             sat_consec=int(ow.get("sat_consec", 80)),
             score_balance=int(ow.get("score_balance", 30)),
             target=int(ow.get("target", 10)),
+            sunhol_3rd=int(ow.get("sunhol_3rd", 80)),
         )
 
         self.model = cp_model.CpModel()
@@ -206,6 +208,10 @@ class OnCallOptimizer:
         sunhol_days = [day for day in days if self.is_sunday_or_holiday(day)]
         for d in doctors:
             self.model.Add(sum(self.day_shifts[(d, day)] for day in sunhol_days) <= 2)
+
+        # 10.5) hard: 日祝勤務(日直+当直) 上限3回
+        for d in doctors:
+            self.model.Add(sum(self.day_shifts[(d, day)] + self.night_shifts[(d, day)] for day in sunhol_days) <= 3)
 
         # 11) hard: 月間スコア上下限（個別設定に対応）
         doctor_scores: List[cp_model.IntVar] = []
@@ -336,6 +342,17 @@ class OnCallOptimizer:
         sunhol_gap = self.model.NewIntVar(0, 999, "sunhol_gap")
         self.model.Add(sunhol_gap == sh_max - sh_min)
 
+        # F. 日祝3回目ペナルティ
+        sunhol_3rd_vars = []
+        for d in doctors:
+            sh_total = sum(self.day_shifts[(d, day)] + self.night_shifts[(d, day)] for day in sunhol_days)
+            is_3rd = self.model.NewIntVar(0, 1, f"is_3rd_sh_d{d}")
+            self.model.Add(is_3rd >= sh_total - 2)
+            sunhol_3rd_vars.append(is_3rd)
+
+        sunhol_3rd_sum = self.model.NewIntVar(0, 1000, "sunhol_3rd_sum")
+        self.model.Add(sunhol_3rd_sum == sum(sunhol_3rd_vars))
+        
         # 最適化実行（全ての重みを合算）
         w = self.objective_weights
         self.model.Minimize(

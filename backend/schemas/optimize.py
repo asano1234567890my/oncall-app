@@ -11,7 +11,8 @@ class ObjectiveWeights(BaseModel):
     sat_consec: int = Field(80, description="2ヶ月連続の土曜当直回避")
     score_balance: int = Field(30, description="過去スコアを含めた公平性")
     target: int = Field(10, description="個別ターゲットスコアへの近似")
-    
+    sunhol_3rd: int = Field(80, description="日祝勤務3回目へのペナルティ")
+
     # 既存の重み（後方互換性のため残す）
     month_fairness: int = Field(100)
     past_sat_gap: int = Field(10)
