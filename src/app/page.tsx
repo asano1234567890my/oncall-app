@@ -4,6 +4,22 @@ import { useState, useEffect } from "react";
 
 type Doctor = { id: string; name: string };
 
+type ObjectiveWeights = {
+  // 既存互換用
+  month_fairness: number;
+  past_sat_gap: number;
+  past_sunhol_gap: number;
+
+  // 統合版
+  gap5: number;
+  pre_clinic: number;
+  sat_consec: number;
+  sunhol_3rd: number;
+  gap6: number;
+  score_balance: number;
+  target: number;
+};
+
 export default function DashboardPage() {
   const [year, setYear] = useState<number>(2026);
   const [month, setMonth] = useState<number>(4);
@@ -16,20 +32,30 @@ export default function DashboardPage() {
   // 仕様の主要条件（表示＋API送信に使う）
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
-  const objectiveWeights = {
-    // 既存互換用
+
+  // ✅ objectiveWeights を State 化
+  const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>({
     month_fairness: 100,
     past_sat_gap: 10,
     past_sunhol_gap: 5,
-    // 統合版：新規追加（※バックエンドに合わせて整数化）
-    gap5: 100,          // 最大級（勤務後5日目を強く避ける）
-    pre_clinic: 100,    // 最大級（外来前日当直を強く避ける）
-    sat_consec: 80,     // 次点（2ヶ月連続土曜を避ける）
-    gap6: 50,           // 次点（勤務後6日目を避ける）
-    score_balance: 30,  // 中（全体スコアの公平性）
-    target: 10,         // 弱（個別ターゲット）
+
+    gap5: 100,
+    pre_clinic: 100,
+    sat_consec: 80,
+    sunhol_3rd: 80,
+    gap6: 50,
+    score_balance: 30,
+    target: 10,
+  });
+
+  const setWeight = (key: keyof ObjectiveWeights, value: number) => {
+    const v = Number.isFinite(value) ? Math.round(value) : 0;
+    setObjectiveWeights((prev) => ({ ...prev, [key]: v }));
   };
 
+  // シフト結果・状態管理
+  // ↓↓↓ この下にあなたの既存コードをそのまま続ける
+  
   // シフト結果・状態管理
   const [schedule, setSchedule] = useState<any[]>([]);
   const [scores, setScores] = useState<any>({});
@@ -312,7 +338,7 @@ useEffect(() => {
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700 shrink-0">目的</span>
                   <span>
-                    ５日間隔・外来前日({objectiveWeights.gap5}) ＞ 連続土曜({objectiveWeights.sat_consec}) ＞ ６日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
+                    ５日間隔・外来前日({objectiveWeights.gap5}) ＞日祝３回目回避({objectiveWeights.sunhol_3rd})・連続土曜({objectiveWeights.sat_consec}) ＞ ６日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
                   </span>
                 </li>
               </ul>
@@ -342,6 +368,102 @@ useEffect(() => {
               <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
             </div>
 
+{/* ✅ 目的関数の重み（折りたたみ） */}
+<details className="mt-4 rounded-lg border border-blue-100 bg-white shadow-sm">
+  <summary
+    className="list-none cursor-pointer select-none p-4
+               flex items-center justify-between gap-3
+               [&::-webkit-details-marker]:hidden"
+  >
+    <div className="min-w-0">
+      <div className="text-sm font-bold text-gray-700 truncate">🎛️ 目的関数の重み</div>
+      <div className="text-[10px] text-gray-500 mt-1">普段は触らず、必要なときだけ開いて調整します</div>
+    </div>
+
+    <div className="flex items-center gap-2 shrink-0">
+      <span className="text-[10px] font-bold text-gray-500">
+        gap5:{objectiveWeights.gap5} / pre:{objectiveWeights.pre_clinic} / 日祝3回目:{objectiveWeights.sunhol_3rd}
+      </span>
+      <span className="text-gray-400">▼</span>
+    </div>
+  </summary>
+
+  {/* 開いたときの中身 */}
+  <div className="px-4 pb-4 pt-1">
+    <div className="flex justify-end mb-3">
+      <button
+        type="button"
+        onClick={() =>
+          setObjectiveWeights((prev) => ({
+            ...prev,
+            gap5: 100,
+            pre_clinic: 100,
+            sat_consec: 80,
+            sunhol_3rd: 80,
+            gap6: 50,
+            score_balance: 30,
+            target: 10,
+          }))
+        }
+        className="text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50"
+        title="重みだけ初期値に戻します"
+      >
+        初期値に戻す
+      </button>
+    </div>
+
+    <div className="space-y-3">
+      {(
+        [
+          { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
+          { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
+          { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
+          { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
+          { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
+          { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
+          { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
+        ] as const
+      ).map((w) => (
+        <div key={w.key} className="rounded-lg border border-gray-100 p-3">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="min-w-0">
+              <div className="text-[12px] font-bold text-gray-700 truncate">
+                {w.label}
+                <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
+              </div>
+            </div>
+
+            <input
+              type="number"
+              inputMode="numeric"
+              value={objectiveWeights[w.key]}
+              onChange={(e) => setWeight(w.key, Number(e.target.value))}
+              className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
+              min={w.min}
+              max={w.max}
+              step={w.step}
+            />
+          </div>
+
+          <input
+            type="range"
+            value={objectiveWeights[w.key]}
+            onChange={(e) => setWeight(w.key, Number(e.target.value))}
+            min={w.min}
+            max={w.max}
+            step={w.step}
+            className="w-full accent-blue-600"
+          />
+
+          <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+            <span>{w.min}</span>
+            <span>{w.max}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+</details>
             <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
