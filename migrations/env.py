@@ -75,6 +75,7 @@ from core.db import Base  # noqa: E402
 # テーブル定義を確実に登録するため、モデルを明示 import
 import models.doctor  # noqa: F401,E402
 import models.shift  # noqa: F401,E402
+import models.weight_preset  # noqa: F401,E402 
 
 target_metadata = Base.metadata
 

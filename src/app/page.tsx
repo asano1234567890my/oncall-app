@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 
-type Doctor = { id: string; name: string };
+type Doctor = {
+  id: string;
+  name: string;
+  min_score?: number | null;
+  max_score?: number | null;
+  target_score?: number | null;
+};
 
 type ObjectiveWeights = {
   // 既存互換用
@@ -93,9 +99,24 @@ useEffect(() => {
       const res = await fetch(`${apiUrl}/api/doctors/`);
       
       if (res.ok) {
-        const data = await res.json();
+        const data: Doctor[] = await res.json();
         setDoctors(data);
         setNumDoctors(data.length);
+      
+        // ✅ 追加：Doctorの min/max/target を index-map に初期マッピング
+        const initMin: Record<number, number> = {};
+        const initMax: Record<number, number> = {};
+        const initTarget: Record<number, number> = {};
+      
+        data.forEach((doc, idx) => {
+          if (doc.min_score !== null && doc.min_score !== undefined) initMin[idx] = doc.min_score;
+          if (doc.max_score !== null && doc.max_score !== undefined) initMax[idx] = doc.max_score;
+          if (doc.target_score !== null && doc.target_score !== undefined) initTarget[idx] = doc.target_score;
+        });
+      
+        setMinScoreMap(initMin);
+        setMaxScoreMap(initMax);
+        setTargetScoreMap(initTarget);
       }
     } catch (err) {
       console.error("医師リストの取得に失敗:", err);
@@ -183,6 +204,39 @@ useEffect(() => {
   // ✨ 【追加】前月土曜当直フラグの切り替え
   const toggleSatPrev = (docIdx: number) => {
     setSatPrevMap((prev) => ({ ...prev, [docIdx]: !prev[docIdx] }));
+  };
+
+  const saveDoctorScores = async (docIdx: number) => {
+    const doc = doctors[docIdx];
+    if (!doc) return;
+  
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  
+      // mapに値が入っていなければ null を送る（float | null に合わせる）
+      const payload = {
+        min_score: minScoreMap[docIdx] ?? null,
+        max_score: maxScoreMap[docIdx] ?? null,
+        target_score: targetScoreMap[docIdx] ?? null,
+      };
+  
+      const res = await fetch(`${apiUrl}/api/doctors/${doc.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "医師スコアの保存に失敗しました");
+      }
+  
+      // 返却がDoctorの場合は画面側のdoctorsも最新化（任意だがズレ防止に推奨）
+      const updated: Doctor = await res.json().catch(() => doc);
+      setDoctors((prev) => prev.map((d, i) => (i === docIdx ? { ...d, ...updated } : d)));
+    } catch (e: any) {
+      setError(e.message || "医師スコアの保存に失敗しました");
+    }
   };
 
   // ✨ シフト自動生成
@@ -755,6 +809,7 @@ useEffect(() => {
                       <th className="py-2 px-2 border-b">Max</th>
                       <th className="py-2 px-2 border-b">目標</th>
                       <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
+                      <th className="py-2 px-2 border-b">保存</th> {/* ✅ 追加 */}
                     </tr>
                   </thead>
                   <tbody>
@@ -790,6 +845,16 @@ useEffect(() => {
                             {satPrevMap[idx] ? "連続回避" : "なし"}
                           </button>
                         </td>
+                        <td className="py-1 px-2">
+  <button
+    type="button"
+    onClick={() => saveDoctorScores(idx)}
+    className="px-2 py-2 rounded text-[10px] font-bold border bg-blue-600 text-white border-blue-700 hover:bg-blue-700 w-full md:w-auto"
+    title="この医師のスコア設定を保存"
+  >
+    保存
+  </button>
+</td>
                       </tr>
                     ))}
                   </tbody>
