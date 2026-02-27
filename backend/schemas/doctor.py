@@ -56,6 +56,10 @@ class DoctorUpdate(BaseModel):
     max_score: Optional[float] = None
     target_score: Optional[float] = None
 
+    # ★追加（要件）
+    unavailable_dates: Optional[List[date]] = None  # 特定の日付のリスト
+    fixed_weekdays: Optional[List[int]] = None      # 0=月曜〜6=日曜
+
 
 class DoctorRead(DoctorBase):
     id: UUID
