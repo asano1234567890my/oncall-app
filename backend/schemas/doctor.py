@@ -35,9 +35,26 @@ class DoctorBase(BaseModel):
     experience_years: int
     is_active: bool = True
 
+    # ★追加（スコアカラム）
+    min_score: Optional[float] = None
+    max_score: Optional[float] = None
+    target_score: Optional[float] = None
+
 
 class DoctorCreate(DoctorBase):
     pass
+
+
+class DoctorUpdate(BaseModel):
+    # ★PUT更新で「送られてきた項目だけ」更新できるよう Optional にする
+    name: Optional[str] = None
+    experience_years: Optional[int] = None
+    is_active: Optional[bool] = None
+
+    # ★追加（スコアカラム）
+    min_score: Optional[float] = None
+    max_score: Optional[float] = None
+    target_score: Optional[float] = None
 
 
 class DoctorRead(DoctorBase):
