@@ -24,3 +24,9 @@ class Doctor(Base):
         cascade="all, delete-orphan",
     )
 
+    # ★追加: Doctor削除時に紐づくShiftAssignmentも連鎖削除
+    shift_assignments: Mapped[list["ShiftAssignment"]] = relationship(
+        back_populates="doctor",
+        cascade="all, delete-orphan",
+        passive_deletes=True,  # ★DB側 ondelete="CASCADE" と併用（FK違反を防ぎやすい）
+    )
