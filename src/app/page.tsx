@@ -1,13 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 type Doctor = {
   id: string;
   name: string;
+
+  // スコア（DB: float | null）
   min_score?: number | null;
   max_score?: number | null;
   target_score?: number | null;
+
+  // ✅ DBの不可日（固定/単発）: unavailable_days
+  unavailable_days?: {
+    date: string | null; // "YYYY-MM-DD" or null
+    day_of_week: number | null; // 0-6 or null
+    is_fixed: boolean;
+  }[];
 };
 
 type ObjectiveWeights = {
@@ -60,9 +69,6 @@ export default function DashboardPage() {
   };
 
   // シフト結果・状態管理
-  // ↓↓↓ この下にあなたの既存コードをそのまま続ける
-  
-  // シフト結果・状態管理
   const [schedule, setSchedule] = useState<any[]>([]);
   const [scores, setScores] = useState<any>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -70,60 +76,115 @@ export default function DashboardPage() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveMessage, setSaveMessage] = useState<string>("");
 
-  // 医師ごとの休み希望管理用
+  // 医師ごとの休み希望管理用（フロント側の既存State）
   const [selectedDocIndex, setSelectedDocIndex] = useState<number>(0);
   const [unavailableMap, setUnavailableMap] = useState<Record<number, number[]>>({});
-
-  // ✅ 固定不可曜日（毎週固定）
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<number, number[]>>({});
 
   // ✅ 月跨ぎ4日間隔（前月末勤務）
-  const calcPrevMonthLastDay = (y: number, m: number) => {
-    return new Date(y, m - 1, 0).getDate();
-  };
+  const calcPrevMonthLastDay = (y: number, m: number) => new Date(y, m - 1, 0).getDate();
   const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2026, 4));
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
 
-  // ✨ 【追加】個別スコア・条件設定用 State
+  // ✨ 個別スコア・条件設定用 State（フロント側）
   const [minScoreMap, setMinScoreMap] = useState<Record<number, number>>({});
   const [maxScoreMap, setMaxScoreMap] = useState<Record<number, number>>({});
   const [targetScoreMap, setTargetScoreMap] = useState<Record<number, number>>({});
   const [satPrevMap, setSatPrevMap] = useState<Record<number, boolean>>({});
 
-// 医師リストの初期取得
-useEffect(() => {
-  const fetchDoctors = async () => {
-    try {
-      // ✅ 環境変数からURLを取得。設定されていなければローカルのURLを使う
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/doctors/`);
-      
-      if (res.ok) {
-        const data: Doctor[] = await res.json();
-        setDoctors(data);
-        setNumDoctors(data.length);
-      
-        // ✅ 追加：Doctorの min/max/target を index-map に初期マッピング
-        const initMin: Record<number, number> = {};
-        const initMax: Record<number, number> = {};
-        const initTarget: Record<number, number> = {};
-      
-        data.forEach((doc, idx) => {
-          if (doc.min_score !== null && doc.min_score !== undefined) initMin[idx] = doc.min_score;
-          if (doc.max_score !== null && doc.max_score !== undefined) initMax[idx] = doc.max_score;
-          if (doc.target_score !== null && doc.target_score !== undefined) initTarget[idx] = doc.target_score;
-        });
-      
-        setMinScoreMap(initMin);
-        setMaxScoreMap(initMax);
-        setTargetScoreMap(initTarget);
-      }
-    } catch (err) {
-      console.error("医師リストの取得に失敗:", err);
-    }
+  // =========================================================
+  // ✅ ヘルパー
+  // =========================================================
+  const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+
+  const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"];
+  const getWeekday = (y: number, m: number, day: number) => weekdaysJp[new Date(y, m - 1, day).getDay()];
+
+  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日"];
+  const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
+
+  // =========================================================
+  // ✅ 重要：DBの unavailable_days をフロントの Map State に復元
+  // =========================================================
+  const applyUnavailableDaysFromDoctors = (docs: Doctor[]) => {
+    const nextUnavailable: Record<number, number[]> = {};
+    const nextFixedWeekdays: Record<number, number[]> = {};
+
+    docs.forEach((doc, idx) => {
+      const list = doc.unavailable_days ?? [];
+      const days: number[] = [];
+      const weekdays: number[] = [];
+
+      list.forEach((u) => {
+        if (u.is_fixed === false) {
+          if (u.date) {
+            const dd = Number(u.date.slice(-2)); // "YYYY-MM-DD" -> DD
+            if (Number.isFinite(dd)) days.push(dd);
+          }
+        } else {
+          if (u.day_of_week !== null && u.day_of_week !== undefined) {
+            weekdays.push(u.day_of_week);
+          }
+        }
+      });
+
+      if (days.length > 0) nextUnavailable[idx] = Array.from(new Set(days)).sort((a, b) => a - b);
+      if (weekdays.length > 0) nextFixedWeekdays[idx] = Array.from(new Set(weekdays)).sort((a, b) => a - b);
+    });
+
+    setUnavailableMap(nextUnavailable);
+    setFixedUnavailableWeekdaysMap(nextFixedWeekdays);
   };
-  fetchDoctors();
-}, []);
+
+  // =========================================================
+  // ✅ 医師データ（スコア）を index-map に初期マッピング
+  // =========================================================
+  const applyScoresFromDoctors = (docs: Doctor[]) => {
+    const initMin: Record<number, number> = {};
+    const initMax: Record<number, number> = {};
+    const initTarget: Record<number, number> = {};
+
+    docs.forEach((doc, idx) => {
+      if (doc.min_score !== null && doc.min_score !== undefined) initMin[idx] = doc.min_score;
+      if (doc.max_score !== null && doc.max_score !== undefined) initMax[idx] = doc.max_score;
+      if (doc.target_score !== null && doc.target_score !== undefined) initTarget[idx] = doc.target_score;
+    });
+
+    setMinScoreMap(initMin);
+    setMaxScoreMap(initMax);
+    setTargetScoreMap(initTarget);
+  };
+
+  // =========================================================
+  // ✅ 医師リストの初期取得（GET）
+  // =========================================================
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const res = await fetch(`${apiUrl}/api/doctors/`);
+
+        if (res.ok) {
+          const data: Doctor[] = await res.json();
+          setDoctors(data);
+          setNumDoctors(data.length);
+
+          // ✅ DBの不可日を復元
+          applyUnavailableDaysFromDoctors(data);
+
+          // ✅ DBのスコアを復元
+          applyScoresFromDoctors(data);
+        }
+      } catch (err) {
+        console.error("医師リストの取得に失敗:", err);
+      }
+    };
+    fetchDoctors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 年月が変わったら「前月最終日」を自動更新
   useEffect(() => {
@@ -132,114 +193,130 @@ useEffect(() => {
     setPrevMonthWorkedDaysMap({});
   }, [year, month]);
 
-  // ヘルパー関数
-  const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"]; 
-  const getWeekday = (y: number, m: number, day: number) => {
-    return weekdaysJp[new Date(y, m - 1, day).getDay()];
-  };
-  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日"]; 
-  const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
-
-  // 共通祝日の切り替え
+  // =========================================================
+  // UI操作系
+  // =========================================================
   const toggleHoliday = (day: number) => {
-    setHolidays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)
-    );
+    setHolidays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
   };
 
-  // 個別休みの切り替え
   const toggleUnavailable = (docIdx: number, day: number) => {
     setUnavailableMap((prev) => {
       const currentDays = prev[docIdx] || [];
-      const newDays = currentDays.includes(day)
-        ? currentDays.filter((d) => d !== day)
-        : [...currentDays, day].sort((a, b) => a - b);
+      const newDays = currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day].sort((a, b) => a - b);
       return { ...prev, [docIdx]: newDays };
     });
   };
 
-  // =========================================================================
-  // ✨ 新規追加：対象医師の不可日を一括操作する関数（1日でもあればクリア、なければ全選択）
-  // =========================================================================
   const toggleAllUnavailable = () => {
     setUnavailableMap((prev) => {
       const currentDays = prev[selectedDocIndex] || [];
       const daysInMonth = getDaysInMonth(year, month);
-      
+
       let newDays: number[] = [];
       if (currentDays.length > 0) {
-        // 1日でも入力があれば：すべてクリア
         newDays = [];
       } else {
-        // 1回も不可日がなければ：その月のすべての日付を不可日に
         newDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
       }
       return { ...prev, [selectedDocIndex]: newDays };
     });
   };
 
-  // 固定不可曜日の切り替え
   const toggleFixedWeekday = (docIdx: number, weekdayPy: number) => {
     setFixedUnavailableWeekdaysMap((prev) => {
       const current = prev[docIdx] || [];
-      const next = current.includes(weekdayPy)
-        ? current.filter((w) => w !== weekdayPy)
-        : [...current, weekdayPy].sort((a, b) => a - b);
+      const next = current.includes(weekdayPy) ? current.filter((w) => w !== weekdayPy) : [...current, weekdayPy].sort((a, b) => a - b);
       return { ...prev, [docIdx]: next };
     });
   };
 
-  // 前月末勤務日の切り替え
   const togglePrevMonthWorkedDay = (docIdx: number, prevDay: number) => {
     setPrevMonthWorkedDaysMap((prev) => {
       const current = prev[docIdx] || [];
-      const next = current.includes(prevDay)
-        ? current.filter((d) => d !== prevDay)
-        : [...current, prevDay].sort((a, b) => a - b);
+      const next = current.includes(prevDay) ? current.filter((d) => d !== prevDay) : [...current, prevDay].sort((a, b) => a - b);
       return { ...prev, [docIdx]: next };
     });
   };
 
-  // ✨ 【追加】前月土曜当直フラグの切り替え
   const toggleSatPrev = (docIdx: number) => {
     setSatPrevMap((prev) => ({ ...prev, [docIdx]: !prev[docIdx] }));
   };
 
-  const saveDoctorScores = async (docIdx: number) => {
+  // =========================================================
+  // ✅ 保存：医師設定（スコア＋休み希望）をまとめてPUT
+  // =========================================================
+  const saveDoctorSettings = async (docIdx: number) => {
     const doc = doctors[docIdx];
     if (!doc) return;
-  
+
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-  
-      // mapに値が入っていなければ null を送る（float | null に合わせる）
+
+      const fixedWeekdays = fixedUnavailableWeekdaysMap[docIdx] ?? [];
+
+      // unavailableMap: [1,5,12] -> unavailable_dates: ["YYYY-MM-01", ...]
+      const unavailableDays = unavailableMap[docIdx] ?? [];
+      const unavailableDates = unavailableDays.map((day) => toYmd(year, month, day));
+
       const payload = {
         min_score: minScoreMap[docIdx] ?? null,
         max_score: maxScoreMap[docIdx] ?? null,
         target_score: targetScoreMap[docIdx] ?? null,
+
+        fixed_weekdays: fixedWeekdays,
+        unavailable_dates: unavailableDates,
       };
-  
+
       const res = await fetch(`${apiUrl}/api/doctors/${doc.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-  
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "医師スコアの保存に失敗しました");
+        throw new Error(errData.detail || "医師設定の保存に失敗しました");
       }
-  
-      // 返却がDoctorの場合は画面側のdoctorsも最新化（任意だがズレ防止に推奨）
+
+      // ✅ 返却Doctorを採用し、doctors と map を同時に復元
       const updated: Doctor = await res.json().catch(() => doc);
+
       setDoctors((prev) => prev.map((d, i) => (i === docIdx ? { ...d, ...updated } : d)));
+
+      // ✅ ここが大事：PUT後にDBの unavailable_days からUI Stateを復元（その医師だけ）
+      {
+        const list = updated.unavailable_days ?? [];
+        const days: number[] = [];
+        const weekdays: number[] = [];
+
+        list.forEach((u) => {
+          if (u.is_fixed === false) {
+            if (u.date) {
+              const dd = Number(u.date.slice(-2));
+              if (Number.isFinite(dd)) days.push(dd);
+            }
+          } else {
+            if (u.day_of_week !== null && u.day_of_week !== undefined) {
+              weekdays.push(u.day_of_week);
+            }
+          }
+        });
+
+        const nextDays = Array.from(new Set(days)).sort((a, b) => a - b);
+        const nextWeekdays = Array.from(new Set(weekdays)).sort((a, b) => a - b);
+
+        setUnavailableMap((prev) => ({ ...prev, [docIdx]: nextDays }));
+        setFixedUnavailableWeekdaysMap((prev) => ({ ...prev, [docIdx]: nextWeekdays }));
+      }
     } catch (e: any) {
-      setError(e.message || "医師スコアの保存に失敗しました");
+      setError(e.message || "医師設定の保存に失敗しました");
     }
   };
 
+  // =========================================================
   // ✨ シフト自動生成
+  // =========================================================
   const handleGenerate = async () => {
     setIsLoading(true);
     setError("");
@@ -254,20 +331,34 @@ useEffect(() => {
       const formattedUnavailable: Record<string, number[]> = {};
       const formattedFixedWeekdays: Record<string, number[]> = {};
       const formattedPrevMonthWorked: Record<string, number[]> = {};
-      
+
       const formattedMinScore: Record<string, number> = {};
       const formattedMaxScore: Record<string, number> = {};
       const formattedTargetScore: Record<string, number> = {};
       const formattedSatPrev: Record<string, boolean> = {};
-      
-      Object.entries(unavailableMap).forEach(([k, v]) => { formattedUnavailable[String(k)] = v; });
-      Object.entries(fixedUnavailableWeekdaysMap).forEach(([k, v]) => { formattedFixedWeekdays[String(k)] = v; });
-      Object.entries(prevMonthWorkedDaysMap).forEach(([k, v]) => { formattedPrevMonthWorked[String(k)] = v; });
-      
-      Object.entries(minScoreMap).forEach(([k, v]) => { formattedMinScore[String(k)] = v; });
-      Object.entries(maxScoreMap).forEach(([k, v]) => { formattedMaxScore[String(k)] = v; });
-      Object.entries(targetScoreMap).forEach(([k, v]) => { formattedTargetScore[String(k)] = v; });
-      Object.entries(satPrevMap).forEach(([k, v]) => { formattedSatPrev[String(k)] = v; });
+
+      Object.entries(unavailableMap).forEach(([k, v]) => {
+        formattedUnavailable[String(k)] = v;
+      });
+      Object.entries(fixedUnavailableWeekdaysMap).forEach(([k, v]) => {
+        formattedFixedWeekdays[String(k)] = v;
+      });
+      Object.entries(prevMonthWorkedDaysMap).forEach(([k, v]) => {
+        formattedPrevMonthWorked[String(k)] = v;
+      });
+
+      Object.entries(minScoreMap).forEach(([k, v]) => {
+        formattedMinScore[String(k)] = v;
+      });
+      Object.entries(maxScoreMap).forEach(([k, v]) => {
+        formattedMaxScore[String(k)] = v;
+      });
+      Object.entries(targetScoreMap).forEach(([k, v]) => {
+        formattedTargetScore[String(k)] = v;
+      });
+      Object.entries(satPrevMap).forEach(([k, v]) => {
+        formattedSatPrev[String(k)] = v;
+      });
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/optimize/`, {
@@ -286,7 +377,7 @@ useEffect(() => {
           score_min: scoreMin,
           score_max: scoreMax,
 
-          // ✨ 【追加】個別設定データを送信
+          // ✨ 個別設定データを送信
           min_score_by_doctor: formattedMinScore,
           max_score_by_doctor: formattedMaxScore,
           target_score_by_doctor: formattedTargetScore,
@@ -315,14 +406,14 @@ useEffect(() => {
     }
   };
 
-  // 💾 データベースへ保存
+  // 💾 データベースへ保存（シフト）
   const handleSaveToDB = async () => {
     setIsSaving(true);
     setSaveMessage("");
     setError("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"; // ← これを追加
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/schedule/save/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -358,18 +449,11 @@ useEffect(() => {
   })();
 
   return (
-    // ✅ スマホ時は外側の余白を最小限(p-2)に
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
-      {/* ✅ スマホ時は画面幅いっぱい(w-full)に使い、内側の余白も小さく(p-4) */}
       <main className="w-full max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-4 md:p-8">
-        
-        <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-8 border-b pb-4">
-          🏥 当直表 自動生成ダッシュボード
-        </h1>
+        <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-8 border-b pb-4">🏥 当直表 自動生成ダッシュボード</h1>
 
-        {/* ✅ 左右のカラム間の隙間もスマホ時は狭く(gap-4) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-4 md:mb-8">
-          
           {/* --- 左側：条件設定フォーム --- */}
           <div className="bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
             <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
@@ -392,7 +476,8 @@ useEffect(() => {
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700 shrink-0">目的</span>
                   <span>
-                    ５日間隔・外来前日({objectiveWeights.gap5}) ＞日祝３回目回避({objectiveWeights.sunhol_3rd})・連続土曜({objectiveWeights.sat_consec}) ＞ ６日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
+                    ５日間隔・外来前日({objectiveWeights.gap5}) ＞日祝３回目回避({objectiveWeights.sunhol_3rd})・連続土曜(
+                    {objectiveWeights.sat_consec}) ＞ ６日間隔({objectiveWeights.gap6}) ＞ スコア公平({objectiveWeights.score_balance})
                   </span>
                 </li>
               </ul>
@@ -400,124 +485,110 @@ useEffect(() => {
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">score_min</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={scoreMin}
-                    onChange={(e) => setScoreMin(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" step="0.1" value={scoreMin} onChange={(e) => setScoreMin(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">score_max</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={scoreMax}
-                    onChange={(e) => setScoreMax(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" step="0.1" value={scoreMax} onChange={(e) => setScoreMax(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
             </div>
 
-{/* ✅ 目的関数の重み（折りたたみ） */}
-<details className="mt-4 rounded-lg border border-blue-100 bg-white shadow-sm">
-  <summary
-    className="list-none cursor-pointer select-none p-4
-               flex items-center justify-between gap-3
-               [&::-webkit-details-marker]:hidden"
-  >
-    <div className="min-w-0">
-      <div className="text-sm font-bold text-gray-700 truncate">🎛️ 目的関数の重み</div>
-      <div className="text-[10px] text-gray-500 mt-1">普段は触らず、必要なときだけ開いて調整します</div>
-    </div>
+            {/* ✅ 目的関数の重み（折りたたみ） */}
+            <details className="mt-4 rounded-lg border border-blue-100 bg-white shadow-sm">
+              <summary
+                className="list-none cursor-pointer select-none p-4 flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-gray-700 truncate">🎛️ 目的関数の重み</div>
+                  <div className="text-[10px] text-gray-500 mt-1">普段は触らず、必要なときだけ開いて調整します</div>
+                </div>
 
-    <div className="flex items-center gap-2 shrink-0">
-      <span className="text-[10px] font-bold text-gray-500">
-        gap5:{objectiveWeights.gap5} / pre:{objectiveWeights.pre_clinic} / 日祝3回目:{objectiveWeights.sunhol_3rd}
-      </span>
-      <span className="text-gray-400">▼</span>
-    </div>
-  </summary>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-bold text-gray-500">
+                    gap5:{objectiveWeights.gap5} / pre:{objectiveWeights.pre_clinic} / 日祝3回目:{objectiveWeights.sunhol_3rd}
+                  </span>
+                  <span className="text-gray-400">▼</span>
+                </div>
+              </summary>
 
-  {/* 開いたときの中身 */}
-  <div className="px-4 pb-4 pt-1">
-    <div className="flex justify-end mb-3">
-      <button
-        type="button"
-        onClick={() =>
-          setObjectiveWeights((prev) => ({
-            ...prev,
-            gap5: 100,
-            pre_clinic: 100,
-            sat_consec: 80,
-            sunhol_3rd: 80,
-            gap6: 50,
-            score_balance: 30,
-            target: 10,
-          }))
-        }
-        className="text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50"
-        title="重みだけ初期値に戻します"
-      >
-        初期値に戻す
-      </button>
-    </div>
+              <div className="px-4 pb-4 pt-1">
+                <div className="flex justify-end mb-3">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setObjectiveWeights((prev) => ({
+                        ...prev,
+                        gap5: 100,
+                        pre_clinic: 100,
+                        sat_consec: 80,
+                        sunhol_3rd: 80,
+                        gap6: 50,
+                        score_balance: 30,
+                        target: 10,
+                      }))
+                    }
+                    className="text-[10px] font-bold text-blue-600 hover:text-blue-700 px-2 py-1 rounded border border-blue-200 bg-blue-50"
+                    title="重みだけ初期値に戻します"
+                  >
+                    初期値に戻す
+                  </button>
+                </div>
 
-    <div className="space-y-3">
-      {(
-        [
-          { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
-          { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
-          { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
-          { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
-          { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
-          { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
-          { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
-        ] as const
-      ).map((w) => (
-        <div key={w.key} className="rounded-lg border border-gray-100 p-3">
-          <div className="flex items-center justify-between gap-2 mb-2">
-            <div className="min-w-0">
-              <div className="text-[12px] font-bold text-gray-700 truncate">
-                {w.label}
-                <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
+                <div className="space-y-3">
+                  {(
+                    [
+                      { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
+                      { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
+                      { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
+                      { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
+                      { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
+                      { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
+                      { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
+                    ] as const
+                  ).map((w) => (
+                    <div key={w.key} className="rounded-lg border border-gray-100 p-3">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="min-w-0">
+                          <div className="text-[12px] font-bold text-gray-700 truncate">
+                            {w.label}
+                            <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
+                          </div>
+                        </div>
+
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          value={objectiveWeights[w.key]}
+                          onChange={(e) => setWeight(w.key, Number(e.target.value))}
+                          className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
+                          min={w.min}
+                          max={w.max}
+                          step={w.step}
+                        />
+                      </div>
+
+                      <input
+                        type="range"
+                        value={objectiveWeights[w.key]}
+                        onChange={(e) => setWeight(w.key, Number(e.target.value))}
+                        min={w.min}
+                        max={w.max}
+                        step={w.step}
+                        className="w-full accent-blue-600"
+                      />
+
+                      <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                        <span>{w.min}</span>
+                        <span>{w.max}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            </details>
 
-            <input
-              type="number"
-              inputMode="numeric"
-              value={objectiveWeights[w.key]}
-              onChange={(e) => setWeight(w.key, Number(e.target.value))}
-              className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
-              min={w.min}
-              max={w.max}
-              step={w.step}
-            />
-          </div>
-
-          <input
-            type="range"
-            value={objectiveWeights[w.key]}
-            onChange={(e) => setWeight(w.key, Number(e.target.value))}
-            min={w.min}
-            max={w.max}
-            step={w.step}
-            className="w-full accent-blue-600"
-          />
-
-          <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-            <span>{w.min}</span>
-            <span>{w.max}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  </div>
-</details>
             <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
@@ -532,12 +603,7 @@ useEffect(() => {
             <div className="mb-4">
               <label className="block text-sm font-bold text-gray-700 mb-1">医師の人数</label>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={numDoctors}
-                  readOnly
-                  className="border rounded p-2 w-full bg-gray-100 text-gray-500 cursor-not-allowed"
-                />
+                <input type="number" value={numDoctors} readOnly className="border rounded p-2 w-full bg-gray-100 text-gray-500 cursor-not-allowed" />
                 <span className="text-sm font-bold text-blue-600">人</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
@@ -574,8 +640,6 @@ useEffect(() => {
 
             {/* 個別休み希望 */}
             <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm relative">
-              
-              {/* ✨ ラベルと誤爆防止クリアボタンを並べる */}
               <div className="flex justify-between items-center mb-3">
                 <label className="text-sm font-bold text-gray-700 text-center flex-grow pl-10">👨‍⚕️ 個別休み希望</label>
                 <button
@@ -617,6 +681,7 @@ useEffect(() => {
                   );
                 })}
               </div>
+
               <div className="mt-2 flex justify-between items-center text-[9px]">
                 <span className="text-transparent">ダミー</span>
                 <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDocIndex]?.length || 0} 日</span>
@@ -624,13 +689,11 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* ✅ 固定不可曜日（毎週固定） */}
+            {/* 固定不可曜日（毎週固定） */}
             <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
               <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日 一括入力</label>
 
-              <div className="text-[10px] text-gray-500 text-center mb-3">
-                各医師の「毎週入れない曜日」をチェックしてください。
-              </div>
+              <div className="text-[10px] text-gray-500 text-center mb-3">各医師の「毎週入れない曜日」をチェックしてください。</div>
 
               <div className="overflow-x-auto">
                 <div className="min-w-[520px]">
@@ -644,11 +707,7 @@ useEffect(() => {
                         <div
                           key={pyWd}
                           className={`text-[11px] font-bold text-center rounded py-1 border ${
-                            isSun
-                              ? "bg-red-50 text-red-500 border-red-100"
-                              : isSat
-                              ? "bg-blue-50 text-blue-600 border-blue-100"
-                              : "bg-gray-50 text-gray-700 border-gray-100"
+                            isSun ? "bg-red-50 text-red-500 border-red-100" : isSat ? "bg-blue-50 text-blue-600 border-blue-100" : "bg-gray-50 text-gray-700 border-gray-100"
                           }`}
                         >
                           {label}
@@ -664,9 +723,7 @@ useEffect(() => {
                           type="button"
                           onClick={() => setSelectedDocIndex(docIdx)}
                           className={`text-left text-[11px] font-bold px-2 py-2 rounded border truncate transition ${
-                            selectedDocIndex === docIdx
-                              ? "bg-blue-600 text-white border-blue-700"
-                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                            selectedDocIndex === docIdx ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                           }`}
                         >
                           {doc.name}
@@ -707,9 +764,7 @@ useEffect(() => {
               </div>
 
               <div className="mt-3 text-[10px] text-center text-gray-500">
-                選択中:{" "}
-                <span className="font-bold text-gray-700">{doctors[selectedDocIndex]?.name || "未選択"}</span>{" "}
-                ／ 固定不可:{" "}
+                選択中: <span className="font-bold text-gray-700">{doctors[selectedDocIndex]?.name || "未選択"}</span> ／ 固定不可:{" "}
                 {(fixedUnavailableWeekdaysMap[selectedDocIndex] || []).length === 0
                   ? "なし"
                   : (fixedUnavailableWeekdaysMap[selectedDocIndex] || [])
@@ -720,23 +775,16 @@ useEffect(() => {
               </div>
             </div>
 
-            {/* ✅ 月跨ぎ4日間隔 */}
+            {/* 月跨ぎ4日間隔 */}
             <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
               <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 前月末勤務</label>
 
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日</label>
-                  <input
-                    type="number"
-                    value={prevMonthLastDay}
-                    onChange={(e) => setPrevMonthLastDay(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" value={prevMonthLastDay} onChange={(e) => setPrevMonthLastDay(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
-                <div className="text-[10px] text-gray-500 flex items-end">
-                  ※年月変更時は自動計算されます
-                </div>
+                <div className="text-[10px] text-gray-500 flex items-end">※年月変更時は自動計算されます</div>
               </div>
 
               <div className="overflow-x-auto">
@@ -753,9 +801,7 @@ useEffect(() => {
                   <div className="space-y-1">
                     {doctors.map((doc, docIdx) => (
                       <div key={doc.id} className="grid grid-cols-[180px_repeat(4,1fr)] gap-1 items-center">
-                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">
-                          {doc.name}
-                        </div>
+                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">{doc.name}</div>
 
                         {prevMonthTailDays.map((d) => {
                           const selected = (prevMonthWorkedDaysMap[docIdx] || []).includes(d);
@@ -765,9 +811,7 @@ useEffect(() => {
                               type="button"
                               onClick={() => togglePrevMonthWorkedDay(docIdx, d)}
                               className={`h-9 rounded border text-[12px] font-bold transition ${
-                                selected
-                                  ? "bg-gray-900 text-white border-gray-900"
-                                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                                selected ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                               }`}
                             >
                               {selected ? "×" : ""}
@@ -792,14 +836,13 @@ useEffect(() => {
 
           {/* --- 右側：結果表示エリア --- */}
           <div className="col-span-1 md:col-span-2">
-            
-            {/* ✨ 医師個別のスコア・条件設定テーブル */}
+            {/* 医師別スコア設定 */}
             <div className="bg-orange-50 p-3 md:p-6 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-6">
               <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
                 <span>🎯 医師別 スコア設定</span>
                 <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
               </h3>
-              
+
               <div className="overflow-x-auto bg-white border rounded-lg">
                 <table className="min-w-full text-center text-[12px]">
                   <thead className="bg-gray-100 text-gray-600">
@@ -809,52 +852,68 @@ useEffect(() => {
                       <th className="py-2 px-2 border-b">Max</th>
                       <th className="py-2 px-2 border-b">目標</th>
                       <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
-                      <th className="py-2 px-2 border-b">保存</th> {/* ✅ 追加 */}
+                      <th className="py-2 px-2 border-b">保存</th>
                     </tr>
                   </thead>
                   <tbody>
                     {doctors.map((doc, idx) => (
                       <tr key={doc.id} className="border-b hover:bg-gray-50">
                         <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
+
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={minScoreMap[idx] === undefined ? "" : minScoreMap[idx]} 
-                            onChange={(e) => setMinScoreMap({...minScoreMap, [idx]: parseFloat(e.target.value)})} 
-                            placeholder={String(scoreMin)} 
+                          <input
+                            type="number"
+                            step="0.5"
+                            className="w-12 md:w-14 border rounded p-1 text-center"
+                            value={minScoreMap[idx] === undefined ? "" : minScoreMap[idx]}
+                            onChange={(e) => setMinScoreMap({ ...minScoreMap, [idx]: parseFloat(e.target.value) })}
+                            placeholder={String(scoreMin)}
                           />
                         </td>
+
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={maxScoreMap[idx] === undefined ? "" : maxScoreMap[idx]} 
-                            onChange={(e) => setMaxScoreMap({...maxScoreMap, [idx]: parseFloat(e.target.value)})} 
-                            placeholder={String(scoreMax)} 
+                          <input
+                            type="number"
+                            step="0.5"
+                            className="w-12 md:w-14 border rounded p-1 text-center"
+                            value={maxScoreMap[idx] === undefined ? "" : maxScoreMap[idx]}
+                            onChange={(e) => setMaxScoreMap({ ...maxScoreMap, [idx]: parseFloat(e.target.value) })}
+                            placeholder={String(scoreMax)}
                           />
                         </td>
+
                         <td className="py-1 px-2">
-                          <input type="number" step="0.5" className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
-                            value={targetScoreMap[idx] === undefined ? "" : targetScoreMap[idx]} 
-                            onChange={(e) => setTargetScoreMap({...targetScoreMap, [idx]: parseFloat(e.target.value)})} 
-                            placeholder="任意" 
+                          <input
+                            type="number"
+                            step="0.5"
+                            className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
+                            value={targetScoreMap[idx] === undefined ? "" : targetScoreMap[idx]}
+                            onChange={(e) => setTargetScoreMap({ ...targetScoreMap, [idx]: parseFloat(e.target.value) })}
+                            placeholder="任意"
                           />
                         </td>
+
                         <td className="py-1 px-2">
-                          <button 
-                            onClick={() => toggleSatPrev(idx)} 
-                            className={`px-2 py-1 rounded text-[10px] font-bold border ${satPrevMap[idx] ? 'bg-orange-500 text-white border-orange-600' : 'bg-white text-gray-400 border-gray-200'}`}
+                          <button
+                            onClick={() => toggleSatPrev(idx)}
+                            className={`px-2 py-1 rounded text-[10px] font-bold border ${
+                              satPrevMap[idx] ? "bg-orange-500 text-white border-orange-600" : "bg-white text-gray-400 border-gray-200"
+                            }`}
                           >
                             {satPrevMap[idx] ? "連続回避" : "なし"}
                           </button>
                         </td>
+
                         <td className="py-1 px-2">
-  <button
-    type="button"
-    onClick={() => saveDoctorScores(idx)}
-    className="px-2 py-2 rounded text-[10px] font-bold border bg-blue-600 text-white border-blue-700 hover:bg-blue-700 w-full md:w-auto"
-    title="この医師のスコア設定を保存"
-  >
-    保存
-  </button>
-</td>
+                          <button
+                            type="button"
+                            onClick={() => saveDoctorSettings(idx)}
+                            className="px-2 py-2 rounded text-[10px] font-bold border bg-blue-600 text-white border-blue-700 hover:bg-blue-700 w-full md:w-auto"
+                            title="この医師の設定を保存（スコア＋休み希望）"
+                          >
+                            保存
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -906,18 +965,14 @@ useEffect(() => {
                             <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
                             <td className="py-2 px-2 md:px-3">
                               {row.day_shift !== null && row.day_shift !== undefined ? (
-                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                                  {doctors[row.day_shift]?.name}
-                                </span>
+                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{doctors[row.day_shift]?.name}</span>
                               ) : (
                                 "-"
                               )}
                             </td>
                             <td className="py-2 px-2 md:px-3">
                               {row.night_shift !== null && row.night_shift !== undefined ? (
-                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                                  {doctors[row.night_shift]?.name}
-                                </span>
+                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{doctors[row.night_shift]?.name}</span>
                               ) : (
                                 "-"
                               )}
