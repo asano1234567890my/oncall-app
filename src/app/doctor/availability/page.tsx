@@ -55,21 +55,21 @@ export default function DoctorManagerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* ✅ 親カード：padding + overflowで“はみ出し”を物理的に封じる */}
-      <div className="max-w-2xl mx-auto bg-white p-4 sm:p-6 md:p-8 w-full overflow-hidden rounded-xl shadow-md border border-gray-200">
+      {/* ✅ 親カード：画面幅を超えない（w-full + max-w-md + mx-auto） */}
+      <div className="w-full max-w-md mx-auto bg-white p-4 md:p-6 rounded-xl shadow-md border border-gray-200 overflow-hidden">
         <h1 className="text-xl md:text-2xl font-bold mb-6 border-b pb-2 text-gray-800">
           👨‍⚕️ 医師マスタ管理
         </h1>
 
-        {/* ✅ 新規追加エリア：指定クラスでスマホ縦 / PC横 */}
+        {/* ✅ 新規追加エリア：Gridで堅牢化（推奨案） */}
         <div className="mb-8 bg-blue-50 p-4 rounded-lg border border-blue-100">
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md mx-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 w-full">
             <input
               type="text"
               placeholder="新しい医師の氏名"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full min-w-0 p-3 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               type="button"
@@ -93,10 +93,10 @@ export default function DoctorManagerPage() {
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full sm:flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full min-w-0 sm:flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               ) : (
-                <span className="font-bold text-gray-700 text-base">
+                <span className="font-bold text-gray-700 text-base break-words">
                   {doc.name}
                 </span>
               )}
