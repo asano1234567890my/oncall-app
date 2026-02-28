@@ -1,138 +1,347 @@
-// src/app/admin/doctors/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState , KeyboardEvent } from "react";
 
-export default function DoctorManagerPage() {
-  const [doctors, setDoctors] = useState<any[]>([]);
+type Doctor = {
+  id: string;
+  name: string;
+  // バックエンドから他プロパティが多数来ても壊れないようにする
+  [key: string]: any;
+};
+
+function getApiUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  return envUrl && envUrl.trim().length > 0 ? envUrl : "http://127.0.0.1:8000";
+}
+
+export default function DoctorsPage() {
+  // ========================
+  // MUST KEEP state names
+  // ========================
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
+  // UI補助
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // 二重送信防止（対象ボタンだけ止める）
+  const [isAdding, setIsAdding] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const apiUrl = useMemo(() => getApiUrl(), []);
+
+  // ========================
+  // A. GET doctors
+  // ========================
   const fetchDoctors = async () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    setIsLoading(true);
+    setErrorMsg(null);
     try {
-      const res = await fetch(`${apiUrl}/api/doctors/`);
-      if (res.ok) setDoctors(await res.json());
-    } catch (error) {
-      console.error("Failed to fetch doctors:", error);
+      const res = await fetch(`${apiUrl}/api/doctors/`, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error(`GET failed: ${res.status}`);
+      }
+      const data = (await res.json()) as Doctor[];
+      setDoctors(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "一覧取得に失敗しました");
+      setDoctors([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDoctors();
+    void fetchDoctors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ========================
+  // B. POST add
+  // ========================
   const handleAdd = async () => {
-    if (!newName) return;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    await fetch(`${apiUrl}/api/doctors/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
-    });
-    setNewName("");
-    fetchDoctors();
+    const name = newName.trim();
+    if (!name) return;
+
+    setIsAdding(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/doctors/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        throw new Error(`POST failed: ${res.status}`);
+      }
+      setNewName("");
+      await fetchDoctors();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "追加に失敗しました");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  // ========================
+  // C. PUT update name
+  // ========================
+  const startEdit = (d: Doctor) => {
+    setEditingId(d.id);
+    setEditName(d.name ?? "");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
   };
 
   const handleUpdate = async (id: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    await fetch(`${apiUrl}/api/doctors/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName }),
-    });
-    setEditingId(null);
-    fetchDoctors();
+    const name = editName.trim();
+    if (!name) return;
+
+    setUpdatingId(id);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/doctors/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        throw new Error(`PUT failed: ${res.status}`);
+      }
+      cancelEdit();
+      await fetchDoctors();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "更新に失敗しました");
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
+  // ========================
+  // D. DELETE
+  // ========================
   const handleDelete = async (id: string) => {
-    if (!confirm("本当に削除しますか？")) return;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    await fetch(`${apiUrl}/api/doctors/${id}`, { method: "DELETE" });
-    fetchDoctors();
+    const ok = confirm("本当に削除しますか？");
+    if (!ok) return;
+
+    setDeletingId(id);
+    setErrorMsg(null);
+    try {
+      const res = await fetch(`${apiUrl}/api/doctors/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        throw new Error(`DELETE failed: ${res.status}`);
+      }
+      // 編集中の対象を消した場合の安全策
+      if (editingId === id) cancelEdit();
+      await fetchDoctors();
+    } catch (e: any) {
+      setErrorMsg(e?.message ?? "削除に失敗しました");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const onAddKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") void handleAdd();
+  };
+
+  const onEditKeyDown = (e: KeyboardEvent<HTMLInputElement>, id: string) => {
+    if (e.key === "Enter") void handleUpdate(id);
+    if (e.key === "Escape") cancelEdit();
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* ✅ 親カード：画面幅を超えない（w-full + max-w-md + mx-auto） */}
-      <div className="w-full max-w-md mx-auto bg-white p-4 md:p-6 rounded-xl shadow-md border border-gray-200 overflow-hidden">
-        <h1 className="text-xl md:text-2xl font-bold mb-6 border-b pb-2 text-gray-800">
-          👨‍⚕️ 医師マスタ管理
-        </h1>
+    <div className="w-full overflow-x-hidden px-3 py-4 sm:px-6 sm:py-6">
+      <div className="mx-auto w-full max-w-5xl">
+        {/* Header */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold leading-tight sm:text-xl">医師マスタ管理</h1>
+            <p className="mt-1 text-xs text-neutral-500 sm:text-sm">
+              一覧の追加・編集・削除を行います（モバイル対応）
+            </p>
+          </div>
 
-        {/* ✅ 新規追加エリア：Gridで堅牢化（推奨案） */}
-        <div className="mb-8 bg-blue-50 p-4 rounded-lg border border-blue-100">
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 w-full">
-            <input
-              type="text"
-              placeholder="新しい医師の氏名"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-full min-w-0 p-3 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={handleAdd}
-              className="w-full sm:w-auto whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded font-bold transition-colors shadow-sm"
+              onClick={() => void fetchDoctors()}
+              disabled={isLoading}
+              className="inline-flex items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium shadow-sm disabled:opacity-50"
             >
-              追加
+              再読込
             </button>
           </div>
         </div>
 
-        {/* 一覧エリア */}
-        <div className="space-y-3">
-          {doctors.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 gap-3"
-            >
-              {editingId === doc.id ? (
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="w-full min-w-0 sm:flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              ) : (
-                <span className="font-bold text-gray-700 text-base break-words">
-                  {doc.name}
-                </span>
-              )}
+        {/* Error */}
+        {errorMsg && (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {errorMsg}
+          </div>
+        )}
 
-              <div className="flex gap-2 w-full sm:w-auto shrink-0">
-                {editingId === doc.id ? (
-                  <button
-                    type="button"
-                    onClick={() => handleUpdate(doc.id)}
-                    className="flex-1 sm:flex-none text-green-700 font-bold bg-green-100 hover:bg-green-200 px-4 py-2 rounded transition-colors"
-                  >
-                    保存
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditingId(doc.id);
-                      setEditName(doc.name);
-                    }}
-                    className="flex-1 sm:flex-none text-blue-700 font-bold bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded transition-colors"
-                  >
-                    編集
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => handleDelete(doc.id)}
-                  className="flex-1 sm:flex-none text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors"
-                >
-                  削除
-                </button>
-              </div>
+        {/* Add form */}
+        <div className="mt-4 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm sm:p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <label className="block text-xs font-medium text-neutral-600">新規医師名</label>
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={onAddKeyDown}
+                placeholder="例）山田 太郎"
+                className="mt-1 w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400"
+              />
             </div>
-          ))}
+
+            <div className="flex gap-2 sm:pt-5">
+              <button
+                type="button"
+                onClick={() => void handleAdd()}
+                disabled={isAdding || newName.trim().length === 0}
+                className="inline-flex w-full items-center justify-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50 sm:w-auto"
+              >
+                {isAdding ? "追加中…" : "追加"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewName("")}
+                disabled={isAdding || newName.length === 0}
+                className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-medium shadow-sm disabled:opacity-50 sm:w-auto"
+              >
+                クリア
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm font-semibold">
+              医師一覧{" "}
+              <span className="font-normal text-neutral-500">({doctors.length})</span>
+            </div>
+            {isLoading && <div className="text-xs text-neutral-500">読み込み中…</div>}
+          </div>
+
+          {/* Cards */}
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:gap-3">
+            {doctors.map((d) => {
+              const isEditing = editingId === d.id;
+              const isBusy =
+                isAdding || updatingId === d.id || deletingId === d.id || isLoading;
+
+              return (
+                <div
+                  key={d.id}
+                  className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm sm:p-4"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    {/* Left: name / edit */}
+                    <div className="min-w-0 flex-1">
+                      {!isEditing ? (
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="min-w-0 flex-1 break-words text-sm font-semibold">
+                              {d.name}
+                            </div>
+                          </div>
+                          <div className="mt-1 break-all text-[11px] text-neutral-500">
+                            ID: {d.id}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="min-w-0">
+                          <label className="block text-xs font-medium text-neutral-600">
+                            医師名（編集）
+                          </label>
+                          <input
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            onKeyDown={(e) => onEditKeyDown(e, d.id)}
+                            className="mt-1 w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-400"
+                            autoFocus
+                          />
+                          <div className="mt-1 text-[11px] text-neutral-500">
+                            Enterで保存 / Escでキャンセル
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right: actions */}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                      {!isEditing ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(d)}
+                            disabled={isBusy}
+                            className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium shadow-sm disabled:opacity-50 sm:w-auto"
+                          >
+                            編集
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDelete(d.id)}
+                            disabled={isBusy}
+                            className="inline-flex w-full items-center justify-center rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm disabled:opacity-50 sm:w-auto"
+                          >
+                            {deletingId === d.id ? "削除中…" : "削除"}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void handleUpdate(d.id)}
+                            disabled={updatingId === d.id || editName.trim().length === 0}
+                            className="inline-flex w-full items-center justify-center rounded-lg bg-neutral-900 px-3 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50 sm:w-auto"
+                          >
+                            {updatingId === d.id ? "保存中…" : "保存"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            disabled={updatingId === d.id}
+                            className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm font-medium shadow-sm disabled:opacity-50 sm:w-auto"
+                          >
+                            キャンセル
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+
+            {!isLoading && doctors.length === 0 && (
+              <div className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+                医師がまだ登録されていません。上のフォームから追加してください。
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer note */}
+        <div className="mt-6 text-xs text-neutral-500">
+          ※ API Base URL: <span className="break-all">{apiUrl}</span>
         </div>
       </div>
     </div>
