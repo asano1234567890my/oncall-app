@@ -19,7 +19,17 @@ class Doctor(Base):
     experience_years: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    # ★追加（要件1）
+    # ★追加（要件: マジックリンク用トークン）
+    # 既存DBへ入れるため、マイグレーション側で既存行に値を埋めてから NOT NULL/UNIQUE を確定させる想定
+    access_token: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=False,
+        default=lambda: uuid.uuid4().hex,
+    )
+
+    # スコア
     min_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     max_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     target_score: Mapped[float | None] = mapped_column(Float, nullable=True)

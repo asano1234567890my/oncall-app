@@ -16,7 +16,6 @@ router = APIRouter(prefix="/api/doctors", tags=["Doctors"])
 # 1. 取得API（一覧）
 @router.get("/")
 async def get_doctors(db: AsyncSession = Depends(get_db)):
-    # ★ Eager Load 徹底
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
@@ -33,6 +32,8 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
             "min_score": d.min_score,
             "max_score": d.max_score,
             "target_score": d.target_score,
+            # ★追加：管理側レスポンスに access_token を含める
+            "access_token": d.access_token,
             "unavailable_days": [
                 {
                     "id": str(u.id),
@@ -53,7 +54,6 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
 async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     doctor_uuid = uuid.UUID(doctor_id)
 
-    # ★ Eager Load 徹底
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
@@ -71,6 +71,8 @@ async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
         "min_score": doctor.min_score,
         "max_score": doctor.max_score,
         "target_score": doctor.target_score,
+        # ★追加
+        "access_token": doctor.access_token,
         "unavailable_days": [
             {
                 "id": str(u.id),
@@ -95,20 +97,26 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
             min_score=doc.min_score,
             max_score=doc.max_score,
             target_score=doc.target_score,
+            # access_token はモデル default で自動生成される
         )
         db.add(new_doc)
 
         await db.commit()
         await db.refresh(new_doc)
 
-        return {"message": "医師を登録しました", "id": str(new_doc.id)}
+        # ★運用でURL発行したいので access_token も返す
+        return {
+            "message": "医師を登録しました",
+            "id": str(new_doc.id),
+            "access_token": new_doc.access_token,
+        }
 
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 4. 更新API（★改修）
+# 4. 更新API（管理側）
 @router.put("/{doctor_id}")
 async def update_doctor(
     doctor_id: str, doc: DoctorUpdate, db: AsyncSession = Depends(get_db)
@@ -116,11 +124,9 @@ async def update_doctor(
     """
     スコア等の更新に加えて、unavailable_dates / fixed_weekdays を受け取った場合は
     UnavailableDay を全削除→再作成する（Full Replace）。
-    ※ SQLAlchemy AsyncSession はSELECTでもautobeginするため、db.begin()は使わず commit を1回にする
     """
     doctor_uuid = uuid.UUID(doctor_id)
 
-    # ■ 1. デバッグログ（先頭）
     print(
         f"DEBUG PUT: doctor_id={doctor_id}, "
         f"payload={doc.model_dump(exclude_unset=True)}"
@@ -133,22 +139,21 @@ async def update_doctor(
         if doctor is None:
             raise HTTPException(status_code=404, detail="Doctor not found")
 
-        # 「送信されたキーだけ」を扱う（未送信は触らない）
         payload = doc.model_dump(exclude_unset=True)
 
-        # 空配列でも全置換したいので「キー存在」で判定
+        # 空配列でも全置換したいのでキー存在で判定
         has_unavailable_dates = "unavailable_dates" in payload
         has_fixed_weekdays = "fixed_weekdays" in payload
 
         unavailable_dates = payload.pop("unavailable_dates", None)
         fixed_weekdays = payload.pop("fixed_weekdays", None)
 
-        # Doctor本体の更新：None は無視（フロントのnull送信・NOT NULL対策）
+        # Doctor本体の更新：None は無視（null送信対策）
         for k, v in payload.items():
             if v is not None:
                 setattr(doctor, k, v)
 
-        # ■ 2. Full Replace（1トランザクション = commit 1回で確定）
+        # Full Replace（commit 1回）
         if has_unavailable_dates or has_fixed_weekdays:
             await db.execute(
                 delete(UnavailableDay).where(UnavailableDay.doctor_id == doctor_uuid)
@@ -181,7 +186,7 @@ async def update_doctor(
 
         await db.commit()
 
-        # ■ 3. Eager Load 徹底：更新後は selectinload付きで再取得して返す
+        # 更新後は selectinload付きで再取得して返す
         result = await db.execute(
             select(Doctor)
             .options(selectinload(Doctor.unavailable_days))
@@ -201,6 +206,8 @@ async def update_doctor(
                 "min_score": doctor.min_score,
                 "max_score": doctor.max_score,
                 "target_score": doctor.target_score,
+                # ★追加
+                "access_token": doctor.access_token,
                 "unavailable_days": [
                     {
                         "id": str(u.id),
