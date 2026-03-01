@@ -11,7 +11,7 @@ export default function ViewSchedulePage() {
   const [schedule, setSchedule] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  
+
   // 画像化する対象の要素を紐付けるためのRef
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -41,16 +41,14 @@ export default function ViewSchedulePage() {
     return ["日", "月", "火", "水", "木", "金", "土"][new Date(y, m - 1, d).getDay()];
   };
 
-  // ✅ 修正版: modern-screenshot を使った画像保存関数
+  // ✅ modern-screenshot を使った画像保存関数
   const handleDownloadImage = async () => {
-    // Refが無い、または保存処理中ならブロック
     if (!tableRef.current || isDownloading) return;
-    
+
     setIsDownloading(true);
     try {
-      // 💡 domToPng を使って直接画像URLを生成（最新CSSもバッチリ対応）
       const dataUrl = await domToPng(tableRef.current, {
-        scale: 3, // 高画質化（スマホで拡大しても綺麗に見えるレベル）
+        scale: 3,
         backgroundColor: "#ffffff",
         quality: 1.0,
       });
@@ -68,31 +66,34 @@ export default function ViewSchedulePage() {
   };
 
   return (
-    // スマホ時は余白を極限まで削る
     <div className="min-h-screen bg-slate-50 p-1 md:p-8">
       <div className="max-w-3xl mx-auto">
         <header className="flex flex-wrap items-center justify-between mb-2 md:mb-6 gap-2">
           <h1 className="text-lg md:text-2xl font-bold text-slate-800">🗓️ 勤務カレンダー</h1>
-          
+
           <div className="flex gap-2 w-full md:w-auto justify-between">
             <div className="flex items-center gap-1 bg-white p-1.5 rounded-lg shadow-sm border border-slate-200">
-              <input 
-                type="number" value={year} onChange={(e) => setYear(Number(e.target.value))}
+              <input
+                type="number"
+                value={year}
+                onChange={(e) => setYear(Number(e.target.value))}
                 className="w-16 p-0 border-none focus:ring-0 text-center font-bold text-sm"
               />
               <span className="text-sm">年</span>
-              <select 
-                value={month} onChange={(e) => setMonth(Number(e.target.value))}
+              <select
+                value={month}
+                onChange={(e) => setMonth(Number(e.target.value))}
                 className="p-0 pl-1 border-none focus:ring-0 font-bold bg-transparent text-sm"
               >
                 {[...Array(12)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{i+1}月</option>
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1}月
+                  </option>
                 ))}
               </select>
             </div>
 
-            {/* ダウンロードボタン */}
-            <button 
+            <button
               onClick={handleDownloadImage}
               disabled={isDownloading || schedule.length === 0}
               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs md:text-sm font-bold px-3 py-1.5 rounded-lg shadow flex items-center gap-1 transition-colors disabled:opacity-50"
@@ -109,9 +110,7 @@ export default function ViewSchedulePage() {
             この月のシフトはまだ登録されていません
           </div>
         ) : (
-          // ref={tableRef} を付与して画像化の対象にする
           <div ref={tableRef} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            {/* 画像化されたときにタイトルが入るようにヘッダーを追加 */}
             <div className="p-2 text-center font-bold text-lg bg-slate-50 border-b border-slate-200">
               {year}年 {month}月 当直表
             </div>
@@ -131,13 +130,16 @@ export default function ViewSchedulePage() {
 
                   return (
                     <tr key={day.day} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className={`py-1.5 px-2 font-medium text-center ${isSun ? 'text-red-500' : isSat ? 'text-blue-500' : 'text-slate-600'}`}>
+                      <td
+                        className={`py-1.5 px-2 font-medium text-center ${
+                          isSun ? "text-red-500" : isSat ? "text-blue-500" : "text-slate-600"
+                        }`}
+                      >
                         {day.day} <span className="text-[10px] md:text-xs">({wd})</span>
                       </td>
                       <td className="py-1.5 px-1">
                         {day.day_shift && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] md:text-xs font-bold bg-orange-100 text-orange-800 whitespace-nowrap">
-                            {/* 💡 全角・半角スペースどちらでも苗字だけを切り取れるように正規表現を使用 */}
                             👤 {day.day_shift.split(/[\s　]+/)[0]}
                           </span>
                         )}

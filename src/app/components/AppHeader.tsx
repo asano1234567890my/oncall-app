@@ -28,6 +28,37 @@ function buildCrumbs(pathname: string): Crumb[] {
 export default function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // ✅ 管理導線を出す範囲を限定（/ と /admin のみ）
+  const isAdminScope = pathname === "/" || pathname.startsWith("/admin");
+  // ✅ 閲覧・入力スコープ（管理導線を完全に絶つ）
+  const isPublicScope = pathname.startsWith("/view") || pathname.startsWith("/entry");
+
+  // Public（/view・/entry）は「システム名 + 戻る」だけ
+  if (isPublicScope) {
+    return (
+      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-extrabold text-gray-800 whitespace-nowrap">
+              🏥 oncall-app
+            </div>
+
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="px-3 py-2 rounded text-sm font-bold border bg-white text-gray-700 hover:bg-gray-50"
+              title="前の画面へ戻る"
+            >
+              ← 戻る
+            </button>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
+  // 管理スコープ（/ と /admin）だけ従来UI
   const crumbs = buildCrumbs(pathname);
   const isHome = pathname === "/";
 
@@ -63,40 +94,42 @@ export default function AppHeader() {
             </div>
           </div>
 
-          {/* 右：ナビ＋戻る */}
+          {/* 右：管理ナビ＋戻る */}
           <div className="flex items-center gap-2">
-            <nav className="hidden md:flex items-center gap-2">
-              <Link
-                href="/"
-                className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                  pathname === "/"
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                当直表作成
-              </Link>
-              <Link
-                href="/admin/doctors"
-                className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                  pathname.startsWith("/admin/doctors")
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                医師管理
-              </Link>
-              <Link
-                href="/view"
-                className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                  pathname.startsWith("/view")
-                    ? "bg-gray-900 text-white border-gray-900"
-                    : "bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-              >
-                当直表を見る
-              </Link>
-            </nav>
+            {isAdminScope && (
+              <nav className="hidden md:flex items-center gap-2">
+                <Link
+                  href="/"
+                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
+                    pathname === "/"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  当直表作成
+                </Link>
+                <Link
+                  href="/admin/doctors"
+                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
+                    pathname.startsWith("/admin/doctors")
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  医師管理
+                </Link>
+                <Link
+                  href="/view"
+                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
+                    pathname.startsWith("/view")
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  当直表を見る
+                </Link>
+              </nav>
+            )}
 
             {!isHome && (
               <button
@@ -111,38 +144,41 @@ export default function AppHeader() {
           </div>
         </div>
 
-        <div className="md:hidden mt-3 flex gap-2">
-          <Link
-            href="/"
-            className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-              pathname === "/"
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-700"
-            }`}
-          >
-            作成
-          </Link>
-          <Link
-            href="/admin/doctors"
-            className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-              pathname.startsWith("/admin/doctors")
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-700"
-            }`}
-          >
-            医師
-          </Link>
-          <Link
-            href="/view"
-            className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-              pathname.startsWith("/view")
-                ? "bg-gray-900 text-white border-gray-900"
-                : "bg-white text-gray-700"
-            }`}
-          >
-            閲覧
-          </Link>
-        </div>
+        {/* 管理スコープだけ下段タブ（スマホ） */}
+        {isAdminScope && (
+          <div className="md:hidden mt-3 flex gap-2">
+            <Link
+              href="/"
+              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
+                pathname === "/"
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              作成
+            </Link>
+            <Link
+              href="/admin/doctors"
+              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
+                pathname.startsWith("/admin/doctors")
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              医師
+            </Link>
+            <Link
+              href="/view"
+              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
+                pathname.startsWith("/view")
+                  ? "bg-gray-900 text-white border-gray-900"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              閲覧
+            </Link>
+          </div>
+        )}
       </div>
     </header>
   );

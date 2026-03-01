@@ -27,6 +27,7 @@ async def get_doctor_by_token(access_token: str, db: AsyncSession = Depends(get_
         "name": doctor.name,
         "experience_years": doctor.experience_years,
         "is_active": doctor.is_active,
+        "is_locked": doctor.is_locked,  # ★追加（公開側でも見えるとUXが良い）
         "unavailable_days": [
             {
                 "id": str(u.id),
@@ -55,6 +56,10 @@ async def update_doctor_by_token(
         doctor = result.scalar_one_or_none()
         if doctor is None:
             raise HTTPException(status_code=404, detail="Doctor not found")
+
+        # ★要件：ロック中は更新禁止
+        if doctor.is_locked is True:
+            raise HTTPException(status_code=403, detail="入力期間は終了しています（Locked）")
 
         data = payload.model_dump(exclude_unset=True)
 
@@ -111,6 +116,7 @@ async def update_doctor_by_token(
             "doctor": {
                 "id": str(doctor.id),
                 "name": doctor.name,
+                "is_locked": doctor.is_locked,
                 "unavailable_days": [
                     {
                         "id": str(u.id),

@@ -1,4 +1,3 @@
-# backend/routers/doctor.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -13,7 +12,6 @@ from schemas.doctor import DoctorCreate, DoctorUpdate
 router = APIRouter(prefix="/api/doctors", tags=["Doctors"])
 
 
-# 1. 取得API（一覧）
 @router.get("/")
 async def get_doctors(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
@@ -32,8 +30,8 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
             "min_score": d.min_score,
             "max_score": d.max_score,
             "target_score": d.target_score,
-            # ★追加：管理側レスポンスに access_token を含める
             "access_token": d.access_token,
+            "is_locked": d.is_locked,  # ★追加
             "unavailable_days": [
                 {
                     "id": str(u.id),
@@ -49,7 +47,6 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
     ]
 
 
-# 2. 取得API（単一）
 @router.get("/{doctor_id}")
 async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     doctor_uuid = uuid.UUID(doctor_id)
@@ -71,8 +68,8 @@ async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
         "min_score": doctor.min_score,
         "max_score": doctor.max_score,
         "target_score": doctor.target_score,
-        # ★追加
         "access_token": doctor.access_token,
+        "is_locked": doctor.is_locked,  # ★追加
         "unavailable_days": [
             {
                 "id": str(u.id),
@@ -86,7 +83,6 @@ async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     }
 
 
-# 3. 医師の追加API
 @router.post("/")
 async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
     try:
@@ -97,18 +93,18 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
             min_score=doc.min_score,
             max_score=doc.max_score,
             target_score=doc.target_score,
-            # access_token はモデル default で自動生成される
+            # access_token / is_locked は default
         )
         db.add(new_doc)
 
         await db.commit()
         await db.refresh(new_doc)
 
-        # ★運用でURL発行したいので access_token も返す
         return {
             "message": "医師を登録しました",
             "id": str(new_doc.id),
             "access_token": new_doc.access_token,
+            "is_locked": new_doc.is_locked,
         }
 
     except Exception as e:
@@ -116,15 +112,10 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 4. 更新API（管理側）
 @router.put("/{doctor_id}")
 async def update_doctor(
     doctor_id: str, doc: DoctorUpdate, db: AsyncSession = Depends(get_db)
 ):
-    """
-    スコア等の更新に加えて、unavailable_dates / fixed_weekdays を受け取った場合は
-    UnavailableDay を全削除→再作成する（Full Replace）。
-    """
     doctor_uuid = uuid.UUID(doctor_id)
 
     print(
@@ -133,7 +124,6 @@ async def update_doctor(
     )
 
     try:
-        # Doctor取得（存在確認）
         result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
         doctor = result.scalar_one_or_none()
         if doctor is None:
@@ -141,19 +131,18 @@ async def update_doctor(
 
         payload = doc.model_dump(exclude_unset=True)
 
-        # 空配列でも全置換したいのでキー存在で判定
         has_unavailable_dates = "unavailable_dates" in payload
         has_fixed_weekdays = "fixed_weekdays" in payload
 
         unavailable_dates = payload.pop("unavailable_dates", None)
         fixed_weekdays = payload.pop("fixed_weekdays", None)
 
-        # Doctor本体の更新：None は無視（null送信対策）
+        # ★管理者は is_locked に関係なく更新可能（現状ロジック維持）
+        # Doctor本体の更新：Noneは無視（False/0は更新OK）
         for k, v in payload.items():
             if v is not None:
                 setattr(doctor, k, v)
 
-        # Full Replace（commit 1回）
         if has_unavailable_dates or has_fixed_weekdays:
             await db.execute(
                 delete(UnavailableDay).where(UnavailableDay.doctor_id == doctor_uuid)
@@ -186,7 +175,6 @@ async def update_doctor(
 
         await db.commit()
 
-        # 更新後は selectinload付きで再取得して返す
         result = await db.execute(
             select(Doctor)
             .options(selectinload(Doctor.unavailable_days))
@@ -206,8 +194,8 @@ async def update_doctor(
                 "min_score": doctor.min_score,
                 "max_score": doctor.max_score,
                 "target_score": doctor.target_score,
-                # ★追加
                 "access_token": doctor.access_token,
+                "is_locked": doctor.is_locked,  # ★追加
                 "unavailable_days": [
                     {
                         "id": str(u.id),
@@ -229,7 +217,6 @@ async def update_doctor(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 5. 削除API
 @router.delete("/{doctor_id}")
 async def delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     await db.execute(delete(Doctor).where(Doctor.id == uuid.UUID(doctor_id)))

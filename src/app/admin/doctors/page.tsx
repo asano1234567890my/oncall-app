@@ -1,12 +1,13 @@
 // src/app/admin/doctors/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 
 type Doctor = {
   id: string;
   name: string;
-  access_token?: string; // ✅ magic link用（バックエンド返却想定）
+  access_token?: string;
+  is_locked?: boolean;
 };
 
 const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -17,8 +18,8 @@ export default function DoctorManagerPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  // ✅ コピー完了フィードバック
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [lockingId, setLockingId] = useState<string | null>(null);
 
   const fetchDoctors = async () => {
     const apiUrl = getApiBase();
@@ -69,7 +70,6 @@ export default function DoctorManagerPage() {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
       } else {
-        // フォールバック（環境によってclipboardが使えない場合）
         const ta = document.createElement("textarea");
         ta.value = url;
         ta.style.position = "fixed";
@@ -88,13 +88,31 @@ export default function DoctorManagerPage() {
     }
   };
 
+  const toggleLock = async (doc: Doctor) => {
+    const apiUrl = getApiBase();
+    setLockingId(doc.id);
+    try {
+      const res = await fetch(`${apiUrl}/api/doctors/${doc.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_locked: !Boolean(doc.is_locked) }),
+      });
+      if (!res.ok) throw new Error("ロック更新に失敗しました");
+      await fetchDoctors();
+    } catch (e) {
+      console.error(e);
+      alert("ロック更新に失敗しました");
+    } finally {
+      setLockingId(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      {/* ✅ 親カード：はみ出し防止 */}
       <div className="max-w-2xl mx-auto bg-white p-4 sm:p-6 w-full overflow-hidden rounded-xl shadow-md border border-gray-200">
         <h1 className="text-xl md:text-2xl font-bold mb-6 border-b pb-2 text-gray-800">👨‍⚕️ 医師マスタ管理</h1>
 
-        {/* ✅ 新規追加：要件どおり（スマホ縦 / PC横） */}
+        {/* 新規追加（スマホ縦 / PC横） */}
         <div className="mb-8 bg-blue-50 p-4 rounded-lg border border-blue-100">
           <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md mx-auto">
             <input
@@ -116,81 +134,108 @@ export default function DoctorManagerPage() {
 
         {/* 一覧 */}
         <div className="space-y-3">
-          {doctors.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded hover:bg-gray-50"
-            >
-              <div className="min-w-0 w-full">
-                {editingId === doc.id ? (
-                  <input
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <div className="font-medium text-gray-700 truncate">{doc.name}</div>
-                )}
+          {doctors.map((doc) => {
+            const locked = Boolean(doc.is_locked);
+            const isLocking = lockingId === doc.id;
 
-                {doc.access_token ? (
-                  <div className="text-[11px] text-gray-400 mt-1 truncate">/entry/{doc.access_token}</div>
-                ) : (
-                  <div className="text-[11px] text-amber-600 mt-1">
-                    ※ access_token が未設定です（バックエンド返却を確認）
-                  </div>
-                )}
-              </div>
+            return (
+              <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded hover:bg-gray-50">
+                <div className="min-w-0 w-full">
+                  {editingId === doc.id ? (
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="font-medium text-gray-700 truncate">{doc.name}</div>
+                      <span
+                        className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border ${
+                          locked ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        }`}
+                      >
+                        {locked ? "ロック中" : "入力可"}
+                      </span>
+                    </div>
+                  )}
 
-              {/* ✅ ボタン群：モバイルは縦で安全に */}
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
-                <button
-                  type="button"
-                  onClick={() => copyEntryUrl(doc)}
-                  disabled={!doc.access_token}
-                  className={`w-full sm:w-auto whitespace-nowrap px-4 py-2 rounded font-bold border transition-colors
-                    ${
-                      copiedId === doc.id
-                        ? "bg-emerald-600 text-white border-emerald-700"
-                        : !doc.access_token
-                        ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                        : "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200"
-                    }`}
-                >
-                  {copiedId === doc.id ? "コピーしました" : "入力用URLをコピー"}
-                </button>
+                  {doc.access_token ? (
+                    <div className="text-[11px] text-gray-400 mt-1 truncate">/entry/{doc.access_token}</div>
+                  ) : (
+                    <div className="text-[11px] text-amber-600 mt-1">※ access_token が未設定です（バックエンド返却を確認）</div>
+                  )}
+                </div>
 
-                {editingId === doc.id ? (
+                {/* ボタン群：モバイル縦積み */}
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
+                  {/* 🔒 ロック切替 */}
                   <button
                     type="button"
-                    onClick={() => handleUpdate(doc.id)}
-                    className="w-full sm:w-auto whitespace-nowrap text-green-700 font-bold bg-green-100 hover:bg-green-200 px-4 py-2 rounded transition-colors"
+                    onClick={() => toggleLock(doc)}
+                    disabled={isLocking}
+                    className={`w-full sm:w-auto whitespace-nowrap px-4 py-2 rounded font-bold border transition-colors disabled:opacity-50
+                      ${
+                        locked
+                          ? "bg-amber-100 text-amber-900 border-amber-200 hover:bg-amber-200"
+                          : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200"
+                      }`}
                   >
-                    保存
+                    {isLocking ? "更新中..." : locked ? "🔓 ロック解除" : "🔒 ロックする"}
                   </button>
-                ) : (
+
+                  {/* URLコピー */}
                   <button
                     type="button"
-                    onClick={() => {
-                      setEditingId(doc.id);
-                      setEditName(doc.name);
-                    }}
-                    className="w-full sm:w-auto whitespace-nowrap text-blue-700 font-bold bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded transition-colors"
+                    onClick={() => copyEntryUrl(doc)}
+                    disabled={!doc.access_token}
+                    className={`w-full sm:w-auto whitespace-nowrap px-4 py-2 rounded font-bold border transition-colors
+                      ${
+                        copiedId === doc.id
+                          ? "bg-emerald-600 text-white border-emerald-700"
+                          : !doc.access_token
+                          ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
+                          : "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200"
+                      }`}
                   >
-                    編集
+                    {copiedId === doc.id ? "コピーしました" : "入力用URLをコピー"}
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => handleDelete(doc.id)}
-                  className="w-full sm:w-auto whitespace-nowrap text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors"
-                >
-                  削除
-                </button>
+                  {/* 編集/保存 */}
+                  {editingId === doc.id ? (
+                    <button
+                      type="button"
+                      onClick={() => handleUpdate(doc.id)}
+                      className="w-full sm:w-auto whitespace-nowrap text-green-700 font-bold bg-green-100 hover:bg-green-200 px-4 py-2 rounded transition-colors"
+                    >
+                      保存
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(doc.id);
+                        setEditName(doc.name);
+                      }}
+                      className="w-full sm:w-auto whitespace-nowrap text-blue-700 font-bold bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded transition-colors"
+                    >
+                      編集
+                    </button>
+                  )}
+
+                  {/* 削除 */}
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(doc.id)}
+                    className="w-full sm:w-auto whitespace-nowrap text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors"
+                  >
+                    削除
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
