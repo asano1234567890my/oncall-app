@@ -237,20 +237,41 @@ export default function EntryPage() {
                   {locked ? "（現在はロック中）" : ""}。
                 </div>
 
-                <div className={`mt-4 rounded-xl border p-2 ${locked ? "opacity-75" : ""}`}>
-                  <DayPicker
-                    mode="multiple"
-                    month={month}
-                    onMonthChange={setMonth}
-                    selected={selectedDates}
-                    onDayClick={onDayClick}
-                    className="w-full"
-                    modifiersClassNames={{
-                      selected: "bg-indigo-600 text-white",
-                      today: "text-indigo-700 font-bold",
-                    }}
-                  />
-                </div>
+                <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
+  {/* PCは中央寄せ：flexで確実にセンタリング */}
+  <div className="w-full flex justify-center">
+    <div className="w-full md:w-auto md:max-w-[520px] rounded-xl border p-2 max-w-full overflow-hidden">
+      <DayPicker
+        mode="multiple"
+        month={month}
+        onMonthChange={setMonth}
+        selected={selectedDates}
+        onDayClick={onDayClick}
+        className={[
+          "w-full",
+          // セルサイズ（スマホ小さめ / PC少し大きめ）
+          "[--rdp-cell-size:36px] md:[--rdp-cell-size:42px]",
+          // はみ出し防止：内部を必ずw-full
+          "[&_.rdp-months]:w-full",
+          "[&_.rdp-month]:w-full",
+          "[&_.rdp-table]:w-full",
+          // 余白を詰めて横幅節約
+          "[&_.rdp-cell]:p-0",
+          "[&_.rdp-button]:w-full",
+          // ✅ 見出し（March 2026）行を中央寄せっぽく整える
+          "[&_.rdp-caption]:justify-center",
+          "[&_.rdp-caption_label]:text-center",
+          // ナビ（← →）の見た目を左右均等に
+          "[&_.rdp-nav]:gap-2",
+        ].join(" ")}
+        modifiersClassNames={{
+          selected: "bg-indigo-600 text-white",
+          today: "text-indigo-700 font-bold",
+        }}
+      />
+    </div>
+  </div>
+</div>
 
                 <div className="mt-3 text-xs text-gray-500">
                   選択中: <span className="font-bold text-gray-800">{selectedSet.size}</span> 日

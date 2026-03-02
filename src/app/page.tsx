@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getDefaultTargetMonth } from "./utils/dateUtils";
 
 type Doctor = {
   id: string;
@@ -51,8 +52,9 @@ const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
 };
 
 export default function DashboardPage() {
-  const [year, setYear] = useState<number>(2026);
-  const [month, setMonth] = useState<number>(4);
+  const defaultTarget = useMemo(() => getDefaultTargetMonth(), []);
+  const [year, setYear] = useState<number>(defaultTarget.year);
+  const [month, setMonth] = useState<number>(defaultTarget.month);
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
 
@@ -92,7 +94,9 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
   // ✅ 月跨ぎ4日間隔（前月末勤務）
   const calcPrevMonthLastDay = (y: number, m: number) => new Date(y, m - 1, 0).getDate();
-  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(2026, 4));
+  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(
+    calcPrevMonthLastDay(defaultTarget.year, defaultTarget.month)
+  );
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
 
   // ✨ 個別スコア・条件設定用 State（フロント側）
