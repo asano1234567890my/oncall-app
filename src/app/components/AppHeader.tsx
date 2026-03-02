@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 type Crumb = { href: string; label: string };
 
 function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === "/") return [{ href: "/", label: "当直表作成" }];
+  if (pathname === "/") return [{ href: "/", label: "created by yoneyama" }];
 
   if (pathname.startsWith("/admin/doctors")) {
     return [
@@ -41,7 +41,7 @@ export default function AppHeader() {
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="font-extrabold text-gray-800 whitespace-nowrap">
-              🏥 oncall-app
+              🏥 oncall-app 当直表作成アプリケーション ver 1.0
             </div>
 
             <button
@@ -70,7 +70,7 @@ export default function AppHeader() {
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="font-extrabold text-gray-800 whitespace-nowrap">
-                🏥 oncall-app
+                🏥 oncall-app 当直表作成アプリケーション ver 1.0
               </div>
 
               <nav className="hidden sm:flex items-center gap-2 text-xs text-gray-500 min-w-0">

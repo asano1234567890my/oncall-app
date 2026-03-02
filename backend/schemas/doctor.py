@@ -25,7 +25,7 @@ class UnavailableDayRead(UnavailableDayBase):
 
 class DoctorBase(BaseModel):
     name: str
-    experience_years: int
+    experience_years: int = 0   # ★必須→デフォルト0に変更
     is_active: bool = True
 
     min_score: Optional[float] = None

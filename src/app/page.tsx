@@ -816,8 +816,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               <div className="text-[10px] text-gray-500 text-center mb-3">各医師の「毎週入れない曜日」をチェックしてください。</div>
 
               <div className="overflow-x-auto">
-                <div className="min-w-[520px]">
-                  <div className="grid grid-cols-[180px_repeat(7,1fr)] gap-1 items-center mb-2">
+                <div className="min-w-[200px]">
+                  <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center mb-2">
                     <div className="text-[11px] font-bold text-gray-600">医師</div>
                     {pyWeekdays.map((pyWd) => {
                       const label = pyWeekdaysJp[pyWd];
@@ -842,7 +842,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
                   <div className="space-y-1">
                     {doctors.map((doc, docIdx) => (
-                      <div key={doc.id} className="grid grid-cols-[180px_repeat(7,1fr)] gap-1 items-center">
+                      <div key={doc.id} className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center">
                         <button
                           type="button"
                           onClick={() => setSelectedDocIndex(docIdx)}
@@ -917,8 +917,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               </div>
 
               <div className="overflow-x-auto">
-                <div className="min-w-[520px]">
-                  <div className="grid grid-cols-[180px_repeat(4,1fr)] gap-1 items-center mb-2">
+                <div className="min-w-[200px]">
+                  <div className="grid grid-cols-[80px_repeat(4,1fr)] gap-1 items-center mb-2">
                     <div className="text-[11px] font-bold text-gray-600">医師</div>
                     {prevMonthTailDays.map((d) => (
                       <div key={d} className="text-[11px] font-bold text-center rounded py-1 border bg-gray-50 text-gray-700 border-gray-100">
@@ -929,7 +929,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
                   <div className="space-y-1">
                     {doctors.map((doc, docIdx) => (
-                      <div key={doc.id} className="grid grid-cols-[180px_repeat(4,1fr)] gap-1 items-center">
+                      <div key={doc.id} className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center">
                         <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">
                           {doc.name}
                         </div>

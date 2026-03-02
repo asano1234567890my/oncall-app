@@ -204,7 +204,7 @@ export default function EntryPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <div className="text-lg font-bold text-gray-800 truncate">{title}</div>
-              <div className="text-xs text-gray-500 mt-1">ログイン不要で、この先生の休み希望のみ入力できます。</div>
+              <div className="text-xs text-gray-500 mt-1">先生の休み希望のみ入力できます。</div>
             </div>
           </div>
 
@@ -216,9 +216,6 @@ export default function EntryPage() {
             >
               📅 確定した当直表を見る
             </Link>
-            <div className="text-[11px] text-gray-500 mt-2">
-              ※この画面から管理画面へは移動できません（戻る/閲覧のみ）
-            </div>
           </div>
 
           {locked && !isLoading && (
