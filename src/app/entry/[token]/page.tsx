@@ -231,7 +231,10 @@ export default function EntryPage() {
               <section className="mt-6">
                 <div className="text-sm font-bold text-gray-700">個別不可日（カレンダー）</div>
                 <div className="text-xs text-gray-500 mt-1">
-                  日付をタップして選択/解除できます{locked ? "（現在はロック中）" : ""}。
+                  日付をタップして選択/解除できます.
+                  ＊前提条件として研究日とその前日は当直は入りません。
+                  ＊外来日前日は当直に含まれるため、ご自身で不可日指定お願いします。
+                  {locked ? "（現在はロック中）" : ""}。
                 </div>
 
                 <div className={`mt-4 rounded-xl border p-2 ${locked ? "opacity-75" : ""}`}>

@@ -918,7 +918,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
               <div className="overflow-x-auto">
                 <div className="min-w-[200px]">
-                  <div className="grid grid-cols-[80px_repeat(4,1fr)] gap-1 items-center mb-2">
+                  <div className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center mb-2">
                     <div className="text-[11px] font-bold text-gray-600">医師</div>
                     {prevMonthTailDays.map((d) => (
                       <div key={d} className="text-[11px] font-bold text-center rounded py-1 border bg-gray-50 text-gray-700 border-gray-100">
