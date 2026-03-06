@@ -4,8 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.config import get_settings
-from routers import health, optimize, schedule, doctor, public_doctor  # ★追加
-
+from routers import health, optimize, schedule, doctor, public_doctor # ★追加
+import routers.holiday as holiday
 
 settings = get_settings()
 
@@ -41,6 +41,7 @@ app.include_router(optimize.router)
 app.include_router(schedule.router)
 app.include_router(doctor.router)
 app.include_router(public_doctor.router)  # ★追加
+app.include_router(holiday.router)
 
 
 @app.get("/")

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
+import { useHolidays } from "./hooks/useHolidays";
 
 type Doctor = {
   id: string;
@@ -59,8 +60,38 @@ export default function DashboardPage() {
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
 
-  // 祝日（全員共通の休み）
-  const [holidays, setHolidays] = useState<number[]>([29]);
+    // 祝日（全員共通の休み）= 手動（臨時休）
+    const [holidays, setHolidays] = useState<number[]>(() => {
+      if (typeof window === "undefined") return [29];
+      try {
+        const mm = String(defaultTarget.month).padStart(2, "0");
+        const key = `oncall.holidays.manual.${defaultTarget.year}-${mm}`;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return [29];
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return [29];
+        return arr.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+      } catch {
+        return [29];
+      }
+    });
+  
+    // ✅ 自動祝日を「平日扱い」にする例外（localStorageで復元）
+    const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => {
+      if (typeof window === "undefined") return new Set();
+      try {
+        const key = `oncall.holidays.override.${defaultTarget.year}`;
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return new Set();
+        const arr = JSON.parse(raw);
+        if (!Array.isArray(arr)) return new Set();
+        // 念のため、この年のYYYY-で始まるものだけ残す
+        const prefix = `${defaultTarget.year}-`;
+        return new Set(arr.map(String).filter((s) => s.startsWith(prefix)));
+      } catch {
+        return new Set();
+      }
+    });
 
   // 仕様の主要条件（表示＋API送信に使う）
   const [scoreMin, setScoreMin] = useState<number>(0.5);
@@ -123,6 +154,73 @@ export default function DashboardPage() {
   const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
 
   // =========================================================
+  // ✅ 祝日設定（手動/override）のlocalStorage永続化（ブラウザ内のみ）
+  // =========================================================
+  const manualHolidayStorageKey = (y: number, m: number) => `oncall.holidays.manual.${y}-${pad2(m)}`;
+  const overrideHolidayStorageKey = (y: number) => `oncall.holidays.override.${y}`;
+
+  // 年月が変わったら、その年月の保存データをロードする
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // 1) 手動（臨時休）: 月単位
+    try {
+      const raw = window.localStorage.getItem(manualHolidayStorageKey(year, month));
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          const next = arr.map((x) => Number(x)).filter((n) => Number.isFinite(n));
+          setHolidays(next);
+        }
+      } else {
+        // 保存がない月は空にする（必要なら [29] に戻すなど運用に合わせてOK）
+        setHolidays([]);
+      }
+    } catch {
+      // 何もしない
+    }
+
+    // 2) override（祝日→平日扱い）: 年単位
+    try {
+      const raw = window.localStorage.getItem(overrideHolidayStorageKey(year));
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          const prefix = `${year}-`;
+          setHolidayWorkdayOverrides(new Set(arr.map(String).filter((s) => s.startsWith(prefix))));
+        }
+      } else {
+        setHolidayWorkdayOverrides(new Set());
+      }
+    } catch {
+      // 何もしない
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month]);
+
+  // 手動（臨時休）を保存：月単位
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(manualHolidayStorageKey(year, month), JSON.stringify(holidays));
+    } catch {
+      // 何もしない
+    }
+  }, [holidays, year, month]);
+
+  // override（祝日→平日扱い）を保存：年単位
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      // Setは直接保存できないので配列化して保存
+      const arr = Array.from(holidayWorkdayOverrides);
+      window.localStorage.setItem(overrideHolidayStorageKey(year), JSON.stringify(arr));
+    } catch {
+      // 何もしない
+    }
+  }, [holidayWorkdayOverrides, year]);
+  
+  // =========================================================
   // ✅ 表示専用：doctor UUID -> name（レンダリング高速化）
   // =========================================================
   const doctorNameById = useMemo(() => {
@@ -136,6 +234,44 @@ export default function DashboardPage() {
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
     return doctorNameById[doctorId] ?? "不明";
+  };
+
+    // =========================================================
+  // ✅ 祝日（自動取得）: 年単位で取得し、月表示ではSet/Mapを参照
+  // =========================================================
+  const { holidayMap, holidaySet } = useHolidays(year);
+
+  const autoHolidayDaysInMonth = useMemo(() => {
+    // この月の祝日（dateのDDだけ抽出）
+    const mm = pad2(month);
+    const prefix = `${year}-${mm}-`;
+    const days: number[] = [];
+
+    for (const ymd of holidaySet) {
+      if (!ymd.startsWith(prefix)) continue;
+      const dd = Number(ymd.slice(-2));
+      if (Number.isFinite(dd)) days.push(dd);
+    }
+
+    return Array.from(new Set(days)).sort((a, b) => a - b);
+  }, [holidaySet, year, month, pad2]);
+
+  const manualHolidaySetInMonth = useMemo(() => {
+    // 既存の holidays: number[]（臨時休）を "YYYY-MM-DD" に変換してSet化
+    const s = new Set<string>();
+    for (const d of holidays) {
+      s.add(toYmd(year, month, d));
+    }
+    return s;
+  }, [holidays, year, month]);
+
+  const isHolidayLikeDay = (day: number) => {
+    const ymd = toYmd(year, month, day);
+    const wd = getWeekday(year, month, day);
+    const isSun = wd === "日";
+    const isAutoHoliday = holidaySet.has(ymd);
+    const isManualHoliday = manualHolidaySetInMonth.has(ymd);
+    return { ymd, wd, isSun, isAutoHoliday, isManualHoliday, isHolidayLike: isSun || isAutoHoliday || isManualHoliday };
   };
 
   // =========================================================
@@ -428,7 +564,21 @@ export default function DashboardPage() {
     setSaveMessage("");
 
     try {
-      const validHolidays = holidays.filter((d) => d <= getDaysInMonth(year, month));
+      const daysInMonth = getDaysInMonth(year, month);
+
+// 手動（臨時休）
+const manual = holidays.filter((d) => d >= 1 && d <= daysInMonth);
+
+// 自動（祝日）: override（平日扱い）された日は除外
+const auto = autoHolidayDaysInMonth
+  .filter((d) => d >= 1 && d <= daysInMonth)
+  .filter((d) => !holidayWorkdayOverrides.has(toYmd(year, month, d)));
+
+// 既存方針：日曜はUIでも選べない＆日曜扱いが別ロジックのため、holiday payload には入れない
+const nonSunday = (d: number) => getWeekday(year, month, d) !== "日";
+
+// 合成（重複排除）
+const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))).sort((a, b) => a - b);
 
       // ✅ UUIDキーは元々stringなので変換不要（念のためシャローコピー）
       const formattedUnavailable: Record<string, number[]> = { ...unavailableMap };
@@ -737,23 +887,73 @@ export default function DashboardPage() {
             <div className="mb-4 md:mb-6">
               <label className="block text-sm font-bold text-gray-700 mb-2">共通の祝日設定</label>
               <div className="flex flex-wrap gap-2">
-                {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
-                  const isSelected = holidays.includes(day);
-                  const isSun = getWeekday(year, month, day) === "日";
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleHoliday(day)}
-                      disabled={isSun}
-                      className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
-                        isSelected ? "bg-red-500 text-white" : isSun ? "bg-red-50 text-red-300" : "bg-white border text-gray-600"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
+              {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
+  const { ymd, isSun, isAutoHoliday, isManualHoliday } = isHolidayLikeDay(day);
+
+  // 手動（臨時休）
+  const isSelectedManual = isManualHoliday;
+
+  // 自動祝日を「平日扱い」にする例外
+  const isAutoHolidayOverridden = isAutoHoliday && holidayWorkdayOverrides.has(ymd);
+  const isAutoHolidayEffective = isAutoHoliday && !isAutoHolidayOverridden;
+
+  // 日曜は従来通り無効（触らせない）
+  const disabled = isSun;
+
+  const title =
+    isAutoHoliday
+      ? `祝日：${holidayMap[ymd]?.name || ""}${isAutoHolidayOverridden ? "（平日扱い）" : ""}`
+      : isSun
+      ? "日曜"
+      : isSelectedManual
+      ? "臨時休（手動）"
+      : "";
+
+  const onClick = () => {
+    if (isSun) return;
+
+    // 自動祝日：平日扱いトグル
+    if (isAutoHoliday) {
+      setHolidayWorkdayOverrides((prev) => {
+        const next = new Set(prev);
+        if (next.has(ymd)) next.delete(ymd);
+        else next.add(ymd);
+        return next;
+      });
+      return;
+    }
+
+    // 通常日：従来通り手動休日（臨時休）トグル
+    toggleHoliday(day);
+  };
+
+  return (
+    <button
+      key={day}
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
+        // 自動祝日（休日扱い）
+        isAutoHolidayEffective
+          ? "bg-red-100 text-red-700 border border-red-200"
+          // 自動祝日（平日扱いにした）
+          : isAutoHolidayOverridden
+          ? "bg-white text-gray-700 border border-red-200"
+          // 手動（臨時休）
+          : isSelectedManual
+          ? "bg-red-500 text-white"
+          // 日曜
+          : isSun
+          ? "bg-red-50 text-red-300"
+          : "bg-white border text-gray-600"
+      }`}
+    >
+      {day}
+    </button>
+  );
+})}
               </div>
             </div>
 
@@ -784,21 +984,21 @@ export default function DashboardPage() {
               </select>
 
               <div className="flex flex-wrap gap-1 justify-center">
-                {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
-                  const isSelected = (unavailableMap[selectedDoctorId] || []).includes(day);
-                  return (
-                    <button
-                      key={day}
-                      type="button"
-                      onClick={() => toggleUnavailable(selectedDoctorId, day)}
-                      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
-                        isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  );
-                })}
+              {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
+  const isSelected = (unavailableMap[selectedDoctorId] || []).includes(day);
+  return (
+    <button
+      key={day}
+      type="button"
+      onClick={() => toggleUnavailable(selectedDoctorId, day)}
+      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
+        isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+      }`}
+    >
+      {day}
+    </button>
+  );
+})}
               </div>
 
               <div className="mt-2 flex justify-between items-center text-[9px]">
@@ -1086,7 +1286,10 @@ export default function DashboardPage() {
                         const wd = getWeekday(year, month, row.day);
                         const isSun = wd === "日";
                         const isSat = wd === "土";
-                        const isHolidayLike = row.is_holiday || isSun;
+                        const ymd = toYmd(year, month, row.day);
+const isAutoHoliday = holidaySet.has(ymd);
+const isManualHoliday = manualHolidaySetInMonth.has(ymd);
+const isHolidayLike = row.is_holiday || isSun || isAutoHoliday || isManualHoliday;
                         return (
                           <tr key={row.day} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
                             <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
