@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import date
 
-from sqlalchemy import Boolean, Date, ForeignKey, Integer
+from sqlalchemy import Boolean, Date, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -28,5 +28,14 @@ class UnavailableDay(Base):
     # True: 毎週固定不可, False: 単発不可
     is_fixed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    doctor: Mapped["Doctor"] = relationship(back_populates="unavailable_days")
+    # ★追加カラム
+    # "all" | "day" | "night" などを想定（まずは文字列で保持）
+    target_shift: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="all"
+    )
+    # True の場合はハード禁止ではなく「ペナルティ扱い」にする用途
+    is_soft_penalty: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
+    doctor: Mapped["Doctor"] = relationship(back_populates="unavailable_days")

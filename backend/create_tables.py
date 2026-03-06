@@ -3,7 +3,6 @@ import asyncio
 from core.db import engine, Base
 # 作成したいモデルをすべてインポートする（これによってBaseがテーブルを認識します）
 import models.doctor
-import models.hospital_calendar
 import models.shift
 import models.system_setting
 import models.unavailable_day

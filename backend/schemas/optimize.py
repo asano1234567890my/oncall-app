@@ -65,4 +65,4 @@ class OptimizeResponse(BaseModel):
     status: Optional[str] = None
     message: Optional[str] = None
     schedule: Optional[List[Dict[str, Any]]] = None
-    scores: Optional[Dict[int, float]] = None
+    scores: Optional[Dict[str, float]] = None

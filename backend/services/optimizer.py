@@ -28,13 +28,13 @@ class OnCallOptimizer:
     - 平日: 当直1 / 土曜: 当直1 / 日祝: 日直1 + 当直1（同日兼務不可）
     ハード制約:
     - 枠充足 / 日祝同日兼務禁止 / 個別不可日 / 固定不可曜日 / 4日間隔 / 月跨ぎ4日間隔 / 月間スコア上下限 / 土曜当直 月1回まで
-    - [追加] 日直回数 上限2回
-    - [追加] 研究日前日の勤務禁止
+    - 日直回数 上限2回
+    - 研究日前日の勤務禁止
     ソフト制約（目的関数）:
     - 当月総スコア公平 / 過去ギャップ補正
-    - [追加] gap5, gap6 回避
-    - [追加] 外来前日の当直回避
-    - [追加] 土曜2ヶ月連続回避
+    - gap5, gap6 回避
+    - 外来前日の当直回避
+    - 土曜2ヶ月連続回避
     """
 
     W_WEEKDAY_NIGHT = 10  # 1.0
@@ -48,15 +48,14 @@ class OnCallOptimizer:
         year: int,
         month: int,
         holidays: Optional[List[int]] = None,
-        unavailable: Optional[Dict[int, List[int]]] = None,
-        fixed_unavailable_weekdays: Optional[Dict[int, List[int]]] = None,
+        unavailable: Optional[Dict[int, List[Dict[str, Any]]]] = None,
+        fixed_unavailable_weekdays: Optional[Dict[int, List[Dict[str, Any]]]] = None,
         prev_month_worked_days: Optional[Dict[int, List[int]]] = None,
         prev_month_last_day: Optional[int] = None,
         score_min: float = 0.5,
         score_max: float = 4.5,
         past_sat_counts: Optional[List[int]] = None,
         past_sunhol_counts: Optional[List[int]] = None,
-        # --- 統合版仕様：追加パラメータ ---
         min_score_by_doctor: Optional[Dict[int, float]] = None,
         max_score_by_doctor: Optional[Dict[int, float]] = None,
         target_score_by_doctor: Optional[Dict[int, float]] = None,
@@ -76,23 +75,18 @@ class OnCallOptimizer:
         self.prev_month_worked_days = prev_month_worked_days or {}
         self.prev_month_last_day = prev_month_last_day
 
-        # 全体デフォルトスコア
         self.score_min_float = score_min
         self.score_max_float = score_max
 
         self.past_sat_counts = past_sat_counts or []
         self.past_sunhol_counts = past_sunhol_counts or []
         
-        # 追加データ群
         self.min_score_by_doctor = min_score_by_doctor or {}
         self.max_score_by_doctor = max_score_by_doctor or {}
         self.target_score_by_doctor = target_score_by_doctor or {}
         self.past_total_scores = past_total_scores or {}
         self.sat_prev = sat_prev or {}
         
-        # [バックエンド供給] 外来曜日のモック定義 (doctor_id -> [0=Mon..6=Sun])
-        # TODO: 将来的にDB保持・UI連携。当面はコード上で定義。
-        # 例：医師0は火曜(1)、医師1は水曜(2)が外来日とする。空ならペナルティ発生せず。
         self.clinic_weekdays = {0: [1], 1: [2]} 
 
         ow = objective_weights or {}
@@ -111,12 +105,10 @@ class OnCallOptimizer:
 
         self.model = cp_model.CpModel()
 
-        # decision vars
         self.night_shifts: Dict[Tuple[int, int], cp_model.IntVar] = {}
         self.day_shifts: Dict[Tuple[int, int], cp_model.IntVar] = {}
         self.work: Dict[Tuple[int, int], cp_model.IntVar] = {}
 
-        # outputs
         self.doctor_scores: List[cp_model.IntVar] = []
         self.max_score: Optional[cp_model.IntVar] = None
         self.min_score: Optional[cp_model.IntVar] = None
@@ -162,23 +154,64 @@ class OnCallOptimizer:
             for day in days:
                 self.model.Add(self.night_shifts[(d, day)] + self.day_shifts[(d, day)] <= 1)
 
-        # 4) hard: 個別不可日
-        for d, bad_days in self.unavailable.items():
-            for day in bad_days:
-                if 1 <= day <= self.num_days:
-                    self.model.Add(self.work[(d, day)] == 0)
+        # === 忌避日のソフト制約ペナルティ用配列 ===
+        soft_unavail_penalties = []
 
-        # 5) hard: 固定不可曜日（毎週）+ 6) [追加] 研究日前日の勤務禁止
-        for d, bad_wds in self.fixed_unavailable_weekdays.items():
-            bad_wds_set = set(bad_wds)
-            for day in days:
-                wd = datetime.date(self.year, self.month, day).weekday()
-                if wd in bad_wds_set:
-                    # 研究日当日の勤務禁止
-                    self.model.Add(self.work[(d, day)] == 0)
-                    # 研究日前日の勤務禁止 (当月内のみ適用)
-                    if day > 1:
-                        self.model.Add(self.work[(d, day - 1)] == 0)
+        # 4) 個別不可日 (ハード/ソフト・シフト分離)
+        for d, items in self.unavailable.items():
+            for item in items:
+                day = item.get("date")
+                if not day or not (1 <= day <= self.num_days):
+                    continue
+                
+                shift_type = item.get("target_shift", "all")
+                is_soft = item.get("is_soft_penalty", False)
+
+                vars_to_constrain = []
+                if shift_type in ["day", "all"]:
+                    vars_to_constrain.append(self.day_shifts[(d, day)])
+                if shift_type in ["night", "all"]:
+                    vars_to_constrain.append(self.night_shifts[(d, day)])
+
+                for var in vars_to_constrain:
+                    if is_soft:
+                        p_var = self.model.NewBoolVar(f"soft_unavail_d{d}_day{day}_{shift_type}")
+                        self.model.Add(p_var == var)
+                        soft_unavail_penalties.append(p_var)
+                    else:
+                        self.model.Add(var == 0)
+
+        # 5) 固定不可曜日（毎週）+ 6) 研究日前日の勤務禁止 (ハード/ソフト・シフト分離)
+        for d, items in self.fixed_unavailable_weekdays.items():
+            for item in items:
+                target_dow = item.get("day_of_week")
+                if target_dow is None:
+                    continue
+                
+                shift_type = item.get("target_shift", "all")
+                is_soft = item.get("is_soft_penalty", False)
+
+                for day in days:
+                    wd = datetime.date(self.year, self.month, day).weekday()
+                    if wd == target_dow:
+                        vars_to_constrain = []
+                        if shift_type in ["day", "all"]:
+                            vars_to_constrain.append(self.day_shifts[(d, day)])
+                        if shift_type in ["night", "all"]:
+                            vars_to_constrain.append(self.night_shifts[(d, day)])
+
+                        for var in vars_to_constrain:
+                            if is_soft:
+                                p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
+                                self.model.Add(p_var == var)
+                                soft_unavail_penalties.append(p_var)
+                            else:
+                                self.model.Add(var == 0)
+                        
+                        # 研究日前日の勤務禁止 (当月内のみ適用)
+                        # ハード制約（is_soft_penalty == False）の場合のみ前日勤務不可とする
+                        if not is_soft and day > 1:
+                            self.model.Add(self.work[(d, day - 1)] == 0)
 
         # 7) hard: 4日間隔
         for d in doctors:
@@ -204,7 +237,7 @@ class OnCallOptimizer:
         for d in doctors:
             self.model.Add(sum(self.night_shifts[(d, day)] for day in saturdays) <= 1)
 
-        # 10) hard: [追加] 日直回数 上限2回
+        # 10) hard: 日直回数 上限2回
         sunhol_days = [day for day in days if self.is_sunday_or_holiday(day)]
         for d in doctors:
             self.model.Add(sum(self.day_shifts[(d, day)] for day in sunhol_days) <= 2)
@@ -213,7 +246,7 @@ class OnCallOptimizer:
         for d in doctors:
             self.model.Add(sum(self.day_shifts[(d, day)] + self.night_shifts[(d, day)] for day in sunhol_days) <= 3)
 
-        # 11) hard: 月間スコア上下限（個別設定に対応）
+        # 11) hard: 月間スコア上下限
         doctor_scores: List[cp_model.IntVar] = []
         for d in doctors:
             score_expr = 0
@@ -229,7 +262,6 @@ class OnCallOptimizer:
             doc_score = self.model.NewIntVar(0, 2000, f"score_d{d}")
             self.model.Add(doc_score == score_expr)
 
-            # 個別スコアが設定されていれば適用、なければ全体設定
             d_min = int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
             d_max = int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
             self.model.Add(doc_score >= d_min)
@@ -248,7 +280,6 @@ class OnCallOptimizer:
             for day in days:
                 if day + 5 <= self.num_days:
                     gap5_bool = self.model.NewBoolVar(f"gap5_d{d}_day{day}")
-                    # 5日後に勤務したらペナルティ (和が2の時のみ gap5_bool が 1 になる)
                     self.model.Add(self.work[(d, day)] + self.work[(d, day + 5)] - 1 <= gap5_bool)
                     gap5_vars.append(gap5_bool)
                 if day + 6 <= self.num_days:
@@ -268,7 +299,6 @@ class OnCallOptimizer:
             for day in days:
                 wd = datetime.date(self.year, self.month, day).weekday()
                 if wd in c_wds_set and day > 1:
-                    # 外来日の前日が当直(night)ならペナルティ加算
                     pre_clinic_vars.append(self.night_shifts[(d, day - 1)])
 
         pre_clinic_sum = self.model.NewIntVar(0, 1000, "pre_clinic_sum")
@@ -279,7 +309,6 @@ class OnCallOptimizer:
         for d in doctors:
             if self.sat_prev.get(d, False):
                 sat_month_bool = self.model.NewBoolVar(f"sat_month_bool_d{d}")
-                # 今月の土曜のいずれかで当直したら1
                 self.model.AddMaxEquality(sat_month_bool, [self.night_shifts[(d, sat)] for sat in saturdays])
                 sat_consec_vars.append(sat_month_bool)
 
@@ -308,7 +337,6 @@ class OnCallOptimizer:
         fairness = self.model.NewIntVar(0, 2000, "fairness")
         self.model.Add(fairness == max_score - min_score)
 
-        # 過去土曜補正
         sat_totals: List[cp_model.IntVar] = []
         for d in doctors:
             sat_count = self.model.NewIntVar(0, 10, f"sat_count_d{d}")
@@ -325,7 +353,6 @@ class OnCallOptimizer:
         sat_gap = self.model.NewIntVar(0, 999, "sat_gap")
         self.model.Add(sat_gap == sat_max - sat_min)
 
-        # 過去日祝補正
         sunhol_totals: List[cp_model.IntVar] = []
         for d in doctors:
             sh_count = self.model.NewIntVar(0, 62, f"sunhol_count_d{d}")
@@ -352,8 +379,15 @@ class OnCallOptimizer:
 
         sunhol_3rd_sum = self.model.NewIntVar(0, 1000, "sunhol_3rd_sum")
         self.model.Add(sunhol_3rd_sum == sum(sunhol_3rd_vars))
-        
-        # 最適化実行（全ての重みを合算）
+
+        # G. 追加: 忌避日のソフト制約ペナルティ合計
+        soft_unavail_sum = self.model.NewIntVar(0, 10000, "soft_unavail_sum")
+        if soft_unavail_penalties:
+            self.model.Add(soft_unavail_sum == sum(soft_unavail_penalties))
+        else:
+            self.model.Add(soft_unavail_sum == 0)
+
+        # 最適化実行
         w = self.objective_weights
         self.model.Minimize(
             w.month_fairness * fairness
@@ -364,6 +398,7 @@ class OnCallOptimizer:
             + w.pre_clinic * pre_clinic_sum
             + w.sat_consec * sat_consec_sum
             + w.target * target_sum
+            + 100 * soft_unavail_sum  # ソフト制約（忌避日）の固定ペナルティ100
         )
 
         self.max_score = max_score
@@ -403,10 +438,11 @@ class OnCallOptimizer:
         }
 
 if __name__ == "__main__":
-    # 簡易手動テスト
+    # 簡易手動テスト（新スキーマに対応）
     optimizer = OnCallOptimizer(
         num_doctors=10, year=2024, month=4, holidays=[29],
-        unavailable={0: [1, 2, 3]}, fixed_unavailable_weekdays={2: [0]},
+        unavailable={0: [{"date": 1, "target_shift": "all", "is_soft_penalty": False}]},
+        fixed_unavailable_weekdays={2: [{"day_of_week": 0, "target_shift": "all", "is_soft_penalty": False}]},
         prev_month_worked_days={0: [30]}, prev_month_last_day=31,
         sat_prev={0: True}
     )

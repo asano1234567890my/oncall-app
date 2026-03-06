@@ -117,6 +117,22 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
 
   const pad2 = (n: number) => String(n).padStart(2, "0");
+    // =========================================================
+  // ✅ 表示専用：doctor UUID -> name
+  //   ※ State（index-map）やAPI送信ロジックは触らない
+  // =========================================================
+  const doctorNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    doctors.forEach((d) => {
+      map[d.id] = d.name;
+    });
+    return map;
+  }, [doctors]);
+
+  const getDoctorName = (doctorId: string | null | undefined) => {
+    if (!doctorId) return "-";
+    return doctorNameById[doctorId] ?? "不明";
+  };
   const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
 
   // =========================================================
@@ -1080,12 +1096,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                 <div className="bg-gray-50 p-3 md:p-4 rounded-lg border mb-4 md:mb-6">
                   <h3 className="text-sm font-bold text-gray-700 mb-2">⚖️ 負担スコア</h3>
                   <div className="flex flex-wrap gap-2">
-                    {Object.entries(scores).map(([docId, score]) => (
-                      <div key={docId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
-                        <span className="text-gray-500 mr-1 md:mr-2">{doctors[Number(docId)]?.name || `医${docId}`}</span>
-                        <span className="font-bold">{String(score)}</span>
-                      </div>
-                    ))}
+                  {Object.entries(scores).map(([doctorId, score]) => (
+  <div key={doctorId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
+    <span className="text-gray-500 mr-1 md:mr-2">{getDoctorName(doctorId)}</span>
+    <span className="font-bold">{String(score)}</span>
+  </div>
+))}
                   </div>
                 </div>
 
@@ -1110,22 +1126,22 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
                             <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
                             <td className="py-2 px-2 md:px-3">
-                              {row.day_shift !== null && row.day_shift !== undefined ? (
-                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                                  {doctors[row.day_shift]?.name}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
+                            {row.day_shift !== null && row.day_shift !== undefined ? (
+  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+    {getDoctorName(row.day_shift)}
+  </span>
+) : (
+  "-"
+)}
                             </td>
                             <td className="py-2 px-2 md:px-3">
-                              {row.night_shift !== null && row.night_shift !== undefined ? (
-                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                                  {doctors[row.night_shift]?.name}
-                                </span>
-                              ) : (
-                                "-"
-                              )}
+                            {row.night_shift !== null && row.night_shift !== undefined ? (
+  <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+    {getDoctorName(row.night_shift)}
+  </span>
+) : (
+  "-"
+)}
                             </td>
                           </tr>
                         );

@@ -12,6 +12,10 @@ class UnavailableDayBase(BaseModel):
     day_of_week: Optional[int] = None
     is_fixed: bool
 
+    # ★追加
+    target_shift: str = "all"
+    is_soft_penalty: bool = False
+    
 
 class UnavailableDayCreate(UnavailableDayBase):
     doctor_id: UUID
