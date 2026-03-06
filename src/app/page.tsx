@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 import { useHolidays } from "./hooks/useHolidays";
+import { useCustomHolidays } from "./hooks/useCustomHolidays";
 
 type Doctor = {
   id: string;
@@ -60,38 +61,11 @@ export default function DashboardPage() {
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
 
-    // 祝日（全員共通の休み）= 手動（臨時休）
-    const [holidays, setHolidays] = useState<number[]>(() => {
-      if (typeof window === "undefined") return [29];
-      try {
-        const mm = String(defaultTarget.month).padStart(2, "0");
-        const key = `oncall.holidays.manual.${defaultTarget.year}-${mm}`;
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return [29];
-        const arr = JSON.parse(raw);
-        if (!Array.isArray(arr)) return [29];
-        return arr.map((x) => Number(x)).filter((n) => Number.isFinite(n));
-      } catch {
-        return [29];
-      }
-    });
-  
-    // ✅ 自動祝日を「平日扱い」にする例外（localStorageで復元）
-    const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => {
-      if (typeof window === "undefined") return new Set();
-      try {
-        const key = `oncall.holidays.override.${defaultTarget.year}`;
-        const raw = window.localStorage.getItem(key);
-        if (!raw) return new Set();
-        const arr = JSON.parse(raw);
-        if (!Array.isArray(arr)) return new Set();
-        // 念のため、この年のYYYY-で始まるものだけ残す
-        const prefix = `${defaultTarget.year}-`;
-        return new Set(arr.map(String).filter((s) => s.startsWith(prefix)));
-      } catch {
-        return new Set();
-      }
-    });
+  // 手動休日（臨時休）: 当月の「日番号」だけ（表示/UI用）
+  const [holidays, setHolidays] = useState<number[]>([]);
+
+  // 祝日無効化（祝日→平日扱い）: "YYYY-MM-DD"（年単位）
+  const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => new Set());
 
   // 仕様の主要条件（表示＋API送信に使う）
   const [scoreMin, setScoreMin] = useState<number>(0.5);
@@ -239,7 +213,49 @@ export default function DashboardPage() {
     // =========================================================
   // ✅ 祝日（自動取得）: 年単位で取得し、月表示ではSet/Mapを参照
   // =========================================================
-  const { holidayMap, holidaySet } = useHolidays(year);
+    // ✅ 自動祝日（国民の祝日）
+    const { holidayMap, holidaySet } = useHolidays(year);
+
+    // ✅ 手動休日＋祝日無効化（DB永続化）
+    const {
+      manualSet: manualHolidaySetYear,
+      setManualSet: setManualHolidaySetYear,
+      disabledSet: disabledHolidaySetYear,
+      setDisabledSet: setDisabledHolidaySetYear,
+      isLoadingCustom,
+      customError,
+    } = useCustomHolidays(year);
+  
+    // DBの年データを、画面用Stateへ同期
+    useEffect(() => {
+      // 祝日無効化（年）
+      setHolidayWorkdayOverrides(new Set(disabledHolidaySetYear));
+    }, [disabledHolidaySetYear]);
+  
+    // 当月の手動休日（days）へ同期（年Set → 月days）
+    useEffect(() => {
+      const mm = pad2(month);
+      const prefix = `${year}-${mm}-`;
+    
+      const nextDays = Array.from(
+        new Set(
+          Array.from(manualHolidaySetYear)
+            .filter((ymd) => ymd.startsWith(prefix))
+            .map((ymd) => Number(ymd.slice(-2)))
+            .filter((dd) => Number.isFinite(dd))
+        )
+      ).sort((a, b) => a - b);
+    
+      // ✅ ここがポイント：同じ配列ならsetしない（無限ループ防止）
+      setHolidays((prev) => {
+        if (prev.length === nextDays.length && prev.every((v, i) => v === nextDays[i])) {
+          return prev;
+        }
+        return nextDays;
+      });
+    }, [manualHolidaySetYear, year, month]);
+
+  
 
   const autoHolidayDaysInMonth = useMemo(() => {
     // この月の祝日（dateのDDだけ抽出）
@@ -381,7 +397,16 @@ export default function DashboardPage() {
   // UI操作系
   // =========================================================
   const toggleHoliday = (day: number) => {
-    setHolidays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
+    const ymd = toYmd(year, month, day);
+    const isSun = getWeekday(year, month, day) === "日";
+    if (isSun) return; // 日曜はUI上もトグル不可の方針
+  
+    setManualHolidaySetYear((prev) => {
+      const next = new Set(prev);
+      if (next.has(ymd)) next.delete(ymd);
+      else next.add(ymd);
+      return next;
+    });
   };
 
   const toggleUnavailable = (doctorId: string, day: number) => {
@@ -705,6 +730,17 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
           <div className="bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
             <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
 
+            {/* ✅ 休日設定（DB同期）の状態表示 */}
+{(isLoadingCustom || customError) && (
+  <div
+    className={`mb-3 rounded-lg border px-3 py-2 text-[12px] font-bold ${
+      customError ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-blue-50 border-blue-200 text-blue-700"
+    }`}
+  >
+    {customError ? `休日設定の同期エラー: ${customError}` : "休日設定を同期中..."}
+  </div>
+)}
+
             {/* 主要条件表示 */}
             <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
               <div className="text-sm font-bold text-gray-700 mb-2 text-center">📌 適用中の主要条件</div>
@@ -914,7 +950,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 
     // 自動祝日：平日扱いトグル
     if (isAutoHoliday) {
-      setHolidayWorkdayOverrides((prev) => {
+      setDisabledHolidaySetYear((prev) => {
         const next = new Set(prev);
         if (next.has(ymd)) next.delete(ymd);
         else next.add(ymd);
