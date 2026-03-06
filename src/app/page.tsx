@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const defaultTarget = useMemo(() => getDefaultTargetMonth(), []);
   const [year, setYear] = useState<number>(defaultTarget.year);
   const [month, setMonth] = useState<number>(defaultTarget.month);
+
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
 
@@ -85,25 +86,27 @@ export default function DashboardPage() {
   const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState<boolean>(false);
 
   // ✅ 重みスライダーの表示/非表示（UIのみ）
-const [isWeightsOpen, setIsWeightsOpen] = useState(false);
+  const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
-  // 医師ごとの休み希望管理用（フロント側の既存State）
-  const [selectedDocIndex, setSelectedDocIndex] = useState<number>(0);
-  const [unavailableMap, setUnavailableMap] = useState<Record<number, number[]>>({});
-  const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<number, number[]>>({});
+  // =========================================================
+  // ✅ UUIDネイティブ化：選択医師は index ではなく doctor.id を保持
+  // =========================================================
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+
+  // 医師ごとの休み希望管理用（UUIDキー）
+  const [unavailableMap, setUnavailableMap] = useState<Record<string, number[]>>({});
+  const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<string, number[]>>({});
 
   // ✅ 月跨ぎ4日間隔（前月末勤務）
   const calcPrevMonthLastDay = (y: number, m: number) => new Date(y, m - 1, 0).getDate();
-  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(
-    calcPrevMonthLastDay(defaultTarget.year, defaultTarget.month)
-  );
-  const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<number, number[]>>({});
+  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(defaultTarget.year, defaultTarget.month));
+  const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<string, number[]>>({});
 
-  // ✨ 個別スコア・条件設定用 State（フロント側）
-  const [minScoreMap, setMinScoreMap] = useState<Record<number, number>>({});
-  const [maxScoreMap, setMaxScoreMap] = useState<Record<number, number>>({});
-  const [targetScoreMap, setTargetScoreMap] = useState<Record<number, number>>({});
-  const [satPrevMap, setSatPrevMap] = useState<Record<number, boolean>>({});
+  // ✨ 個別スコア・条件設定用 State（UUIDキー）
+  const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
+  const [maxScoreMap, setMaxScoreMap] = useState<Record<string, number>>({});
+  const [targetScoreMap, setTargetScoreMap] = useState<Record<string, number>>({});
+  const [satPrevMap, setSatPrevMap] = useState<Record<string, boolean>>({});
 
   // =========================================================
   // ✅ ヘルパー
@@ -117,9 +120,10 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
 
   const pad2 = (n: number) => String(n).padStart(2, "0");
-    // =========================================================
-  // ✅ 表示専用：doctor UUID -> name
-  //   ※ State（index-map）やAPI送信ロジックは触らない
+  const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
+
+  // =========================================================
+  // ✅ 表示専用：doctor UUID -> name（レンダリング高速化）
   // =========================================================
   const doctorNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -133,16 +137,15 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
     if (!doctorId) return "-";
     return doctorNameById[doctorId] ?? "不明";
   };
-  const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
 
   // =========================================================
-  // ✅ 重要：DBの unavailable_days をフロントの Map State に復元
+  // ✅ 重要：DBの unavailable_days をフロントの Map State に復元（UUIDキー）
   // =========================================================
   const applyUnavailableDaysFromDoctors = (docs: Doctor[]) => {
-    const nextUnavailable: Record<number, number[]> = {};
-    const nextFixedWeekdays: Record<number, number[]> = {};
+    const nextUnavailable: Record<string, number[]> = {};
+    const nextFixedWeekdays: Record<string, number[]> = {};
 
-    docs.forEach((doc, idx) => {
+    docs.forEach((doc) => {
       const list = doc.unavailable_days ?? [];
       const days: number[] = [];
       const weekdays: number[] = [];
@@ -160,8 +163,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
         }
       });
 
-      if (days.length > 0) nextUnavailable[idx] = Array.from(new Set(days)).sort((a, b) => a - b);
-      if (weekdays.length > 0) nextFixedWeekdays[idx] = Array.from(new Set(weekdays)).sort((a, b) => a - b);
+      if (days.length > 0) nextUnavailable[doc.id] = Array.from(new Set(days)).sort((a, b) => a - b);
+      if (weekdays.length > 0) nextFixedWeekdays[doc.id] = Array.from(new Set(weekdays)).sort((a, b) => a - b);
     });
 
     setUnavailableMap(nextUnavailable);
@@ -169,17 +172,18 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   };
 
   // =========================================================
-  // ✅ 医師データ（スコア）を index-map に初期マッピング
+  // ✅ 医師データ（スコア）を UUID-map に初期マッピング
   // =========================================================
   const applyScoresFromDoctors = (docs: Doctor[]) => {
-    const initMin: Record<number, number> = {};
-    const initMax: Record<number, number> = {};
-    const initTarget: Record<number, number> = {};
+    const initMin: Record<string, number> = {};
+    const initMax: Record<string, number> = {};
+    const initTarget: Record<string, number> = {};
 
-    docs.forEach((doc, idx) => {
-      if (doc.min_score !== null && doc.min_score !== undefined) initMin[idx] = doc.min_score;
-      if (doc.max_score !== null && doc.max_score !== undefined) initMax[idx] = doc.max_score;
-      if (doc.target_score !== null && doc.target_score !== undefined) initTarget[idx] = doc.target_score;
+    docs.forEach((doc) => {
+      const id = doc.id;
+      if (doc.min_score !== null && doc.min_score !== undefined) initMin[id] = doc.min_score;
+      if (doc.max_score !== null && doc.max_score !== undefined) initMax[id] = doc.max_score;
+      if (doc.target_score !== null && doc.target_score !== undefined) initTarget[id] = doc.target_score;
     });
 
     setMinScoreMap(initMin);
@@ -200,6 +204,9 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
         setDoctors(data);
         setNumDoctors(data.length);
 
+        // ✅ 初期選択：未選択なら先頭の医師を選ぶ（UUID）
+        setSelectedDoctorId((prev) => prev || data[0]?.id || "");
+
         // ✅ DBの不可日を復元
         applyUnavailableDaysFromDoctors(data);
 
@@ -210,6 +217,14 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
       console.error("医師リストの取得に失敗:", err);
     }
   };
+
+  // doctors 更新後、選択IDが消えていたら先頭に戻す（安全策）
+  useEffect(() => {
+    if (doctors.length === 0) return;
+    if (!selectedDoctorId || !doctors.some((d) => d.id === selectedDoctorId)) {
+      setSelectedDoctorId(doctors[0]?.id || "");
+    }
+  }, [doctors, selectedDoctorId]);
 
   // =========================================================
   // ✅ 医師リストの初期取得（GET）
@@ -233,47 +248,48 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
     setHolidays((prev) => (prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b)));
   };
 
-  const toggleUnavailable = (docIdx: number, day: number) => {
+  const toggleUnavailable = (doctorId: string, day: number) => {
+    if (!doctorId) return;
     setUnavailableMap((prev) => {
-      const currentDays = prev[docIdx] || [];
+      const currentDays = prev[doctorId] || [];
       const newDays = currentDays.includes(day) ? currentDays.filter((d) => d !== day) : [...currentDays, day].sort((a, b) => a - b);
-      return { ...prev, [docIdx]: newDays };
+      return { ...prev, [doctorId]: newDays };
     });
   };
 
   const toggleAllUnavailable = () => {
+    if (!selectedDoctorId) return;
+
     setUnavailableMap((prev) => {
-      const currentDays = prev[selectedDocIndex] || [];
+      const currentDays = prev[selectedDoctorId] || [];
       const daysInMonth = getDaysInMonth(year, month);
 
-      let newDays: number[] = [];
-      if (currentDays.length > 0) {
-        newDays = [];
-      } else {
-        newDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-      }
-      return { ...prev, [selectedDocIndex]: newDays };
+      const newDays = currentDays.length > 0 ? [] : Array.from({ length: daysInMonth }, (_, i) => i + 1);
+      return { ...prev, [selectedDoctorId]: newDays };
     });
   };
 
-  const toggleFixedWeekday = (docIdx: number, weekdayPy: number) => {
+  const toggleFixedWeekday = (doctorId: string, weekdayPy: number) => {
+    if (!doctorId) return;
     setFixedUnavailableWeekdaysMap((prev) => {
-      const current = prev[docIdx] || [];
+      const current = prev[doctorId] || [];
       const next = current.includes(weekdayPy) ? current.filter((w) => w !== weekdayPy) : [...current, weekdayPy].sort((a, b) => a - b);
-      return { ...prev, [docIdx]: next };
+      return { ...prev, [doctorId]: next };
     });
   };
 
-  const togglePrevMonthWorkedDay = (docIdx: number, prevDay: number) => {
+  const togglePrevMonthWorkedDay = (doctorId: string, prevDay: number) => {
+    if (!doctorId) return;
     setPrevMonthWorkedDaysMap((prev) => {
-      const current = prev[docIdx] || [];
+      const current = prev[doctorId] || [];
       const next = current.includes(prevDay) ? current.filter((d) => d !== prevDay) : [...current, prevDay].sort((a, b) => a - b);
-      return { ...prev, [docIdx]: next };
+      return { ...prev, [doctorId]: next };
     });
   };
 
-  const toggleSatPrev = (docIdx: number) => {
-    setSatPrevMap((prev) => ({ ...prev, [docIdx]: !prev[docIdx] }));
+  const toggleSatPrev = (doctorId: string) => {
+    if (!doctorId) return;
+    setSatPrevMap((prev) => ({ ...prev, [doctorId]: !prev[doctorId] }));
   };
 
   // =========================================================
@@ -287,16 +303,16 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      const fixedWeekdays = fixedUnavailableWeekdaysMap[docIdx] ?? [];
+      const fixedWeekdays = fixedUnavailableWeekdaysMap[doc.id] ?? [];
 
       // unavailableMap: [1,5,12] -> unavailable_dates: ["YYYY-MM-01", ...]
-      const unavailableDays = unavailableMap[docIdx] ?? [];
+      const unavailableDays = unavailableMap[doc.id] ?? [];
       const unavailableDates = unavailableDays.map((day) => toYmd(year, month, day));
 
       const payload = {
-        min_score: minScoreMap[docIdx] ?? null,
-        max_score: maxScoreMap[docIdx] ?? null,
-        target_score: targetScoreMap[docIdx] ?? null,
+        min_score: minScoreMap[doc.id] ?? null,
+        max_score: maxScoreMap[doc.id] ?? null,
+        target_score: targetScoreMap[doc.id] ?? null,
 
         fixed_weekdays: fixedWeekdays,
         unavailable_dates: unavailableDates,
@@ -340,8 +356,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
         const nextDays = Array.from(new Set(days)).sort((a, b) => a - b);
         const nextWeekdays = Array.from(new Set(weekdays)).sort((a, b) => a - b);
 
-        setUnavailableMap((prev) => ({ ...prev, [docIdx]: nextDays }));
-        setFixedUnavailableWeekdaysMap((prev) => ({ ...prev, [docIdx]: nextWeekdays }));
+        setUnavailableMap((prev) => ({ ...prev, [updated.id]: nextDays }));
+        setFixedUnavailableWeekdaysMap((prev) => ({ ...prev, [updated.id]: nextWeekdays }));
       }
     } catch (e: any) {
       setError(e.message || "医師設定の保存に失敗しました");
@@ -360,16 +376,16 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      const tasks = doctors.map((doc, docIdx) => {
-        const fixedWeekdays = fixedUnavailableWeekdaysMap[docIdx] ?? [];
+      const tasks = doctors.map((doc) => {
+        const fixedWeekdays = fixedUnavailableWeekdaysMap[doc.id] ?? [];
 
-        const unavailableDays = unavailableMap[docIdx] ?? [];
+        const unavailableDays = unavailableMap[doc.id] ?? [];
         const unavailableDates = unavailableDays.map((day) => toYmd(year, month, day));
 
         const payload = {
-          min_score: minScoreMap[docIdx] ?? null,
-          max_score: maxScoreMap[docIdx] ?? null,
-          target_score: targetScoreMap[docIdx] ?? null,
+          min_score: minScoreMap[doc.id] ?? null,
+          max_score: maxScoreMap[doc.id] ?? null,
+          target_score: targetScoreMap[doc.id] ?? null,
 
           fixed_weekdays: fixedWeekdays,
           unavailable_dates: unavailableDates,
@@ -414,38 +430,15 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
     try {
       const validHolidays = holidays.filter((d) => d <= getDaysInMonth(year, month));
 
-      // ✅ 辞書のキーを明示的に文字列化
-      const formattedUnavailable: Record<string, number[]> = {};
-      const formattedFixedWeekdays: Record<string, number[]> = {};
-      const formattedPrevMonthWorked: Record<string, number[]> = {};
+      // ✅ UUIDキーは元々stringなので変換不要（念のためシャローコピー）
+      const formattedUnavailable: Record<string, number[]> = { ...unavailableMap };
+      const formattedFixedWeekdays: Record<string, number[]> = { ...fixedUnavailableWeekdaysMap };
+      const formattedPrevMonthWorked: Record<string, number[]> = { ...prevMonthWorkedDaysMap };
 
-      const formattedMinScore: Record<string, number> = {};
-      const formattedMaxScore: Record<string, number> = {};
-      const formattedTargetScore: Record<string, number> = {};
-      const formattedSatPrev: Record<string, boolean> = {};
-
-      Object.entries(unavailableMap).forEach(([k, v]) => {
-        formattedUnavailable[String(k)] = v;
-      });
-      Object.entries(fixedUnavailableWeekdaysMap).forEach(([k, v]) => {
-        formattedFixedWeekdays[String(k)] = v;
-      });
-      Object.entries(prevMonthWorkedDaysMap).forEach(([k, v]) => {
-        formattedPrevMonthWorked[String(k)] = v;
-      });
-
-      Object.entries(minScoreMap).forEach(([k, v]) => {
-        formattedMinScore[String(k)] = v;
-      });
-      Object.entries(maxScoreMap).forEach(([k, v]) => {
-        formattedMaxScore[String(k)] = v;
-      });
-      Object.entries(targetScoreMap).forEach(([k, v]) => {
-        formattedTargetScore[String(k)] = v;
-      });
-      Object.entries(satPrevMap).forEach(([k, v]) => {
-        formattedSatPrev[String(k)] = v;
-      });
+      const formattedMinScore: Record<string, number> = { ...minScoreMap };
+      const formattedMaxScore: Record<string, number> = { ...maxScoreMap };
+      const formattedTargetScore: Record<string, number> = { ...targetScoreMap };
+      const formattedSatPrev: Record<string, boolean> = { ...satPrevMap };
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/optimize/`, {
@@ -464,12 +457,13 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
           score_min: scoreMin,
           score_max: scoreMax,
 
-          // ✨ 個別設定データを送信
+          // ✨ 個別設定データを送信（UUIDキー）
           min_score_by_doctor: formattedMinScore,
           max_score_by_doctor: formattedMaxScore,
           target_score_by_doctor: formattedTargetScore,
           sat_prev: formattedSatPrev,
 
+          // 既存のバックエンド互換用（必要なら残す）
           past_sat_counts: new Array(numDoctors).fill(0),
           past_sunhol_counts: new Array(numDoctors).fill(0),
           past_total_scores: {},
@@ -578,128 +572,125 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                 </li>
 
                 <li className="flex gap-2 items-start">
-  <span className="font-bold text-blue-700 shrink-0">重み</span>
+                  <span className="font-bold text-blue-700 shrink-0">重み</span>
 
-  <div className="min-w-0 flex-1">
-    <div className="flex items-start justify-between gap-2">
-      {/* 左：サマリー（バッジ群） */}
-      <span className="flex flex-wrap items-center gap-1">
-        {weightChanges.isDefault ? (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-            現在：標準設定
-          </span>
-        ) : (
-          <>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-              変更あり：{weightChanges.changedCount}件
-            </span>
-            {weightChanges.top.map((t) => (
-              <span
-                key={t}
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200"
-              >
-                {t}
-              </span>
-            ))}
-          </>
-        )}
-      </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      {/* 左：サマリー（バッジ群） */}
+                      <span className="flex flex-wrap items-center gap-1">
+                        {weightChanges.isDefault ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            現在：標準設定
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                              変更あり：{weightChanges.changedCount}件
+                            </span>
+                            {weightChanges.top.map((t) => (
+                              <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
+                                {t}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                      </span>
 
-      {/* 右：赤丸エリアの【設定】ボタン */}
-      <button
-        type="button"
-        onClick={() => setIsWeightsOpen((v) => !v)}
-        className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.99] transition"
-      >
-        設定
-      </button>
-    </div>
+                      {/* 右：赤丸エリアの【設定】ボタン */}
+                      <button
+                        type="button"
+                        onClick={() => setIsWeightsOpen((v) => !v)}
+                        className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.99] transition"
+                      >
+                        設定
+                      </button>
+                    </div>
 
-    {/* クリックで開く：重み調整パネル（ここにスライダーを格納） */}
-    {isWeightsOpen && (
-      <div className="mt-3 rounded-lg border border-blue-100 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
-          <div className="text-[12px] font-bold text-blue-800">⚙️ 最適化の詳細設定（重み調整）</div>
+                    {/* クリックで開く：重み調整パネル（ここにスライダーを格納） */}
+                    {isWeightsOpen && (
+                      <div className="mt-3 rounded-lg border border-blue-100 bg-white shadow-sm overflow-hidden">
+                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
+                          <div className="text-[12px] font-bold text-blue-800">⚙️ 最適化の詳細設定（重み調整）</div>
 
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
-              className="text-[10px] font-bold text-blue-700 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
-              title="重みだけ初期値に戻します"
-            >
-              初期値
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsWeightsOpen(false)}
-              className="text-[10px] font-bold text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 bg-white"
-            >
-              閉じる
-            </button>
-          </div>
-        </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
+                              className="text-[10px] font-bold text-blue-700 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
+                              title="重みだけ初期値に戻します"
+                            >
+                              初期値
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsWeightsOpen(false)}
+                              className="text-[10px] font-bold text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 bg-white"
+                            >
+                              閉じる
+                            </button>
+                          </div>
+                        </div>
 
-        <div className="p-3 space-y-3">
-          {(
-            [
-              { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
-              { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
-              { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
-              { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
-              { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
-              { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
-              { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
-            ] as const
-          ).map((w) => (
-            <div key={w.key} className="rounded-lg border border-gray-100 p-3">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <div className="min-w-0">
-                  <div className="text-[12px] font-bold text-gray-700 truncate">
-                    {w.label}
-                    <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
+                        <div className="p-3 space-y-3">
+                          {(
+                            [
+                              { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
+                              { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
+                              { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
+                              { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
+                              { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
+                              { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
+                              { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
+                            ] as const
+                          ).map((w) => (
+                            <div key={w.key} className="rounded-lg border border-gray-100 p-3">
+                              <div className="flex items-center justify-between gap-2 mb-2">
+                                <div className="min-w-0">
+                                  <div className="text-[12px] font-bold text-gray-700 truncate">
+                                    {w.label}
+                                    <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
+                                  </div>
+                                </div>
+
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  value={objectiveWeights[w.key]}
+                                  onChange={(e) => setWeight(w.key, Number(e.target.value))}
+                                  className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
+                                  min={w.min}
+                                  max={w.max}
+                                  step={w.step}
+                                />
+                              </div>
+
+                              <input
+                                type="range"
+                                value={objectiveWeights[w.key]}
+                                onChange={(e) => setWeight(w.key, Number(e.target.value))}
+                                min={w.min}
+                                max={w.max}
+                                step={w.step}
+                                className="w-full accent-blue-600"
+                              />
+
+                              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                                <span>{w.min}</span>
+                                <span>{w.max}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={objectiveWeights[w.key]}
-                  onChange={(e) => setWeight(w.key, Number(e.target.value))}
-                  className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
-                  min={w.min}
-                  max={w.max}
-                  step={w.step}
-                />
-              </div>
-
-              <input
-                type="range"
-                value={objectiveWeights[w.key]}
-                onChange={(e) => setWeight(w.key, Number(e.target.value))}
-                min={w.min}
-                max={w.max}
-                step={w.step}
-                className="w-full accent-blue-600"
-              />
-
-              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                <span>{w.min}</span>
-                <span>{w.max}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )}
-  </div>
-</li>
+                </li>
 
                 <li className="flex gap-2">
                   <span className="font-bold text-blue-700 shrink-0">目的</span>
                   <span>
-                    ５日間隔 ({objectiveWeights.gap5}) ✕外来前日({objectiveWeights.pre_clinic}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd})✕連続土曜({objectiveWeights.sat_consec}) ✕
-                    ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
+                    ５日間隔 ({objectiveWeights.gap5}) ✕外来前日({objectiveWeights.pre_clinic}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd})✕連続土曜(
+                    {objectiveWeights.sat_consec}) ✕ ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
                   </span>
                 </li>
               </ul>
@@ -707,23 +698,11 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">score_min</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={scoreMin}
-                    onChange={(e) => setScoreMin(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" step="0.1" value={scoreMin} onChange={(e) => setScoreMin(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">score_max</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={scoreMax}
-                    onChange={(e) => setScoreMax(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" step="0.1" value={scoreMax} onChange={(e) => setScoreMax(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
               </div>
               <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
@@ -793,12 +772,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               </div>
 
               <select
-                value={selectedDocIndex}
-                onChange={(e) => setSelectedDocIndex(Number(e.target.value))}
+                value={selectedDoctorId}
+                onChange={(e) => setSelectedDoctorId(String(e.target.value))}
                 className="w-full p-2 mb-4 border rounded font-bold text-blue-700 bg-blue-50 outline-none"
               >
-                {doctors.map((doc, idx) => (
-                  <option key={doc.id} value={idx}>
+                {doctors.map((doc) => (
+                  <option key={doc.id} value={doc.id}>
                     {doc.name} 先生
                   </option>
                 ))}
@@ -806,12 +785,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
               <div className="flex flex-wrap gap-1 justify-center">
                 {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
-                  const isSelected = (unavailableMap[selectedDocIndex] || []).includes(day);
+                  const isSelected = (unavailableMap[selectedDoctorId] || []).includes(day);
                   return (
                     <button
                       key={day}
                       type="button"
-                      onClick={() => toggleUnavailable(selectedDocIndex, day)}
+                      onClick={() => toggleUnavailable(selectedDoctorId, day)}
                       className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
                         isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
                       }`}
@@ -824,7 +803,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
 
               <div className="mt-2 flex justify-between items-center text-[9px]">
                 <span className="text-transparent">ダミー</span>
-                <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDocIndex]?.length || 0} 日</span>
+                <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDoctorId]?.length || 0} 日</span>
                 <span className="text-transparent">ダミー</span>
               </div>
             </div>
@@ -861,20 +840,20 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                   </div>
 
                   <div className="space-y-1">
-                    {doctors.map((doc, docIdx) => (
+                    {doctors.map((doc) => (
                       <div key={doc.id} className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center">
                         <button
                           type="button"
-                          onClick={() => setSelectedDocIndex(docIdx)}
+                          onClick={() => setSelectedDoctorId(doc.id)}
                           className={`text-left text-[11px] font-bold px-2 py-2 rounded border truncate transition ${
-                            selectedDocIndex === docIdx ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                            selectedDoctorId === doc.id ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                           }`}
                         >
                           {doc.name}
                         </button>
 
                         {pyWeekdays.map((pyWd) => {
-                          const selected = (fixedUnavailableWeekdaysMap[docIdx] || []).includes(pyWd);
+                          const selected = (fixedUnavailableWeekdaysMap[doc.id] || []).includes(pyWd);
                           const isSun = pyWd === 6;
                           const isSat = pyWd === 5;
 
@@ -882,7 +861,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             <button
                               key={`${doc.id}-${pyWd}`}
                               type="button"
-                              onClick={() => toggleFixedWeekday(docIdx, pyWd)}
+                              onClick={() => toggleFixedWeekday(doc.id, pyWd)}
                               className={`h-9 rounded border text-[12px] font-bold transition ${
                                 selected
                                   ? isSun
@@ -908,10 +887,11 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               </div>
 
               <div className="mt-3 text-[10px] text-center text-gray-500">
-                選択中: <span className="font-bold text-gray-700">{doctors[selectedDocIndex]?.name || "未選択"}</span> ／ 固定不可:{" "}
-                {(fixedUnavailableWeekdaysMap[selectedDocIndex] || []).length === 0
+                選択中:{" "}
+                <span className="font-bold text-gray-700">{doctors.find((d) => d.id === selectedDoctorId)?.name || "未選択"}</span> ／ 固定不可:{" "}
+                {(fixedUnavailableWeekdaysMap[selectedDoctorId] || []).length === 0
                   ? "なし"
-                  : (fixedUnavailableWeekdaysMap[selectedDocIndex] || [])
+                  : (fixedUnavailableWeekdaysMap[selectedDoctorId] || [])
                       .slice()
                       .sort((a, b) => a - b)
                       .map((wd) => pyWeekdaysJp[wd])
@@ -926,12 +906,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日</label>
-                  <input
-                    type="number"
-                    value={prevMonthLastDay}
-                    onChange={(e) => setPrevMonthLastDay(Number(e.target.value))}
-                    className="border rounded p-2 w-full text-sm"
-                  />
+                  <input type="number" value={prevMonthLastDay} onChange={(e) => setPrevMonthLastDay(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
                 </div>
                 <div className="text-[10px] text-gray-500 flex items-end">※年月変更時は自動計算されます</div>
               </div>
@@ -948,19 +923,17 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                   </div>
 
                   <div className="space-y-1">
-                    {doctors.map((doc, docIdx) => (
+                    {doctors.map((doc) => (
                       <div key={doc.id} className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center">
-                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">
-                          {doc.name}
-                        </div>
+                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">{doc.name}</div>
 
                         {prevMonthTailDays.map((d) => {
-                          const selected = (prevMonthWorkedDaysMap[docIdx] || []).includes(d);
+                          const selected = (prevMonthWorkedDaysMap[doc.id] || []).includes(d);
                           return (
                             <button
                               key={`${doc.id}-prev-${d}`}
                               type="button"
-                              onClick={() => togglePrevMonthWorkedDay(docIdx, d)}
+                              onClick={() => togglePrevMonthWorkedDay(doc.id, d)}
                               className={`h-9 rounded border text-[12px] font-bold transition ${
                                 selected ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
                               }`}
@@ -993,16 +966,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                 type="button"
                 onClick={saveAllDoctorsSettings}
                 disabled={isBulkSavingDoctors || doctors.length === 0}
-                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition ${
-                  isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
+                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
                 title="全医師のスコア設定＋休み希望（単発/固定）をまとめて保存します"
               >
                 {isBulkSavingDoctors ? "保存中..." : "💾 全員の休み希望を一括保存"}
               </button>
-              <div className="mt-2 text-[11px] text-gray-500">
-                ※ 現在の「スコア設定（Min/Max/目標）」「固定不可曜日」「個別不可日」を全員分まとめて保存します。
-              </div>
+              <div className="mt-2 text-[11px] text-gray-500">※ 現在の「スコア設定（Min/Max/目標）」「固定不可曜日」「個別不可日」を全員分まとめて保存します。</div>
             </div>
 
             {/* 医師別スコア設定 */}
@@ -1010,9 +979,7 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
               <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
                 <span>🎯 医師別 スコア設定</span>
                 <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
-                <span className="text-xs font-normal text-gray-500 bg-white px-2 py-1 rounded border border-orange-200">
-                  ※保存は上の「一括保存」ボタン
-                </span>
+                <span className="text-xs font-normal text-gray-500 bg-white px-2 py-1 rounded border border-orange-200">※保存は上の「一括保存」ボタン</span>
               </h3>
 
               <div className="overflow-x-auto bg-white border rounded-lg">
@@ -1024,11 +991,10 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                       <th className="py-2 px-2 border-b">Max</th>
                       <th className="py-2 px-2 border-b">目標</th>
                       <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
-                      {/* ✅ 要件①：行ごとの保存ボタンは廃止 */}
                     </tr>
                   </thead>
                   <tbody>
-                    {doctors.map((doc, idx) => (
+                    {doctors.map((doc) => (
                       <tr key={doc.id} className="border-b hover:bg-gray-50">
                         <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
 
@@ -1037,8 +1003,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             type="number"
                             step="0.5"
                             className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={minScoreMap[idx] === undefined ? "" : minScoreMap[idx]}
-                            onChange={(e) => setMinScoreMap({ ...minScoreMap, [idx]: parseFloat(e.target.value) })}
+                            value={minScoreMap[doc.id] === undefined ? "" : minScoreMap[doc.id]}
+                            onChange={(e) => setMinScoreMap({ ...minScoreMap, [doc.id]: parseFloat(e.target.value) })}
                             placeholder={String(scoreMin)}
                           />
                         </td>
@@ -1048,8 +1014,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             type="number"
                             step="0.5"
                             className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={maxScoreMap[idx] === undefined ? "" : maxScoreMap[idx]}
-                            onChange={(e) => setMaxScoreMap({ ...maxScoreMap, [idx]: parseFloat(e.target.value) })}
+                            value={maxScoreMap[doc.id] === undefined ? "" : maxScoreMap[doc.id]}
+                            onChange={(e) => setMaxScoreMap({ ...maxScoreMap, [doc.id]: parseFloat(e.target.value) })}
                             placeholder={String(scoreMax)}
                           />
                         </td>
@@ -1059,8 +1025,8 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             type="number"
                             step="0.5"
                             className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
-                            value={targetScoreMap[idx] === undefined ? "" : targetScoreMap[idx]}
-                            onChange={(e) => setTargetScoreMap({ ...targetScoreMap, [idx]: parseFloat(e.target.value) })}
+                            value={targetScoreMap[doc.id] === undefined ? "" : targetScoreMap[doc.id]}
+                            onChange={(e) => setTargetScoreMap({ ...targetScoreMap, [doc.id]: parseFloat(e.target.value) })}
                             placeholder="任意"
                           />
                         </td>
@@ -1068,12 +1034,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                         <td className="py-1 px-2">
                           <button
                             type="button"
-                            onClick={() => toggleSatPrev(idx)}
+                            onClick={() => toggleSatPrev(doc.id)}
                             className={`px-2 py-1 rounded text-[10px] font-bold border ${
-                              satPrevMap[idx] ? "bg-orange-500 text-white border-orange-600" : "bg-white text-gray-400 border-gray-200"
+                              satPrevMap[doc.id] ? "bg-orange-500 text-white border-orange-600" : "bg-white text-gray-400 border-gray-200"
                             }`}
                           >
-                            {satPrevMap[idx] ? "連続回避" : "なし"}
+                            {satPrevMap[doc.id] ? "連続回避" : "なし"}
                           </button>
                         </td>
                       </tr>
@@ -1096,12 +1062,12 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                 <div className="bg-gray-50 p-3 md:p-4 rounded-lg border mb-4 md:mb-6">
                   <h3 className="text-sm font-bold text-gray-700 mb-2">⚖️ 負担スコア</h3>
                   <div className="flex flex-wrap gap-2">
-                  {Object.entries(scores).map(([doctorId, score]) => (
-  <div key={doctorId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
-    <span className="text-gray-500 mr-1 md:mr-2">{getDoctorName(doctorId)}</span>
-    <span className="font-bold">{String(score)}</span>
-  </div>
-))}
+                    {Object.entries(scores).map(([doctorId, score]) => (
+                      <div key={doctorId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
+                        <span className="text-gray-500 mr-1 md:mr-2">{getDoctorName(doctorId)}</span>
+                        <span className="font-bold">{String(score)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
@@ -1126,22 +1092,18 @@ const [isWeightsOpen, setIsWeightsOpen] = useState(false);
                             <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
                             <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
                             <td className="py-2 px-2 md:px-3">
-                            {row.day_shift !== null && row.day_shift !== undefined ? (
-  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-    {getDoctorName(row.day_shift)}
-  </span>
-) : (
-  "-"
-)}
+                              {row.day_shift !== null && row.day_shift !== undefined ? (
+                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{getDoctorName(row.day_shift)}</span>
+                              ) : (
+                                "-"
+                              )}
                             </td>
                             <td className="py-2 px-2 md:px-3">
-                            {row.night_shift !== null && row.night_shift !== undefined ? (
-  <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-    {getDoctorName(row.night_shift)}
-  </span>
-) : (
-  "-"
-)}
+                              {row.night_shift !== null && row.night_shift !== undefined ? (
+                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{getDoctorName(row.night_shift)}</span>
+                              ) : (
+                                "-"
+                              )}
                             </td>
                           </tr>
                         );
