@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 import { useHolidays } from "./hooks/useHolidays";
 import { useCustomHolidays } from "./hooks/useCustomHolidays";
@@ -54,9 +55,8 @@ const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
 };
 
 export default function DashboardPage() {
-  const defaultTarget = useMemo(() => getDefaultTargetMonth(), []);
-  const [year, setYear] = useState<number>(defaultTarget.year);
-  const [month, setMonth] = useState<number>(defaultTarget.month);
+  const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
 
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -104,7 +104,7 @@ export default function DashboardPage() {
 
   // ✅ 月跨ぎ4日間隔（前月末勤務）
   const calcPrevMonthLastDay = (y: number, m: number) => new Date(y, m - 1, 0).getDate();
-  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(calcPrevMonthLastDay(defaultTarget.year, defaultTarget.month));
+  const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(() => calcPrevMonthLastDay(year, month));
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<string, number[]>>({});
 
   // ✨ 個別スコア・条件設定用 State（UUIDキー）
@@ -384,6 +384,16 @@ export default function DashboardPage() {
   useEffect(() => {
     void fetchDoctors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+    // =========================================================
+  // ✅ TODO2：初回ロード時は「翌月」を初期表示にする（クライアントで1回だけ）
+  // =========================================================
+  useEffect(() => {
+    const now = new Date();
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 翌月の1日
+    setYear(next.getFullYear());
+    setMonth(next.getMonth() + 1); // 1-12
   }, []);
 
   // 年月が変わったら「前月最終日」を自動更新
@@ -727,8 +737,20 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-4 md:mb-8">
           {/* --- 左側：条件設定フォーム --- */}
-          <div className="bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit">
-            <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
+          <div
+  className={`bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit relative transition ${
+    isLoading ? "opacity-80" : "opacity-100"
+  }`}
+>
+          {isLoading && (
+  <div className="absolute inset-0 z-10 rounded-lg bg-white/50 backdrop-blur-[1px] pointer-events-auto flex items-start justify-center p-4">
+    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">
+      <Loader2 className="h-4 w-4 animate-spin" />
+      <span>生成中は入力を一時ロックしています</span>
+    </div>
+  </div>
+)}
+         <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
 
             {/* ✅ 休日設定（DB同期）の状態表示 */}
 {(isLoadingCustom || customError) && (
@@ -1186,16 +1208,41 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
             </div>
 
             <button
-              onClick={handleGenerate}
-              disabled={isLoading || numDoctors === 0}
-              className={`w-full py-3 rounded font-bold text-white shadow-md ${isLoading ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"}`}
-            >
-              {isLoading ? "AIが計算中..." : "✨ シフトを自動生成"}
-            </button>
+  onClick={handleGenerate}
+  disabled={isLoading || numDoctors === 0}
+  className={`w-full min-h-12 px-4 py-3 rounded font-bold text-white shadow-md transition flex items-center justify-center gap-2 ${
+    isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+  }`}
+>
+  {isLoading ? (
+    <>
+      <Loader2 className="h-5 w-5 animate-spin" />
+      <span>生成中...</span>
+    </>
+  ) : (
+    <span>✨ シフトを自動生成</span>
+  )}
+</button>
           </div>
 
           {/* --- 右側：結果表示エリア --- */}
-          <div className="col-span-1 md:col-span-2">
+          <div className="col-span-1 md:col-span-2 relative"></div><div className="col-span-1 md:col-span-2">
+          {isLoading && (
+  <div className="absolute inset-0 z-20 rounded-lg bg-white/70 backdrop-blur-[1px] flex items-center justify-center p-4">
+    <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white shadow-xl px-4 py-6 md:px-6">
+      <div className="flex flex-col items-center text-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
+        <div className="text-base md:text-lg font-bold text-gray-800">当直表を生成中です</div>
+        <div className="mt-2 text-sm text-gray-500">
+          AIが勤務条件をもとに候補を計算しています。
+        </div>
+        <div className="mt-4 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div className="h-full w-1/2 bg-blue-500 animate-pulse rounded-full" />
+        </div>
+      </div>
+    </div>
+  </div>
+)}
             {/* ✅ 要件①：大きな一括保存ボタン（押しやすい位置） */}
             <div className="mb-4 md:mb-6">
               <button
