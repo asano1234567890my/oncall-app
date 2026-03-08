@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Lock, Unlock } from "lucide-react";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 import { useHolidays } from "./hooks/useHolidays";
 import { useCustomHolidays } from "./hooks/useCustomHolidays";
@@ -10,6 +10,7 @@ import { useCustomHolidays } from "./hooks/useCustomHolidays";
 type Doctor = {
   id: string;
   name: string;
+  is_active?: boolean;
 
   // スコア（DB: float | null）
   min_score?: number | null;
@@ -86,6 +87,10 @@ export default function DashboardPage() {
   const [error, setError] = useState<string>("");
   const [isSaving, setIsSaving] = useState<boolean>(false); // ※シフト保存用
   const [saveMessage, setSaveMessage] = useState<string>("");
+  const [isDeletingMonthSchedule, setIsDeletingMonthSchedule] = useState<boolean>(false);
+
+  const [lockedShiftKeys, setLockedShiftKeys] = useState<Set<string>>(() => new Set());
+  const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
 
   // ✅ 要件①：全員一括保存用 state
   const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState<boolean>(false);
@@ -126,6 +131,7 @@ export default function DashboardPage() {
 
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
+  const getShiftKey = (day: number, shiftType: "day" | "night") => `${day}_${shiftType}`;
 
   // =========================================================
   // ✅ 祝日設定（手動/override）のlocalStorage永続化（ブラウザ内のみ）
@@ -209,6 +215,32 @@ export default function DashboardPage() {
     if (!doctorId) return "-";
     return doctorNameById[doctorId] ?? "不明";
   };
+
+  const activeDoctors = useMemo(() => doctors.filter((doc) => doc.is_active !== false), [doctors]);
+  const activeDoctorIds = useMemo(() => activeDoctors.map((doc) => doc.id), [activeDoctors]);
+
+  const filterRecordByActiveDoctors = <T,>(input: Record<string, T>) => {
+    const next: Record<string, T> = {};
+    activeDoctorIds.forEach((id) => {
+      if (Object.prototype.hasOwnProperty.call(input, id)) {
+        next[id] = input[id];
+      }
+    });
+    return next;
+  };
+
+  const isActiveDoctorId = (doctorId: string | null | undefined) => {
+    if (!doctorId) return false;
+    return activeDoctorIds.includes(doctorId);
+  };
+
+  const getScheduleDoctorId = (day: number, shiftType: "day" | "night") => {
+    const row = schedule.find((r) => r.day === day);
+    if (!row) return null;
+    return shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
+  };
+
+  const isShiftLocked = (day: number, shiftType: "day" | "night") => lockedShiftKeys.has(getShiftKey(day, shiftType));
 
     // =========================================================
   // ✅ 祝日（自動取得）: 年単位で取得し、月表示ではSet/Mapを参照
@@ -354,10 +386,12 @@ export default function DashboardPage() {
       if (res.ok) {
         const data: Doctor[] = await res.json();
         setDoctors(data);
-        setNumDoctors(data.length);
+        const activeCount = data.filter((doc) => doc.is_active !== false).length;
+        setNumDoctors(activeCount);
 
         // ✅ 初期選択：未選択なら先頭の医師を選ぶ（UUID）
-        setSelectedDoctorId((prev) => prev || data[0]?.id || "");
+        const firstActiveDoctor = data.find((doc) => doc.is_active !== false);
+        setSelectedDoctorId((prev) => prev || firstActiveDoctor?.id || "");
 
         // ✅ DBの不可日を復元
         applyUnavailableDaysFromDoctors(data);
@@ -370,13 +404,17 @@ export default function DashboardPage() {
     }
   };
 
-  // doctors 更新後、選択IDが消えていたら先頭に戻す（安全策）
+  // active doctors 更新後、選択IDが消えていたら先頭に戻す（安全策）
   useEffect(() => {
-    if (doctors.length === 0) return;
-    if (!selectedDoctorId || !doctors.some((d) => d.id === selectedDoctorId)) {
-      setSelectedDoctorId(doctors[0]?.id || "");
+    setNumDoctors(activeDoctors.length);
+    if (activeDoctors.length === 0) {
+      setSelectedDoctorId("");
+      return;
     }
-  }, [doctors, selectedDoctorId]);
+    if (!selectedDoctorId || !activeDoctors.some((d) => d.id === selectedDoctorId)) {
+      setSelectedDoctorId(activeDoctors[0]?.id || "");
+    }
+  }, [activeDoctors, selectedDoctorId]);
 
   // =========================================================
   // ✅ 医師リストの初期取得（GET）
@@ -530,8 +568,9 @@ export default function DashboardPage() {
         setUnavailableMap((prev) => ({ ...prev, [updated.id]: nextDays }));
         setFixedUnavailableWeekdaysMap((prev) => ({ ...prev, [updated.id]: nextWeekdays }));
       }
-    } catch (e: any) {
-      setError(e.message || "医師設定の保存に失敗しました");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "医師設定の保存に失敗しました";
+      setError(message);
     }
   };
 
@@ -539,7 +578,7 @@ export default function DashboardPage() {
   // ✅ 要件①：全員の休み希望を一括保存（Promise.all）
   // =========================================================
   const saveAllDoctorsSettings = async () => {
-    if (doctors.length === 0) return;
+    if (activeDoctors.length === 0) return;
 
     setIsBulkSavingDoctors(true);
     setError("");
@@ -547,7 +586,7 @@ export default function DashboardPage() {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      const tasks = doctors.map((doc) => {
+      const tasks = activeDoctors.map((doc) => {
         const fixedWeekdays = fixedUnavailableWeekdaysMap[doc.id] ?? [];
 
         const unavailableDays = unavailableMap[doc.id] ?? [];
@@ -580,13 +619,108 @@ export default function DashboardPage() {
 
       alert("✅ 全員の休み希望（スコア含む）を保存しました。");
       await fetchDoctors();
-    } catch (e: any) {
-      setError(e?.message || "全員の保存に失敗しました");
-      alert(`❌ 保存に失敗しました：${e?.message || ""}`);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "全員の保存に失敗しました";
+      setError(message);
+      alert(`❌ 保存に失敗しました：${message}`);
     } finally {
       setIsBulkSavingDoctors(false);
     }
   };
+  const toggleShiftLock = (day: number, shiftType: "day" | "night") => {
+    const doctorId = getScheduleDoctorId(day, shiftType);
+    if (!doctorId) return;
+
+    const key = getShiftKey(day, shiftType);
+    setLockedShiftKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const moveOrSwapShift = (fromDay: number, fromType: "day" | "night", toDay: number, toType: "day" | "night") => {
+    if (fromDay === toDay && fromType === toType) return;
+    if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) return;
+
+    setSchedule((prev) => {
+      const next = prev.map((r) => ({ ...r }));
+      const fromRow = next.find((r) => r.day === fromDay);
+      const toRow = next.find((r) => r.day === toDay);
+      if (!fromRow || !toRow) return prev;
+
+      const fromField = fromType === "day" ? "day_shift" : "night_shift";
+      const toField = toType === "day" ? "day_shift" : "night_shift";
+
+      const fromDoctorId = fromRow[fromField] ?? null;
+      const toDoctorId = toRow[toField] ?? null;
+      if (!fromDoctorId) return prev;
+
+      fromRow[fromField] = toDoctorId;
+      toRow[toField] = fromDoctorId;
+
+      const hasConflict = [fromRow, toRow].some((row) => row.day_shift && row.night_shift && row.day_shift === row.night_shift);
+      if (hasConflict) {
+        setError("同一日の日直と当直に同じ医師は設定できません");
+        return prev;
+      }
+
+      return next;
+    });
+  };
+
+  const handleDeleteMonthSchedule = async () => {
+    if (!confirm(`${year}年${month}月のシフトを全削除します。よろしいですか？`)) return;
+
+    setIsDeletingMonthSchedule(true);
+    setError("");
+
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { method: "DELETE" });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "月間シフトの削除に失敗しました");
+      }
+
+      setSchedule([]);
+      setScores({});
+      setLockedShiftKeys(new Set());
+      setSaveMessage("");
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "月間シフトの削除に失敗しました";
+      setError(message);
+    } finally {
+      setIsDeletingMonthSchedule(false);
+    }
+  };
+
+  useEffect(() => {
+    setLockedShiftKeys(new Set());
+  }, [year, month]);
+
+  useEffect(() => {
+    setLockedShiftKeys((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+
+      prev.forEach((key) => {
+        const [dayStr, shiftTypeRaw] = key.split("_");
+        const day = Number(dayStr);
+        const shiftType = shiftTypeRaw === "day" || shiftTypeRaw === "night" ? shiftTypeRaw : null;
+        if (!shiftType || !Number.isFinite(day)) return;
+
+        const row = schedule.find((r) => r.day === day);
+        if (!row) return;
+        const doctorId = shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
+        if (doctorId) next.add(key);
+      });
+
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [schedule]);
 
   // =========================================================
   // ✨ シフト自動生成
@@ -594,12 +728,15 @@ export default function DashboardPage() {
   const handleGenerate = async () => {
     setIsLoading(true);
     setError("");
-    setSchedule([]);
-    setScores({});
     setSaveMessage("");
 
     try {
       const daysInMonth = getDaysInMonth(year, month);
+      const activeCount = activeDoctorIds.length;
+
+      if (activeCount === 0) {
+        throw new Error("アクティブな医師がいないため最適化できません");
+      }
 
 // 手動（臨時休）
 const manual = holidays.filter((d) => d >= 1 && d <= daysInMonth);
@@ -616,23 +753,40 @@ const nonSunday = (d: number) => getWeekday(year, month, d) !== "日";
 const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))).sort((a, b) => a - b);
 
       // ✅ UUIDキーは元々stringなので変換不要（念のためシャローコピー）
-      const formattedUnavailable: Record<string, number[]> = { ...unavailableMap };
-      const formattedFixedWeekdays: Record<string, number[]> = { ...fixedUnavailableWeekdaysMap };
-      const formattedPrevMonthWorked: Record<string, number[]> = { ...prevMonthWorkedDaysMap };
+      const formattedUnavailable: Record<string, number[]> = filterRecordByActiveDoctors(unavailableMap);
+      const formattedFixedWeekdays: Record<string, number[]> = filterRecordByActiveDoctors(fixedUnavailableWeekdaysMap);
+      const formattedPrevMonthWorked: Record<string, number[]> = filterRecordByActiveDoctors(prevMonthWorkedDaysMap);
 
-      const formattedMinScore: Record<string, number> = { ...minScoreMap };
-      const formattedMaxScore: Record<string, number> = { ...maxScoreMap };
-      const formattedTargetScore: Record<string, number> = { ...targetScoreMap };
-      const formattedSatPrev: Record<string, boolean> = { ...satPrevMap };
+      const formattedMinScore: Record<string, number> = filterRecordByActiveDoctors(minScoreMap);
+      const formattedMaxScore: Record<string, number> = filterRecordByActiveDoctors(maxScoreMap);
+      const formattedTargetScore: Record<string, number> = filterRecordByActiveDoctors(targetScoreMap);
+      const formattedSatPrev: Record<string, boolean> = filterRecordByActiveDoctors(satPrevMap);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const lockedShifts = Array.from(lockedShiftKeys)
+        .map((key) => {
+          const [dayStr, shiftTypeRaw] = key.split("_");
+          const day = Number(dayStr);
+          const shiftType = shiftTypeRaw === "day" || shiftTypeRaw === "night" ? shiftTypeRaw : null;
+          if (!shiftType || !Number.isFinite(day)) return null;
+
+          const doctorId = getScheduleDoctorId(day, shiftType);
+          if (!isActiveDoctorId(doctorId)) return null;
+
+          return {
+            date: toYmd(year, month, day),
+            shift_type: shiftType,
+            doctor_id: doctorId,
+          };
+        })
+        .filter((item): item is { date: string; shift_type: "day" | "night"; doctor_id: string } => item !== null);
       const res = await fetch(`${apiUrl}/api/optimize/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           year: year,
           month: month,
-          num_doctors: numDoctors,
+          num_doctors: activeDoctors.length,
           holidays: validHolidays,
 
           unavailable: formattedUnavailable,
@@ -649,11 +803,12 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
           sat_prev: formattedSatPrev,
 
           // 既存のバックエンド互換用（必要なら残す）
-          past_sat_counts: new Array(numDoctors).fill(0),
-          past_sunhol_counts: new Array(numDoctors).fill(0),
+          past_sat_counts: new Array(activeCount).fill(0),
+          past_sunhol_counts: new Array(activeCount).fill(0),
           past_total_scores: {},
 
           objective_weights: objectiveWeights,
+          locked_shifts: lockedShifts,
         }),
       });
 
@@ -686,7 +841,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
         body: JSON.stringify({
           year,
           month,
-          num_doctors: numDoctors,
+          num_doctors: activeDoctors.length,
           schedule: schedule.map((s) => ({
             day: s.day,
             day_shift: s.day_shift,
@@ -934,7 +1089,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                 <span className="text-sm font-bold text-blue-600">人</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
-                {doctors.map((doc) => (
+                {activeDoctors.map((doc) => (
                   <span key={doc.id} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
                     {doc.name}
                   </span>
@@ -1034,7 +1189,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                 onChange={(e) => setSelectedDoctorId(String(e.target.value))}
                 className="w-full p-2 mb-4 border rounded font-bold text-blue-700 bg-blue-50 outline-none"
               >
-                {doctors.map((doc) => (
+                {activeDoctors.map((doc) => (
                   <option key={doc.id} value={doc.id}>
                     {doc.name} 先生
                   </option>
@@ -1098,7 +1253,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                   </div>
 
                   <div className="space-y-1">
-                    {doctors.map((doc) => (
+                    {activeDoctors.map((doc) => (
                       <div key={doc.id} className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center">
                         <button
                           type="button"
@@ -1146,7 +1301,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 
               <div className="mt-3 text-[10px] text-center text-gray-500">
                 選択中:{" "}
-                <span className="font-bold text-gray-700">{doctors.find((d) => d.id === selectedDoctorId)?.name || "未選択"}</span> ／ 固定不可:{" "}
+                <span className="font-bold text-gray-700">{activeDoctors.find((d) => d.id === selectedDoctorId)?.name || "未選択"}</span> ／ 固定不可:{" "}
                 {(fixedUnavailableWeekdaysMap[selectedDoctorId] || []).length === 0
                   ? "なし"
                   : (fixedUnavailableWeekdaysMap[selectedDoctorId] || [])
@@ -1181,7 +1336,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                   </div>
 
                   <div className="space-y-1">
-                    {doctors.map((doc) => (
+                    {activeDoctors.map((doc) => (
                       <div key={doc.id} className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center">
                         <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">{doc.name}</div>
 
@@ -1209,7 +1364,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 
             <button
   onClick={handleGenerate}
-  disabled={isLoading || numDoctors === 0}
+  disabled={isLoading || activeDoctors.length === 0}
   className={`w-full min-h-12 px-4 py-3 rounded font-bold text-white shadow-md transition flex items-center justify-center gap-2 ${
     isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
   }`}
@@ -1248,7 +1403,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
               <button
                 type="button"
                 onClick={saveAllDoctorsSettings}
-                disabled={isBulkSavingDoctors || doctors.length === 0}
+                disabled={isBulkSavingDoctors || activeDoctors.length === 0}
                 className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
                 title="全医師のスコア設定＋休み希望（単発/固定）をまとめて保存します"
               >
@@ -1277,7 +1432,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                     </tr>
                   </thead>
                   <tbody>
-                    {doctors.map((doc) => (
+                    {activeDoctors.map((doc) => (
                       <tr key={doc.id} className="border-b hover:bg-gray-50">
                         <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
 
@@ -1342,6 +1497,18 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 
             {schedule.length > 0 && (
               <div className="animate-fade-in">
+                <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div className="text-xs text-gray-500">シフトをドラッグして移動/入れ替えできます。ロック済みコマは移動されません。</div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteMonthSchedule}
+                    disabled={isDeletingMonthSchedule}
+                    className="w-full md:w-auto rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeletingMonthSchedule ? "削除中..." : "この月のシフトを全削除"}
+                  </button>
+                </div>
+
                 <div className="bg-gray-50 p-3 md:p-4 rounded-lg border mb-4 md:mb-6">
                   <h3 className="text-sm font-bold text-gray-700 mb-2">⚖️ 負担スコア</h3>
                   <div className="flex flex-wrap gap-2">
@@ -1373,23 +1540,114 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
 const isAutoHoliday = holidaySet.has(ymd);
 const isManualHoliday = manualHolidaySetInMonth.has(ymd);
 const isHolidayLike = row.is_holiday || isSun || isAutoHoliday || isManualHoliday;
+                        const dayLocked = isShiftLocked(row.day, "day");
+                        const nightLocked = isShiftLocked(row.day, "night");
                         return (
                           <tr key={row.day} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
                             <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
-                            <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
-                            <td className="py-2 px-2 md:px-3">
-                              {row.day_shift !== null && row.day_shift !== undefined ? (
-                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{getDoctorName(row.day_shift)}</span>
-                              ) : (
-                                "-"
-                              )}
+                            <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>`r`n                            <td className="py-2 px-2 md:px-3">
+                              <div
+                                onDragOver={(e) => {
+                                  if (!dayLocked) e.preventDefault();
+                                }}
+                                onDrop={(e) => {
+                                  if (dayLocked) return;
+                                  e.preventDefault();
+                                  const raw = e.dataTransfer.getData("text/plain") || dragSourceKey;
+                                  if (!raw) return;
+                                  try {
+                                    const parsed = JSON.parse(raw) as { day: number; shiftType: "day" | "night" };
+                                    moveOrSwapShift(parsed.day, parsed.shiftType, row.day, "day");
+                                  } catch {
+                                    // no-op
+                                  }
+                                  setDragSourceKey(null);
+                                }}
+                                className={`min-h-10 rounded-lg border p-1 flex items-center justify-between gap-1 ${
+                                  dayLocked ? "border-amber-300 bg-amber-50" : "border-transparent"
+                                }`}
+                              >
+                                {row.day_shift !== null && row.day_shift !== undefined ? (
+                                  <span
+                                    draggable={!dayLocked}
+                                    onDragStart={(e) => {
+                                      const payload = JSON.stringify({ day: row.day, shiftType: "day" as const });
+                                      e.dataTransfer.setData("text/plain", payload);
+                                      e.dataTransfer.effectAllowed = "move";
+                                      setDragSourceKey(payload);
+                                    }}
+                                    onDragEnd={() => setDragSourceKey(null)}
+                                    className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
+                                      dayLocked ? "bg-amber-100 text-amber-900" : "bg-orange-100 text-orange-800"
+                                    }`}
+                                  >
+                                    {getDoctorName(row.day_shift)}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleShiftLock(row.day, "day")}
+                                  disabled={!row.day_shift}
+                                  className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={dayLocked ? "ロック解除" : "ロック"}
+                                >
+                                  {dayLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             </td>
                             <td className="py-2 px-2 md:px-3">
-                              {row.night_shift !== null && row.night_shift !== undefined ? (
-                                <span className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap">{getDoctorName(row.night_shift)}</span>
-                              ) : (
-                                "-"
-                              )}
+                              <div
+                                onDragOver={(e) => {
+                                  if (!nightLocked) e.preventDefault();
+                                }}
+                                onDrop={(e) => {
+                                  if (nightLocked) return;
+                                  e.preventDefault();
+                                  const raw = e.dataTransfer.getData("text/plain") || dragSourceKey;
+                                  if (!raw) return;
+                                  try {
+                                    const parsed = JSON.parse(raw) as { day: number; shiftType: "day" | "night" };
+                                    moveOrSwapShift(parsed.day, parsed.shiftType, row.day, "night");
+                                  } catch {
+                                    // no-op
+                                  }
+                                  setDragSourceKey(null);
+                                }}
+                                className={`min-h-10 rounded-lg border p-1 flex items-center justify-between gap-1 ${
+                                  nightLocked ? "border-amber-300 bg-amber-50" : "border-transparent"
+                                }`}
+                              >
+                                {row.night_shift !== null && row.night_shift !== undefined ? (
+                                  <span
+                                    draggable={!nightLocked}
+                                    onDragStart={(e) => {
+                                      const payload = JSON.stringify({ day: row.day, shiftType: "night" as const });
+                                      e.dataTransfer.setData("text/plain", payload);
+                                      e.dataTransfer.effectAllowed = "move";
+                                      setDragSourceKey(payload);
+                                    }}
+                                    onDragEnd={() => setDragSourceKey(null)}
+                                    className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
+                                      nightLocked ? "bg-amber-100 text-amber-900" : "bg-indigo-100 text-indigo-800"
+                                    }`}
+                                  >
+                                    {getDoctorName(row.night_shift)}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleShiftLock(row.day, "night")}
+                                  disabled={!row.night_shift}
+                                  className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title={nightLocked ? "ロック解除" : "ロック"}
+                                >
+                                  {nightLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

@@ -216,9 +216,12 @@ async def update_doctor(
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.delete("/{doctor_id}")
 async def delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
-    await db.execute(delete(Doctor).where(Doctor.id == uuid.UUID(doctor_id)))
+    doctor_uuid = uuid.UUID(doctor_id)
+    result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
+    doctor = result.scalar_one_or_none()
+    if doctor is not None:
+        doctor.is_active = False
     await db.commit()
     return {"message": "削除しました"}

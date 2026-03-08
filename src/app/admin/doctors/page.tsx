@@ -1,13 +1,14 @@
 // src/app/admin/doctors/page.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 
 type Doctor = {
   id: string;
   name: string;
   access_token?: string;
   is_locked?: boolean;
+  is_active?: boolean;
 };
 
 const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -17,9 +18,12 @@ export default function DoctorManagerPage() {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lockingId, setLockingId] = useState<string | null>(null);
+
+  const visibleDoctors = useMemo(() => (showInactive ? doctors : doctors.filter((doc) => doc.is_active !== false)), [doctors, showInactive]);
 
   const fetchDoctors = async () => {
     const apiUrl = getApiBase();
@@ -55,7 +59,7 @@ export default function DoctorManagerPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("本当に削除しますか？")) return;
+    if (!confirm("この医師を退職扱い（非アクティブ化）にしますか？")) return;
     const apiUrl = getApiBase();
     await fetch(`${apiUrl}/api/doctors/${id}`, { method: "DELETE" });
     fetchDoctors();
@@ -132,14 +136,28 @@ export default function DoctorManagerPage() {
           </div>
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-gray-700">
+            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="h-4 w-4 accent-blue-600" />
+            退職者を表示する
+          </label>
+          <span className="text-xs text-gray-500">表示中: {visibleDoctors.length}名 / 全体: {doctors.length}名</span>
+        </div>
+
         {/* 一覧 */}
         <div className="space-y-3">
-          {doctors.map((doc) => {
+          {visibleDoctors.map((doc) => {
             const locked = Boolean(doc.is_locked);
             const isLocking = lockingId === doc.id;
+            const inactive = doc.is_active === false;
 
             return (
-              <div key={doc.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded hover:bg-gray-50">
+              <div
+                key={doc.id}
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded ${
+                  inactive ? "bg-gray-100 border-gray-300 opacity-80" : "hover:bg-gray-50"
+                }`}
+              >
                 <div className="min-w-0 w-full">
                   {editingId === doc.id ? (
                     <input
@@ -151,6 +169,7 @@ export default function DoctorManagerPage() {
                   ) : (
                     <div className="flex items-center gap-2 min-w-0">
                       <div className="font-medium text-gray-700 truncate">{doc.name}</div>
+                      {inactive && <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border bg-gray-200 text-gray-700 border-gray-300">退職</span>}
                       <span
                         className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border ${
                           locked ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
@@ -228,9 +247,10 @@ export default function DoctorManagerPage() {
                   <button
                     type="button"
                     onClick={() => handleDelete(doc.id)}
-                    className="w-full sm:w-auto whitespace-nowrap text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors"
+                    disabled={inactive}
+                    className="w-full sm:w-auto whitespace-nowrap text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
                   >
-                    削除
+                    {inactive ? "退職済み" : "削除"}
                   </button>
                 </div>
               </div>

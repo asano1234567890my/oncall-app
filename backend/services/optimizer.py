@@ -21,6 +21,7 @@ class ObjectiveWeights:
     score_balance: int = 30
     target: int = 10
     sunhol_3rd: int = 80
+    soft_unavailable: int = 100
 
 class OnCallOptimizer:
     """
@@ -62,6 +63,7 @@ class OnCallOptimizer:
         past_total_scores: Optional[Dict[int, float]] = None,
         sat_prev: Optional[Dict[int, bool]] = None,
         objective_weights: Optional[Dict[str, Any]] = None,
+        locked_shifts: Optional[List[Dict[str, Any]]] = None,
     ):
         self.num_doctors = num_doctors
         self.year = year
@@ -86,6 +88,8 @@ class OnCallOptimizer:
         self.target_score_by_doctor = target_score_by_doctor or {}
         self.past_total_scores = past_total_scores or {}
         self.sat_prev = sat_prev or {}
+        # ルーター境界で doctor_id(UUID) -> doctor_idx(int) 変換済みデータを保持
+        self.locked_shifts = locked_shifts or []
         
         self.clinic_weekdays = {0: [1], 1: [2]} 
 
@@ -101,6 +105,7 @@ class OnCallOptimizer:
             score_balance=int(ow.get("score_balance", 30)),
             target=int(ow.get("target", 10)),
             sunhol_3rd=int(ow.get("sunhol_3rd", 80)),
+            soft_unavailable=int(ow.get("soft_unavailable", 100)),
         )
 
         self.model = cp_model.CpModel()
@@ -128,6 +133,48 @@ class OnCallOptimizer:
     def _get_past(self, arr: List[int], d: int) -> int:
         return arr[d] if d < len(arr) else 0
 
+    def _parse_locked_day(self, raw_date: Any) -> Optional[int]:
+        """
+        locked_shifts の date を optimizer 内部 day(1..num_days) に正規化する。
+        受け入れ:
+        - day-of-month 整数/数字文字列 (例: 15, "15")
+        - ISO日付文字列/日付オブジェクト (例: "2026-03-15", date(2026, 3, 15))
+        """
+        day: Optional[int] = None
+        if isinstance(raw_date, int):
+            day = raw_date
+        elif isinstance(raw_date, str):
+            s = raw_date.strip()
+            if s.isdigit():
+                day = int(s)
+            else:
+                try:
+                    parsed = datetime.date.fromisoformat(s)
+                    if parsed.year == self.year and parsed.month == self.month:
+                        day = parsed.day
+                except ValueError:
+                    return None
+        elif isinstance(raw_date, datetime.datetime):
+            if raw_date.year == self.year and raw_date.month == self.month:
+                day = raw_date.day
+        elif isinstance(raw_date, datetime.date):
+            if raw_date.year == self.year and raw_date.month == self.month:
+                day = raw_date.day
+
+        if day is None:
+            return None
+        if 1 <= day <= self.num_days:
+            return day
+        return None
+
+    def _normalize_shift_type(self, raw_shift_type: Any) -> Optional[str]:
+        s = str(raw_shift_type).strip().lower()
+        if s in {"night", "night_shift"}:
+            return "night"
+        if s in {"day", "day_shift"}:
+            return "day"
+        return None
+
     def build_model(self) -> None:
         doctors = range(self.num_doctors)
         days = range(1, self.num_days + 1)
@@ -153,6 +200,35 @@ class OnCallOptimizer:
         for d in doctors:
             for day in days:
                 self.model.Add(self.night_shifts[(d, day)] + self.day_shifts[(d, day)] <= 1)
+
+        # 3.5) hard: 一部ロック済み勤務の固定
+        # router/service 境界で UUID -> doctor_idx に正規化された locked_shifts を前提にする。
+        for item in self.locked_shifts:
+            if not isinstance(item, dict):
+                continue
+
+            doctor_idx = item.get("doctor_idx")
+            if doctor_idx is None:
+                continue
+            try:
+                d = int(doctor_idx)
+            except (TypeError, ValueError):
+                continue
+            if d < 0 or d >= self.num_doctors:
+                continue
+
+            day = self._parse_locked_day(item.get("date"))
+            if day is None:
+                continue
+
+            shift = self._normalize_shift_type(item.get("shift_type"))
+            if shift is None:
+                continue
+
+            if shift == "night":
+                self.model.Add(self.night_shifts[(d, day)] == 1)
+            else:
+                self.model.Add(self.day_shifts[(d, day)] == 1)
 
         # === 忌避日のソフト制約ペナルティ用配列 ===
         soft_unavail_penalties = []
@@ -369,6 +445,21 @@ class OnCallOptimizer:
         sunhol_gap = self.model.NewIntVar(0, 999, "sunhol_gap")
         self.model.Add(sunhol_gap == sh_max - sh_min)
 
+
+        # E-2. 過去累計スコア込み公平性（score_balance）
+        total_score_with_past: List[cp_model.IntVar] = []
+        for d in doctors:
+            past_total = int(round(self.past_total_scores.get(d, 0.0) * 10))
+            total = self.model.NewIntVar(0, 100000, f"total_score_with_past_d{d}")
+            self.model.Add(total == doctor_scores[d] + past_total)
+            total_score_with_past.append(total)
+
+        score_balance_max = self.model.NewIntVar(0, 100000, "score_balance_max")
+        score_balance_min = self.model.NewIntVar(0, 100000, "score_balance_min")
+        self.model.AddMaxEquality(score_balance_max, total_score_with_past)
+        self.model.AddMinEquality(score_balance_min, total_score_with_past)
+        score_balance_gap = self.model.NewIntVar(0, 100000, "score_balance_gap")
+        self.model.Add(score_balance_gap == score_balance_max - score_balance_min)
         # F. 日祝3回目ペナルティ
         sunhol_3rd_vars = []
         for d in doctors:
@@ -397,8 +488,10 @@ class OnCallOptimizer:
             + w.gap6 * gap6_sum
             + w.pre_clinic * pre_clinic_sum
             + w.sat_consec * sat_consec_sum
+            + w.score_balance * score_balance_gap
             + w.target * target_sum
-            + 100 * soft_unavail_sum  # ソフト制約（忌避日）の固定ペナルティ100
+            + w.sunhol_3rd * sunhol_3rd_sum
+            + w.soft_unavailable * soft_unavail_sum
         )
 
         self.max_score = max_score
@@ -448,3 +541,6 @@ if __name__ == "__main__":
     )
     optimizer.build_model()
     print(optimizer.solve())
+
+
+

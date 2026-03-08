@@ -58,7 +58,18 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
         formatted_target_score = _remap_keys(req.target_score_by_doctor)
         formatted_past_total_scores = _remap_keys(req.past_total_scores)
         formatted_sat_prev = _remap_keys(req.sat_prev)
-
+        locked_shifts_idx = [
+            {
+                "date": (
+                    locked.date.isoformat()
+                    if hasattr(locked.date, "isoformat")
+                    else str(locked.date)
+                ),
+                "shift_type": locked.shift_type,
+                "doctor_idx": _key_to_idx(locked.doctor_id),
+            }
+            for locked in req.locked_shifts
+        ]
         # 2) unavailable / fixed_unavailable_weekdays はキー正規化 + 属性付与（ステルス実装）
         # - unavailable: {"date": day, "target_shift": "all", "is_soft_penalty": False}
         # - fixed: {"day_of_week": wd, "target_shift": "all", "is_soft_penalty": False}
@@ -100,6 +111,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
             past_total_scores=formatted_past_total_scores,
             sat_prev=formatted_sat_prev,
             objective_weights=weights_dict,
+            locked_shifts=locked_shifts_idx,
         )
 
         optimizer.build_model()
