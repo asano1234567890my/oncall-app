@@ -2,7 +2,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import { Loader2, Lock, Unlock } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { GenerationSettingsPanel, DoctorSettingsPanel } from "./components/SettingsPanel";
+import ScheduleBoard from "./components/ScheduleBoard";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 import { useHolidays } from "./hooks/useHolidays";
 import { useCustomHolidays } from "./hooks/useCustomHolidays";
@@ -1017,808 +1019,167 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
     return { isDefault, changedCount: changed.length, top };
   }, [objectiveWeights]);
 
+  const daysInMonth = getDaysInMonth(year, month);
+
+  const handleScoreMinChange = (value: number) => setScoreMin(value);
+  const handleScoreMaxChange = (value: number) => setScoreMax(value);
+  const handleYearChange = (value: number) => setYear(value);
+  const handleMonthChange = (value: number) => setMonth(value);
+  const handleSelectedDoctorChange = (doctorId: string) => setSelectedDoctorId(doctorId);
+  const handlePrevMonthLastDayChange = (value: number) => setPrevMonthLastDay(value);
+
+  const handleHolidayOverrideToggle = (ymd: string) => {
+    setDisabledHolidaySetYear((prev) => {
+      const next = new Set(prev);
+      if (next.has(ymd)) next.delete(ymd);
+      else next.add(ymd);
+      return next;
+    });
+  };
+
+  const handleMinScoreChange = (doctorId: string, value: string) => {
+    setMinScoreMap({ ...minScoreMap, [doctorId]: parseFloat(value) });
+  };
+
+  const handleMaxScoreChange = (doctorId: string, value: string) => {
+    setMaxScoreMap({ ...maxScoreMap, [doctorId]: parseFloat(value) });
+  };
+
+  const handleTargetScoreChange = (doctorId: string, value: string) => {
+    setTargetScoreMap({ ...targetScoreMap, [doctorId]: parseFloat(value) });
+  };
+
+  const handleShiftDragStart = (
+    event: DragEvent<HTMLSpanElement>,
+    day: number,
+    shiftType: "day" | "night",
+    doctorId: string | null | undefined
+  ) => {
+    const payload = JSON.stringify({ day, shiftType });
+    event.dataTransfer.setData("text/plain", payload);
+    event.dataTransfer.effectAllowed = "move";
+    setDragSourceKey(payload);
+    setDraggingDoctorId(doctorId ?? null);
+    setInvalidHoverShiftKey(null);
+  };
+
   const scheduleColumns = useMemo(() => {
     if (schedule.length === 0) return [];
     const splitIndex = Math.ceil(schedule.length / 2);
     return [schedule.slice(0, splitIndex), schedule.slice(splitIndex)].filter((rows) => rows.length > 0);
   }, [schedule]);
 
-  const renderScheduleTable = (rows: typeof schedule, columnKey: string) => (
-    <div key={columnKey} className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-      <table className="min-w-full table-fixed bg-white text-center text-xs md:text-[13px]">
-        <thead className="bg-gray-100 whitespace-nowrap">
-          <tr>
-            <th className="py-2 px-1.5 md:px-2 border-b">日付</th>
-            <th className="py-2 px-1.5 md:px-2 border-b">曜日</th>
-            <th className="py-2 px-1.5 md:px-2 border-b bg-orange-50">日直</th>
-            <th className="py-2 px-1.5 md:px-2 border-b bg-indigo-50">当直</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const wd = getWeekday(year, month, row.day);
-            const isSun = wd === "日";
-            const isSat = wd === "土";
-            const ymd = toYmd(year, month, row.day);
-            const isAutoHoliday = holidaySet.has(ymd);
-            const isManualHoliday = manualHolidaySetInMonth.has(ymd);
-            const isHolidayLike = row.is_holiday || isSun || isAutoHoliday || isManualHoliday;
-            const isDayShiftEnabled = isHolidayLike;
-            const dayLocked = isShiftLocked(row.day, "day");
-            const nightLocked = isShiftLocked(row.day, "night");
-            const dayShiftKey = getShiftKey(row.day, "day");
-            const nightShiftKey = getShiftKey(row.day, "night");
-            const dayHoverInvalid = invalidHoverShiftKey === dayShiftKey;
-            const nightHoverInvalid = invalidHoverShiftKey === nightShiftKey;
-
-            return (
-              <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
-                <td className="w-14 py-1.5 px-1.5 md:px-2 whitespace-nowrap align-middle text-[11px] font-semibold text-gray-700">{row.day}日</td>
-                <td className={`w-12 py-1.5 px-1.5 md:px-2 align-middle text-[11px] font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
-                <td className="w-[37%] py-1.5 px-1.5 md:px-2 align-middle">
-                  {isDayShiftEnabled ? (
-                    <div
-                      onDragEnter={(e) => handleShiftDragOver(e, row.day, "day", dayLocked, isHolidayLike)}
-                      onDragOver={(e) => handleShiftDragOver(e, row.day, "day", dayLocked, isHolidayLike)}
-                      onDragLeave={() => handleShiftDragLeave(row.day, "day")}
-                      onDrop={(e) => handleShiftDrop(e, row.day, "day", dayLocked, isHolidayLike)}
-                      className={`min-h-9 rounded-md border px-1.5 py-1 flex items-center justify-between gap-1.5 ${
-                        dayHoverInvalid
-                          ? "border-red-300 bg-red-200 cursor-not-allowed"
-                          : dayLocked
-                          ? "border-amber-300 bg-amber-50"
-                          : "border-transparent hover:border-gray-200"
-                      }`}
-                    >
-                      {row.day_shift !== null && row.day_shift !== undefined ? (
-                        <span
-                          draggable={!dayLocked}
-                          onDragStart={(e) => {
-                            const payload = JSON.stringify({ day: row.day, shiftType: "day" as const });
-                            e.dataTransfer.setData("text/plain", payload);
-                            e.dataTransfer.effectAllowed = "move";
-                            setDragSourceKey(payload);
-                            setDraggingDoctorId(row.day_shift ?? null);
-                            setInvalidHoverShiftKey(null);
-                          }}
-                          onDragEnd={clearDragState}
-                          className={`min-w-0 flex-1 truncate px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
-                            dayLocked ? "bg-amber-100 text-amber-900" : "bg-orange-100 text-orange-800"
-                          }`}
-                        >
-                          {getDoctorName(row.day_shift)}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">-</span>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleShiftLock(row.day, "day")}
-                        disabled={!row.day_shift}
-                        className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={dayLocked ? "ロック解除" : "ロック"}
-                      >
-                        {dayLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                      </button>
-                    </div>
-                  ) : (
-                    <div
-                      onDragEnter={handleDisabledDayDragOver}
-                      onDragOver={handleDisabledDayDragOver}
-                      className="min-h-9 rounded-md border border-gray-200 bg-gray-100 px-1.5 py-1 flex items-center justify-center text-[11px] font-semibold text-gray-400 cursor-not-allowed"
-                    >
-                      -
-                    </div>
-                  )}
-                </td>
-                <td className="w-[37%] py-1.5 px-1.5 md:px-2 align-middle">
-                  <div
-                    onDragEnter={(e) => handleShiftDragOver(e, row.day, "night", nightLocked, isHolidayLike)}
-                    onDragOver={(e) => handleShiftDragOver(e, row.day, "night", nightLocked, isHolidayLike)}
-                    onDragLeave={() => handleShiftDragLeave(row.day, "night")}
-                    onDrop={(e) => handleShiftDrop(e, row.day, "night", nightLocked, isHolidayLike)}
-                    className={`min-h-9 rounded-md border px-1.5 py-1 flex items-center justify-between gap-1.5 ${
-                      nightHoverInvalid
-                        ? "border-red-300 bg-red-200 cursor-not-allowed"
-                        : nightLocked
-                        ? "border-amber-300 bg-amber-50"
-                        : "border-transparent hover:border-gray-200"
-                    }`}
-                  >
-                    {row.night_shift !== null && row.night_shift !== undefined ? (
-                      <span
-                        draggable={!nightLocked}
-                        onDragStart={(e) => {
-                          const payload = JSON.stringify({ day: row.day, shiftType: "night" as const });
-                          e.dataTransfer.setData("text/plain", payload);
-                          e.dataTransfer.effectAllowed = "move";
-                          setDragSourceKey(payload);
-                          setDraggingDoctorId(row.night_shift ?? null);
-                          setInvalidHoverShiftKey(null);
-                        }}
-                        onDragEnd={clearDragState}
-                        className={`min-w-0 flex-1 truncate px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
-                          nightLocked ? "bg-amber-100 text-amber-900" : "bg-indigo-100 text-indigo-800"
-                        }`}
-                      >
-                        {getDoctorName(row.night_shift)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => toggleShiftLock(row.day, "night")}
-                      disabled={!row.night_shift}
-                      className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                      title={nightLocked ? "ロック解除" : "ロック"}
-                    >
-                      {nightLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
   return (
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
       <main className="w-full max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-3 md:p-6 xl:p-8">
         <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-8 border-b pb-4">🏥 当直表 自動生成ダッシュボード</h1>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,0.98fr)_minmax(0,1.32fr)] lg:items-start mb-4 md:mb-6">
-          {/* --- 左側：条件設定フォーム --- */}
-          <div
-  className={`bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 col-span-1 h-fit min-w-0 relative transition lg:sticky lg:top-24 ${
-    isLoading ? "opacity-80" : "opacity-100"
-  }`}
->
-          {isLoading && (
-  <div className="absolute inset-0 z-10 rounded-lg bg-white/50 backdrop-blur-[1px] pointer-events-auto flex items-start justify-center p-4">
-    <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">
-      <Loader2 className="h-4 w-4 animate-spin" />
-      <span>生成中は入力を一時ロックしています</span>
-    </div>
-  </div>
-)}
-         <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
+          <GenerationSettingsPanel
+            isLoading={isLoading}
+            isLoadingCustom={isLoadingCustom}
+            customError={customError}
+            scoreMin={scoreMin}
+            scoreMax={scoreMax}
+            objectiveWeights={objectiveWeights}
+            weightChanges={weightChanges}
+            isWeightsOpen={isWeightsOpen}
+            year={year}
+            month={month}
+            numDoctors={numDoctors}
+            activeDoctors={activeDoctors}
+            holidayMap={holidayMap}
+            holidayWorkdayOverrides={holidayWorkdayOverrides}
+            daysInMonth={daysInMonth}
+            selectedDoctorId={selectedDoctorId}
+            unavailableMap={unavailableMap}
+            fixedUnavailableWeekdaysMap={fixedUnavailableWeekdaysMap}
+            pyWeekdays={pyWeekdays}
+            pyWeekdaysJp={pyWeekdaysJp}
+            prevMonthLastDay={prevMonthLastDay}
+            prevMonthTailDays={prevMonthTailDays}
+            prevMonthWorkedDaysMap={prevMonthWorkedDaysMap}
+            onScoreMinChange={handleScoreMinChange}
+            onScoreMaxChange={handleScoreMaxChange}
+            onToggleWeights={() => setIsWeightsOpen((value) => !value)}
+            onResetWeights={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
+            onCloseWeights={() => setIsWeightsOpen(false)}
+            onWeightChange={setWeight}
+            onYearChange={handleYearChange}
+            onMonthChange={handleMonthChange}
+            isHolidayLikeDay={isHolidayLikeDay}
+            onToggleHoliday={toggleHoliday}
+            onToggleHolidayOverride={handleHolidayOverrideToggle}
+            onSelectedDoctorChange={handleSelectedDoctorChange}
+            onToggleAllUnavailable={toggleAllUnavailable}
+            onToggleUnavailable={toggleUnavailable}
+            onToggleFixedWeekday={toggleFixedWeekday}
+            onPrevMonthLastDayChange={handlePrevMonthLastDayChange}
+            onTogglePrevMonthWorkedDay={togglePrevMonthWorkedDay}
+            onGenerate={handleGenerate}
+          />
 
-            {/* ✅ 休日設定（DB同期）の状態表示 */}
-{(isLoadingCustom || customError) && (
-  <div
-    className={`mb-3 rounded-lg border px-3 py-2 text-[12px] font-bold ${
-      customError ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-blue-50 border-blue-200 text-blue-700"
-    }`}
-  >
-    {customError ? `休日設定の同期エラー: ${customError}` : "休日設定を同期中..."}
-  </div>
-)}
-
-            {/* 主要条件表示 */}
-            <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <div className="text-sm font-bold text-gray-700 mb-2 text-center">📌 適用中の主要条件</div>
-
-              <ul className="text-xs text-gray-700 space-y-1.5">
-                <li className="flex gap-2">
-                  <span className="font-bold text-blue-700 shrink-0">ハード</span>
-                  <span>4日間隔(月跨ぎ含) / 土曜月1回 / 日祝同日禁止 / 日直上限2回 / 研究日・前日禁止</span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-bold text-blue-700 shrink-0">スコア</span>
-                  <span>
-                    共通範囲: {scoreMin} 〜 {scoreMax} <span className="text-[10px] text-orange-600">(個別設定優先)</span>
-                  </span>
-                </li>
-
-                <li className="flex gap-2 items-start">
-                  <span className="font-bold text-blue-700 shrink-0">重み</span>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      {/* 左：サマリー（バッジ群） */}
-                      <span className="flex flex-wrap items-center gap-1">
-                        {weightChanges.isDefault ? (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            現在：標準設定
-                          </span>
-                        ) : (
-                          <>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                              変更あり：{weightChanges.changedCount}件
-                            </span>
-                            {weightChanges.top.map((t) => (
-                              <span key={t} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
-                                {t}
-                              </span>
-                            ))}
-                          </>
-                        )}
-                      </span>
-
-                      {/* 右：赤丸エリアの【設定】ボタン */}
-                      <button
-                        type="button"
-                        onClick={() => setIsWeightsOpen((v) => !v)}
-                        className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.99] transition"
-                      >
-                        設定
-                      </button>
-                    </div>
-
-                    {/* クリックで開く：重み調整パネル（ここにスライダーを格納） */}
-                    {isWeightsOpen && (
-                      <div className="mt-3 rounded-lg border border-blue-100 bg-white shadow-sm overflow-hidden">
-                        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
-                          <div className="text-[12px] font-bold text-blue-800">⚙️ 最適化の詳細設定（重み調整）</div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
-                              className="text-[10px] font-bold text-blue-700 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
-                              title="重みだけ初期値に戻します"
-                            >
-                              初期値
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setIsWeightsOpen(false)}
-                              className="text-[10px] font-bold text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 bg-white"
-                            >
-                              閉じる
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="p-3 space-y-3">
-                          {(
-                            [
-                              { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
-                              { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
-                              { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
-                              { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
-                              { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
-                              { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
-                              { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
-                            ] as const
-                          ).map((w) => (
-                            <div key={w.key} className="rounded-lg border border-gray-100 p-3">
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <div className="min-w-0">
-                                  <div className="text-[12px] font-bold text-gray-700 truncate">
-                                    {w.label}
-                                    <span className="ml-2 text-[10px] font-bold text-gray-400">{w.hint}</span>
-                                  </div>
-                                </div>
-
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  value={objectiveWeights[w.key]}
-                                  onChange={(e) => setWeight(w.key, Number(e.target.value))}
-                                  className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
-                                  min={w.min}
-                                  max={w.max}
-                                  step={w.step}
-                                />
-                              </div>
-
-                              <input
-                                type="range"
-                                value={objectiveWeights[w.key]}
-                                onChange={(e) => setWeight(w.key, Number(e.target.value))}
-                                min={w.min}
-                                max={w.max}
-                                step={w.step}
-                                className="w-full accent-blue-600"
-                              />
-
-                              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                                <span>{w.min}</span>
-                                <span>{w.max}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </li>
-
-                <li className="flex gap-2">
-                  <span className="font-bold text-blue-700 shrink-0">目的</span>
-                  <span>
-                    ５日間隔 ({objectiveWeights.gap5}) ✕外来前日({objectiveWeights.pre_clinic}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd})✕連続土曜(
-                    {objectiveWeights.sat_consec}) ✕ ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
-                  </span>
-                </li>
-              </ul>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">score_min</label>
-                  <input type="number" step="0.1" value={scoreMin} onChange={(e) => setScoreMin(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">score_max</label>
-                  <input type="number" step="0.1" value={scoreMax} onChange={(e) => setScoreMax(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-                </div>
-              </div>
-              <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
-                <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="border rounded p-2 w-full" />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">月</label>
-                <input type="number" value={month} onChange={(e) => setMonth(Number(e.target.value))} className="border rounded p-2 w-full" />
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-bold text-gray-700 mb-1">医師の人数</label>
-              <div className="flex items-center gap-2">
-                <input type="number" value={numDoctors} readOnly className="border rounded p-2 w-full bg-gray-100 text-gray-500 cursor-not-allowed" />
-                <span className="text-sm font-bold text-blue-600">人</span>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {activeDoctors.map((doc) => (
-                  <span key={doc.id} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-                    {doc.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="mb-4 md:mb-6">
-              <label className="block text-sm font-bold text-gray-700 mb-2">共通の祝日設定</label>
-              <div className="flex flex-wrap gap-2">
-              {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
-  const { ymd, isSun, isAutoHoliday, isManualHoliday } = isHolidayLikeDay(day);
-
-  // 手動（臨時休）
-  const isSelectedManual = isManualHoliday;
-
-  // 自動祝日を「平日扱い」にする例外
-  const isAutoHolidayOverridden = isAutoHoliday && holidayWorkdayOverrides.has(ymd);
-  const isAutoHolidayEffective = isAutoHoliday && !isAutoHolidayOverridden;
-
-  // 日曜は従来通り無効（触らせない）
-  const disabled = isSun;
-
-  const title =
-    isAutoHoliday
-      ? `祝日：${holidayMap[ymd]?.name || ""}${isAutoHolidayOverridden ? "（平日扱い）" : ""}`
-      : isSun
-      ? "日曜"
-      : isSelectedManual
-      ? "臨時休（手動）"
-      : "";
-
-  const onClick = () => {
-    if (isSun) return;
-
-    // 自動祝日：平日扱いトグル
-    if (isAutoHoliday) {
-      setDisabledHolidaySetYear((prev) => {
-        const next = new Set(prev);
-        if (next.has(ymd)) next.delete(ymd);
-        else next.add(ymd);
-        return next;
-      });
-      return;
-    }
-
-    // 通常日：従来通り手動休日（臨時休）トグル
-    toggleHoliday(day);
-  };
-
-  return (
-    <button
-      key={day}
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
-        // 自動祝日（休日扱い）
-        isAutoHolidayEffective
-          ? "bg-red-100 text-red-700 border border-red-200"
-          // 自動祝日（平日扱いにした）
-          : isAutoHolidayOverridden
-          ? "bg-white text-gray-700 border border-red-200"
-          // 手動（臨時休）
-          : isSelectedManual
-          ? "bg-red-500 text-white"
-          // 日曜
-          : isSun
-          ? "bg-red-50 text-red-300"
-          : "bg-white border text-gray-600"
-      }`}
-    >
-      {day}
-    </button>
-  );
-})}
-              </div>
-            </div>
-
-            {/* 個別休み希望 */}
-            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm relative">
-              <div className="flex justify-between items-center mb-3">
-                <label className="text-sm font-bold text-gray-700 text-center flex-grow pl-10">👨‍⚕️ 個別休み希望</label>
-                <button
-                  type="button"
-                  onClick={toggleAllUnavailable}
-                  className="text-[10px] text-gray-400 hover:text-red-600 border border-transparent hover:border-red-200 rounded px-1.5 py-1 transition-all"
-                  title="1日でも不可日があればクリア、なければ月間すべて不可日にします"
-                >
-                  ↺ 一括クリア/一括選択
-                </button>
-              </div>
-
-              <select
-                value={selectedDoctorId}
-                onChange={(e) => setSelectedDoctorId(String(e.target.value))}
-                className="w-full p-2 mb-4 border rounded font-bold text-blue-700 bg-blue-50 outline-none"
-              >
-                {activeDoctors.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.name} 先生
-                  </option>
-                ))}
-              </select>
-
-              <div className="flex flex-wrap gap-1 justify-center">
-              {Array.from({ length: getDaysInMonth(year, month) }, (_, i) => i + 1).map((day) => {
-  const isSelected = (unavailableMap[selectedDoctorId] || []).includes(day);
-  return (
-    <button
-      key={day}
-      type="button"
-      onClick={() => toggleUnavailable(selectedDoctorId, day)}
-      className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
-        isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-      }`}
-    >
-      {day}
-    </button>
-  );
-})}
-              </div>
-
-              <div className="mt-2 flex justify-between items-center text-[9px]">
-                <span className="text-transparent">ダミー</span>
-                <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDoctorId]?.length || 0} 日</span>
-                <span className="text-transparent">ダミー</span>
-              </div>
-            </div>
-
-            {/* 固定不可曜日（毎週固定） */}
-            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日 一括入力</label>
-
-              <div className="text-[10px] text-gray-500 text-center mb-3">各医師の「毎週入れない曜日」をチェックしてください。</div>
-
-              <div className="overflow-x-auto">
-                <div className="min-w-[200px]">
-                  <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center mb-2">
-                    <div className="text-[11px] font-bold text-gray-600">医師</div>
-                    {pyWeekdays.map((pyWd) => {
-                      const label = pyWeekdaysJp[pyWd];
-                      const isSun = pyWd === 6;
-                      const isSat = pyWd === 5;
-                      return (
-                        <div
-                          key={pyWd}
-                          className={`text-[11px] font-bold text-center rounded py-1 border ${
-                            isSun
-                              ? "bg-red-50 text-red-500 border-red-100"
-                              : isSat
-                              ? "bg-blue-50 text-blue-600 border-blue-100"
-                              : "bg-gray-50 text-gray-700 border-gray-100"
-                          }`}
-                        >
-                          {label}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="space-y-1">
-                    {activeDoctors.map((doc) => (
-                      <div key={doc.id} className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDoctorId(doc.id)}
-                          className={`text-left text-[11px] font-bold px-2 py-2 rounded border truncate transition ${
-                            selectedDoctorId === doc.id ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                          }`}
-                        >
-                          {doc.name}
-                        </button>
-
-                        {pyWeekdays.map((pyWd) => {
-                          const selected = (fixedUnavailableWeekdaysMap[doc.id] || []).includes(pyWd);
-                          const isSun = pyWd === 6;
-                          const isSat = pyWd === 5;
-
-                          return (
-                            <button
-                              key={`${doc.id}-${pyWd}`}
-                              type="button"
-                              onClick={() => toggleFixedWeekday(doc.id, pyWd)}
-                              className={`h-9 rounded border text-[12px] font-bold transition ${
-                                selected
-                                  ? isSun
-                                    ? "bg-red-500 text-white border-red-600"
-                                    : isSat
-                                    ? "bg-blue-600 text-white border-blue-700"
-                                    : "bg-gray-900 text-white border-gray-900"
-                                  : isSun
-                                  ? "bg-red-50 text-red-400 border-red-200 hover:bg-red-100"
-                                  : isSat
-                                  ? "bg-blue-50 text-blue-500 border-blue-200 hover:bg-blue-100"
-                                  : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                              }`}
-                            >
-                              {selected ? "×" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 text-[10px] text-center text-gray-500">
-                選択中:{" "}
-                <span className="font-bold text-gray-700">{activeDoctors.find((d) => d.id === selectedDoctorId)?.name || "未選択"}</span> ／ 固定不可:{" "}
-                {(fixedUnavailableWeekdaysMap[selectedDoctorId] || []).length === 0
-                  ? "なし"
-                  : (fixedUnavailableWeekdaysMap[selectedDoctorId] || [])
-                      .slice()
-                      .sort((a, b) => a - b)
-                      .map((wd) => pyWeekdaysJp[wd])
-                      .join(" / ")}
-              </div>
-            </div>
-
-            {/* 月跨ぎ4日間隔 */}
-            <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-              <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 前月末勤務</label>
-
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日</label>
-                  <input type="number" value={prevMonthLastDay} onChange={(e) => setPrevMonthLastDay(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-                </div>
-                <div className="text-[10px] text-gray-500 flex items-end">※年月変更時は自動計算されます</div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <div className="min-w-[200px]">
-                  <div className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center mb-2">
-                    <div className="text-[11px] font-bold text-gray-600">医師</div>
-                    {prevMonthTailDays.map((d) => (
-                      <div key={d} className="text-[11px] font-bold text-center rounded py-1 border bg-gray-50 text-gray-700 border-gray-100">
-                        {d}日
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="space-y-1">
-                    {activeDoctors.map((doc) => (
-                      <div key={doc.id} className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center">
-                        <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">{doc.name}</div>
-
-                        {prevMonthTailDays.map((d) => {
-                          const selected = (prevMonthWorkedDaysMap[doc.id] || []).includes(d);
-                          return (
-                            <button
-                              key={`${doc.id}-prev-${d}`}
-                              type="button"
-                              onClick={() => togglePrevMonthWorkedDay(doc.id, d)}
-                              className={`h-9 rounded border text-[12px] font-bold transition ${
-                                selected ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                              }`}
-                            >
-                              {selected ? "×" : ""}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <button
-  onClick={handleGenerate}
-  disabled={isLoading || activeDoctors.length === 0}
-  className={`w-full min-h-12 px-4 py-3 rounded font-bold text-white shadow-md transition flex items-center justify-center gap-2 ${
-    isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
-  }`}
->
-  {isLoading ? (
-    <>
-      <Loader2 className="h-5 w-5 animate-spin" />
-      <span>生成中...</span>
-    </>
-  ) : (
-    <span>✨ シフトを自動生成</span>
-  )}
-</button>
-          </div>
-
-          {/* --- 右側：結果表示エリア --- */}
           <div className="relative min-w-0">
-          {isLoading && (
-  <div className="absolute inset-0 z-20 rounded-lg bg-white/70 backdrop-blur-[1px] flex items-center justify-center p-4">
-    <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white shadow-xl px-4 py-6 md:px-6">
-      <div className="flex flex-col items-center text-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
-        <div className="text-base md:text-lg font-bold text-gray-800">当直表を生成中です</div>
-        <div className="mt-2 text-sm text-gray-500">
-          AIが勤務条件をもとに候補を計算しています。
-        </div>
-        <div className="mt-4 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-          <div className="h-full w-1/2 bg-blue-500 animate-pulse rounded-full" />
-        </div>
-      </div>
-    </div>
-  </div>
-)}
-            {/* ✅ 要件①：大きな一括保存ボタン（押しやすい位置） */}
-            <div className="mb-4 md:mb-6">
-              <button
-                type="button"
-                onClick={saveAllDoctorsSettings}
-                disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-                className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
-                title="全医師のスコア設定＋休み希望（単発/固定）をまとめて保存します"
-              >
-                {isBulkSavingDoctors ? "保存中..." : "💾 全員の休み希望を一括保存"}
-              </button>
-              <div className="mt-2 text-[11px] text-gray-500">※ 現在の「スコア設定（Min/Max/目標）」「固定不可曜日」「個別不可日」を全員分まとめて保存します。</div>
-            </div>
-
-            {/* 医師別スコア設定 */}
-            <div className="bg-orange-50 p-3 md:p-4 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-5">
-              <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
-                <span>🎯 医師別 スコア設定</span>
-                <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
-                <span className="text-xs font-normal text-gray-500 bg-white px-2 py-1 rounded border border-orange-200">※保存は上の「一括保存」ボタン</span>
-              </h3>
-
-              <div className="overflow-x-auto bg-white border rounded-lg">
-                <table className="min-w-full text-center text-[12px]">
-                  <thead className="bg-gray-100 text-gray-600">
-                    <tr>
-                      <th className="py-2 px-2 border-b text-left">医師名</th>
-                      <th className="py-2 px-2 border-b">Min</th>
-                      <th className="py-2 px-2 border-b">Max</th>
-                      <th className="py-2 px-2 border-b">目標</th>
-                      <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activeDoctors.map((doc) => (
-                      <tr key={doc.id} className="border-b hover:bg-gray-50">
-                        <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
-
-                        <td className="py-1 px-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={minScoreMap[doc.id] === undefined ? "" : minScoreMap[doc.id]}
-                            onChange={(e) => setMinScoreMap({ ...minScoreMap, [doc.id]: parseFloat(e.target.value) })}
-                            placeholder={String(scoreMin)}
-                          />
-                        </td>
-
-                        <td className="py-1 px-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            className="w-12 md:w-14 border rounded p-1 text-center"
-                            value={maxScoreMap[doc.id] === undefined ? "" : maxScoreMap[doc.id]}
-                            onChange={(e) => setMaxScoreMap({ ...maxScoreMap, [doc.id]: parseFloat(e.target.value) })}
-                            placeholder={String(scoreMax)}
-                          />
-                        </td>
-
-                        <td className="py-1 px-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
-                            value={targetScoreMap[doc.id] === undefined ? "" : targetScoreMap[doc.id]}
-                            onChange={(e) => setTargetScoreMap({ ...targetScoreMap, [doc.id]: parseFloat(e.target.value) })}
-                            placeholder="任意"
-                          />
-                        </td>
-
-                        <td className="py-1 px-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleSatPrev(doc.id)}
-                            className={`px-2 py-1 rounded text-[10px] font-bold border ${
-                              satPrevMap[doc.id] ? "bg-orange-500 text-white border-orange-600" : "bg-white text-gray-400 border-gray-200"
-                            }`}
-                          >
-                            {satPrevMap[doc.id] ? "連続回避" : "なし"}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {dragNotice && <div className="bg-amber-50 text-amber-800 p-3 mb-4 rounded-xl border border-amber-200">{dragNotice}</div>}
-
-            {!schedule.length && !isLoading && !error && (
-              <div className="flex items-center justify-center h-full min-h-[400px] border-2 border-dashed border-gray-300 rounded-lg text-gray-400 bg-gray-50 p-4 text-center">
-                左下の「生成ボタン」を押してください
-              </div>
-            )}
-
-            {schedule.length > 0 && (
-              <div className="animate-fade-in">
-                <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                  <div className="text-xs text-gray-500">シフトをドラッグして移動/入れ替えできます。ロック済みコマは移動されません。</div>
-                  <button
-                    type="button"
-                    onClick={handleDeleteMonthSchedule}
-                    disabled={isDeletingMonthSchedule}
-                    className="w-full md:w-auto rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isDeletingMonthSchedule ? "削除中..." : "この月のシフトを全削除"}
-                  </button>
-                </div>
-
-                <div className="bg-gray-50 p-3 md:p-4 rounded-lg border mb-4 md:mb-6">
-                  <h3 className="text-sm font-bold text-gray-700 mb-2">⚖️ 負担スコア</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {Object.entries(scores).map(([doctorId, score]) => (
-                      <div key={doctorId} className="bg-white px-2 py-1 rounded border text-xs shadow-sm flex items-center">
-                        <span className="text-gray-500 mr-1 md:mr-2">{getDoctorName(doctorId)}</span>
-                        <span className="font-bold">{String(score)}</span>
-                      </div>
-                    ))}
+            {isLoading && (
+              <div className="absolute inset-0 z-20 rounded-lg bg-white/70 backdrop-blur-[1px] flex items-center justify-center p-4">
+                <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white shadow-xl px-4 py-6 md:px-6">
+                  <div className="flex flex-col items-center text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-3" />
+                    <div className="text-base md:text-lg font-bold text-gray-800">当直表を生成中です</div>
+                    <div className="mt-2 text-sm text-gray-500">AIが勤務条件をもとに候補を計算しています。</div>
+                    <div className="mt-4 w-full h-2 rounded-full bg-gray-100 overflow-hidden">
+                      <div className="h-full w-1/2 bg-blue-500 animate-pulse rounded-full" />
+                    </div>
                   </div>
                 </div>
-
-                <div className="space-y-4 lg:hidden">
-                  {renderScheduleTable(schedule, "mobile")}
-                </div>
-                <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
-                  {scheduleColumns.map((rows, index) => renderScheduleTable(rows, `desktop-${index}`))}
-                </div>
-
-                <div className="mt-6 flex flex-col items-center">
-                  <button
-                    onClick={handleSaveToDB}
-                    disabled={isSaving}
-                    className="px-6 py-3 md:px-8 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold shadow-lg transform hover:scale-105 transition w-full md:w-auto"
-                  >
-                    {isSaving ? "保存中..." : "💾 このシフトを確定・保存する"}
-                  </button>
-                  {saveMessage && <div className="mt-4 text-green-800 font-bold">🎉 {saveMessage}</div>}
-                </div>
               </div>
             )}
+
+            <DoctorSettingsPanel
+              isBulkSavingDoctors={isBulkSavingDoctors}
+              activeDoctors={activeDoctors}
+              minScoreMap={minScoreMap}
+              maxScoreMap={maxScoreMap}
+              targetScoreMap={targetScoreMap}
+              satPrevMap={satPrevMap}
+              scoreMin={scoreMin}
+              scoreMax={scoreMax}
+              onSaveAllDoctorsSettings={saveAllDoctorsSettings}
+              onMinScoreChange={handleMinScoreChange}
+              onMaxScoreChange={handleMaxScoreChange}
+              onTargetScoreChange={handleTargetScoreChange}
+              onToggleSatPrev={toggleSatPrev}
+            />
+
+            <ScheduleBoard
+              isLoading={isLoading}
+              dragNotice={dragNotice}
+              error={error}
+              schedule={schedule}
+              scheduleColumns={scheduleColumns}
+              scores={scores}
+              getDoctorName={getDoctorName}
+              year={year}
+              month={month}
+              holidaySet={holidaySet}
+              manualHolidaySetInMonth={manualHolidaySetInMonth}
+              toYmd={toYmd}
+              getWeekday={getWeekday}
+              isShiftLocked={isShiftLocked}
+              invalidHoverShiftKey={invalidHoverShiftKey}
+              onHandleShiftDragOver={handleShiftDragOver}
+              onHandleShiftDragLeave={handleShiftDragLeave}
+              onHandleShiftDrop={handleShiftDrop}
+              onHandleDisabledDayDragOver={handleDisabledDayDragOver}
+              onShiftDragStart={handleShiftDragStart}
+              onClearDragState={clearDragState}
+              onToggleShiftLock={toggleShiftLock}
+              onDeleteMonthSchedule={handleDeleteMonthSchedule}
+              isDeletingMonthSchedule={isDeletingMonthSchedule}
+              onSaveToDB={handleSaveToDB}
+              isSaving={isSaving}
+              saveMessage={saveMessage}
+            />
           </div>
         </div>
       </main>
