@@ -84,6 +84,7 @@ export default function DashboardPage() {
   const [scores, setScores] = useState<any>({});
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  const [isServerBooting, setIsServerBooting] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false); // ※シフト保存用
   const [saveMessage, setSaveMessage] = useState<string>("");
 
@@ -382,9 +383,71 @@ export default function DashboardPage() {
   // ✅ 医師リストの初期取得（GET）
   // =========================================================
   useEffect(() => {
+    let isMounted = true;
+    let retryTimeoutId: number | null = null;
+
+    const checkHealth = async () => {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      try {
+        const res = await fetch(`${apiUrl}/api/health`, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`Health check failed: ${res.status}`);
+        }
+
+        if (isMounted) {
+          setIsServerBooting(false);
+        }
+      } catch (err) {
+        console.error("health check failed:", err);
+        if (isMounted) {
+          retryTimeoutId = window.setTimeout(() => {
+            void checkHealth();
+          }, 5000);
+        }
+      }
+    };
+
+    void checkHealth();
+
+    return () => {
+      isMounted = false;
+      if (retryTimeoutId !== null) {
+        window.clearTimeout(retryTimeoutId);
+      }
+    };
+  }, []);
+
+  // =========================================================
+  // TODO3: 初回起動後に定期ヘルスチェックで3時間保温
+  // =========================================================
+  useEffect(() => {
+    if (isServerBooting) return;
     void fetchDoctors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isServerBooting]);
+
+  useEffect(() => {
+    if (isServerBooting) return;
+
+    let keepAliveCount = 0;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+    const intervalId = window.setInterval(() => {
+      keepAliveCount += 1;
+      void fetch(`${apiUrl}/api/health`, { cache: "no-store" }).catch((err) => {
+        console.error("keep-alive failed:", err);
+      });
+
+      if (keepAliveCount >= 45) {
+        window.clearInterval(intervalId);
+      }
+    }, 240000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [isServerBooting]);
 
     // =========================================================
   // ✅ TODO2：初回ロード時は「翌月」を初期表示にする（クライアントで1回だけ）
@@ -729,6 +792,18 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
     const top = changed.slice(0, 3).map((c) => `${String(c.key)}:${c.now}`);
     return { isDefault, changedCount: changed.length, top };
   }, [objectiveWeights]);
+
+  if (isServerBooting) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-white p-6">
+        <div className="w-full max-w-lg rounded-2xl border border-blue-100 bg-white p-8 text-center shadow-xl">
+          <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-800">サーバーを起動しています...</h2>
+          <p className="mt-2 text-sm text-gray-500">最大1分ほどかかる場合があります</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
