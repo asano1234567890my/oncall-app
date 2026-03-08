@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "./components/AppHeader";
@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "oncall-app",
-  description: "当直表最適化Webアプリ",
+  description: "当直表作成アプリケーション",
 };
 
 export default function RootLayout({
