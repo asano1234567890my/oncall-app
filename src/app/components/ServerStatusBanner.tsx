@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useServerHealthMonitor } from "../hooks/useServerHealthMonitor";
 
@@ -10,9 +10,9 @@ export default function ServerStatusBanner() {
   const isBooting = status === "booting";
 
   return (
-    <div className="pointer-events-none fixed right-4 top-20 z-50">
+    <div className="pointer-events-none fixed inset-x-4 top-20 z-50 md:inset-x-auto md:right-4">
       <div
-        className={`rounded-full border px-4 py-2 text-sm font-semibold shadow-lg transition-all duration-500 ${
+        className={`mx-auto max-w-sm rounded-2xl border px-4 py-2 text-center text-sm font-semibold shadow-lg transition-all duration-500 md:max-w-none ${
           isBooting
             ? "border-amber-200 bg-amber-50 text-amber-900"
             : "border-emerald-200 bg-emerald-50 text-emerald-800"

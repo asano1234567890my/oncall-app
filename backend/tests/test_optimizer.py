@@ -83,6 +83,40 @@ def test_fixed_unavailable_weekday_blocks_all_matching_dates():
                 assert row["day_shift"] != 0
 
 
+def test_unavailable_dict_format_blocks_target_shift_only():
+    opt = OnCallOptimizer(
+        num_doctors=6,
+        year=2024,
+        month=4,
+        holidays=[7],
+        unavailable={0: [{"date": 7, "target_shift": "night", "is_soft_penalty": False}]},
+        score_max=100.0,
+    )
+    opt.build_model()
+    res = opt.solve()
+    assert res["success"] is True
+
+    row = next(r for r in res["schedule"] if r["day"] == 7)
+    assert row["night_shift"] != 0
+
+
+def test_fixed_unavailable_weekday_dict_format_blocks_matching_night_shifts():
+    opt = OnCallOptimizer(
+        num_doctors=8,
+        year=2024,
+        month=4,
+        fixed_unavailable_weekdays={0: [{"day_of_week": 0, "target_shift": "night", "is_soft_penalty": False}]},
+    )
+    opt.build_model()
+    res = opt.solve()
+    assert res["success"] is True
+
+    for row in res["schedule"]:
+        day = row["day"]
+        wd = datetime.date(2024, 4, day).weekday()
+        if wd == 0:
+            assert row["night_shift"] != 0
+
 def test_spacing_rule_min_4_days_apart():
     opt = OnCallOptimizer(num_doctors=12, year=2024, month=4, holidays=[29])
     opt.build_model()
@@ -98,7 +132,7 @@ def test_spacing_rule_min_4_days_apart():
         days_sorted = sorted(days)
         for i in range(len(days_sorted) - 1):
             gap = days_sorted[i + 1] - days_sorted[i]
-            assert gap >= 5  # "次の4日(1..4)は禁止" -> 最短でも差は5
+            assert gap >= 5  # "谺｡縺ｮ4譌･(1..4)縺ｯ遖∵ｭ｢" -> 譛遏ｭ縺ｧ繧ょｷｮ縺ｯ5
 
 
 def test_month_cross_spacing_blocks_early_days():
@@ -133,4 +167,4 @@ def test_score_bounds_enforced_or_infeasible():
         for s in res["scores"].values():
             assert abs(s - 2.0) < 1e-9
     else:
-        assert "解が見つかりません" in res["message"]
+        assert "隗｣縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ" in res["message"]

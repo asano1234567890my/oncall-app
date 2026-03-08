@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import { Loader2, Lock, Unlock } from "lucide-react";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 import { useHolidays } from "./hooks/useHolidays";
@@ -56,8 +56,9 @@ const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
 };
 
 export default function DashboardPage() {
-  const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
+  const defaultTargetMonth = getDefaultTargetMonth();
+  const [year, setYear] = useState<number>(defaultTargetMonth.year);
+  const [month, setMonth] = useState<number>(defaultTargetMonth.month);
 
   const [numDoctors, setNumDoctors] = useState<number>(0);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -91,7 +92,9 @@ export default function DashboardPage() {
 
   const [lockedShiftKeys, setLockedShiftKeys] = useState<Set<string>>(() => new Set());
   const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
-
+  const [dragNotice, setDragNotice] = useState<string>("");
+  const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
+  const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
   // ✅ 要件①：全員一括保存用 state
   const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState<boolean>(false);
 
@@ -242,6 +245,122 @@ export default function DashboardPage() {
 
   const isShiftLocked = (day: number, shiftType: "day" | "night") => lockedShiftKeys.has(getShiftKey(day, shiftType));
 
+  const getWeekdayPy = (y: number, m: number, d: number) => (new Date(y, m - 1, d).getDay() + 6) % 7;
+
+  const getDoctorConstraintMessage = (doctorId: string | null | undefined, day: number) => {
+    if (!doctorId) return null;
+
+    if ((unavailableMap[doctorId] || []).includes(day)) {
+      return getDoctorName(doctorId) + "先生は" + month + "月" + day + "日を不可日に設定しています";
+    }
+
+    const weekdayPy = getWeekdayPy(year, month, day);
+    if ((fixedUnavailableWeekdaysMap[doctorId] || []).includes(weekdayPy)) {
+      return getDoctorName(doctorId) + "先生は" + pyWeekdaysJp[weekdayPy] + "曜日を固定不可に設定しています";
+    }
+
+    return null;
+  };
+
+  const getSameDayConflictMessage = (doctorId: string | null | undefined, day: number, shiftType: "day" | "night") => {
+    if (!doctorId) return null;
+
+    const row = schedule.find((entry) => entry.day === day);
+    if (!row) return null;
+
+    const oppositeDoctorId = shiftType === "day" ? row.night_shift ?? null : row.day_shift ?? null;
+    return oppositeDoctorId && oppositeDoctorId === doctorId ? "同じ日に日直と当直へ同じ医師は配置できません" : null;
+  };
+
+  const clearDragState = () => {
+    setDragSourceKey(null);
+    setDraggingDoctorId(null);
+    setInvalidHoverShiftKey(null);
+  };
+
+  const handleDisabledDayDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!draggingDoctorId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+    setInvalidHoverShiftKey(null);
+  };
+
+  const handleShiftDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    day: number,
+    shiftType: "day" | "night",
+    locked: boolean,
+    isHolidayLike: boolean
+  ) => {
+    if (!draggingDoctorId) return;
+
+    const shiftKey = getShiftKey(day, shiftType);
+    const constraintMessage = getDoctorConstraintMessage(draggingDoctorId, day) ?? getSameDayConflictMessage(draggingDoctorId, day, shiftType);
+
+    if (locked) {
+      event.dataTransfer.dropEffect = "none";
+      setInvalidHoverShiftKey(null);
+      return;
+    }
+
+    if (shiftType === "day" && !isHolidayLike) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "none";
+      setInvalidHoverShiftKey(null);
+      return;
+    }
+
+    event.preventDefault();
+    if (constraintMessage) {
+      event.dataTransfer.dropEffect = "none";
+      setInvalidHoverShiftKey(shiftKey);
+      return;
+    }
+
+    event.dataTransfer.dropEffect = "move";
+    setInvalidHoverShiftKey(null);
+  };
+
+  const handleShiftDragLeave = (day: number, shiftType: "day" | "night") => {
+    const shiftKey = getShiftKey(day, shiftType);
+    setInvalidHoverShiftKey((prev) => (prev === shiftKey ? null : prev));
+  };
+
+  const handleShiftDrop = (event: DragEvent<HTMLDivElement>, toDay: number, toType: "day" | "night", locked: boolean, isHolidayLike: boolean) => {
+    if (locked) {
+      clearDragState();
+      return;
+    }
+
+    event.preventDefault();
+    const raw = event.dataTransfer.getData("text/plain") || dragSourceKey;
+    if (!raw) {
+      clearDragState();
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { day: number; shiftType: "day" | "night" };
+      const doctorId = draggingDoctorId ?? getScheduleDoctorId(parsed.day, parsed.shiftType);
+
+      if (toType === "day" && !isHolidayLike) {
+        setDragNotice("平日の日直には配置できません");
+        return;
+      }
+
+      const constraintMessage = getDoctorConstraintMessage(doctorId, toDay) ?? getSameDayConflictMessage(doctorId, toDay, toType);
+      if (constraintMessage) {
+        setDragNotice(constraintMessage);
+        return;
+      }
+
+      moveOrSwapShift(parsed.day, parsed.shiftType, toDay, toType);
+    } catch {
+      setDragNotice("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
+    } finally {
+      clearDragState();
+    }
+  };
     // =========================================================
   // ✅ 祝日（自動取得）: 年単位で取得し、月表示ではSet/Mapを参照
   // =========================================================
@@ -422,16 +541,6 @@ export default function DashboardPage() {
   useEffect(() => {
     void fetchDoctors();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-    // =========================================================
-  // ✅ TODO2：初回ロード時は「翌月」を初期表示にする（クライアントで1回だけ）
-  // =========================================================
-  useEffect(() => {
-    const now = new Date();
-    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 翌月の1日
-    setYear(next.getFullYear());
-    setMonth(next.getMonth() + 1); // 1-12
   }, []);
 
   // 年月が変わったら「前月最終日」を自動更新
@@ -653,19 +762,32 @@ export default function DashboardPage() {
       const fromField = fromType === "day" ? "day_shift" : "night_shift";
       const toField = toType === "day" ? "day_shift" : "night_shift";
 
-      const fromDoctorId = fromRow[fromField] ?? null;
+            const fromDoctorId = fromRow[fromField] ?? null;
       const toDoctorId = toRow[toField] ?? null;
       if (!fromDoctorId) return prev;
+
+      const moveTargetConflict = getDoctorConstraintMessage(fromDoctorId, toDay) ?? getSameDayConflictMessage(fromDoctorId, toDay, toType);
+      if (moveTargetConflict) {
+        setDragNotice(moveTargetConflict);
+        return prev;
+      }
+
+      const swapTargetConflict = getDoctorConstraintMessage(toDoctorId, fromDay) ?? getSameDayConflictMessage(toDoctorId, fromDay, fromType);
+      if (swapTargetConflict) {
+        setDragNotice(swapTargetConflict);
+        return prev;
+      }
 
       fromRow[fromField] = toDoctorId;
       toRow[toField] = fromDoctorId;
 
       const hasConflict = [fromRow, toRow].some((row) => row.day_shift && row.night_shift && row.day_shift === row.night_shift);
       if (hasConflict) {
-        setError("同一日の日直と当直に同じ医師は設定できません");
+        setDragNotice("同じ日に日直と当直へ同じ医師は配置できません");
         return prev;
       }
 
+      setDragNotice("");
       return next;
     });
   };
@@ -725,6 +847,16 @@ export default function DashboardPage() {
   // =========================================================
   // ✨ シフト自動生成
   // =========================================================
+  useEffect(() => {
+    if (!dragNotice) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setDragNotice("");
+    }, 4000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [dragNotice]);
+
   const handleGenerate = async () => {
     setIsLoading(true);
     setError("");
@@ -885,15 +1017,162 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
     return { isDefault, changedCount: changed.length, top };
   }, [objectiveWeights]);
 
+  const scheduleColumns = useMemo(() => {
+    if (schedule.length === 0) return [];
+    const splitIndex = Math.ceil(schedule.length / 2);
+    return [schedule.slice(0, splitIndex), schedule.slice(splitIndex)].filter((rows) => rows.length > 0);
+  }, [schedule]);
+
+  const renderScheduleTable = (rows: typeof schedule, columnKey: string) => (
+    <div key={columnKey} className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <table className="min-w-full table-fixed bg-white text-center text-xs md:text-[13px]">
+        <thead className="bg-gray-100 whitespace-nowrap">
+          <tr>
+            <th className="py-2 px-1.5 md:px-2 border-b">日付</th>
+            <th className="py-2 px-1.5 md:px-2 border-b">曜日</th>
+            <th className="py-2 px-1.5 md:px-2 border-b bg-orange-50">日直</th>
+            <th className="py-2 px-1.5 md:px-2 border-b bg-indigo-50">当直</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const wd = getWeekday(year, month, row.day);
+            const isSun = wd === "日";
+            const isSat = wd === "土";
+            const ymd = toYmd(year, month, row.day);
+            const isAutoHoliday = holidaySet.has(ymd);
+            const isManualHoliday = manualHolidaySetInMonth.has(ymd);
+            const isHolidayLike = row.is_holiday || isSun || isAutoHoliday || isManualHoliday;
+            const isDayShiftEnabled = isHolidayLike;
+            const dayLocked = isShiftLocked(row.day, "day");
+            const nightLocked = isShiftLocked(row.day, "night");
+            const dayShiftKey = getShiftKey(row.day, "day");
+            const nightShiftKey = getShiftKey(row.day, "night");
+            const dayHoverInvalid = invalidHoverShiftKey === dayShiftKey;
+            const nightHoverInvalid = invalidHoverShiftKey === nightShiftKey;
+
+            return (
+              <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
+                <td className="w-14 py-1.5 px-1.5 md:px-2 whitespace-nowrap align-middle text-[11px] font-semibold text-gray-700">{row.day}日</td>
+                <td className={`w-12 py-1.5 px-1.5 md:px-2 align-middle text-[11px] font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>
+                <td className="w-[37%] py-1.5 px-1.5 md:px-2 align-middle">
+                  {isDayShiftEnabled ? (
+                    <div
+                      onDragEnter={(e) => handleShiftDragOver(e, row.day, "day", dayLocked, isHolidayLike)}
+                      onDragOver={(e) => handleShiftDragOver(e, row.day, "day", dayLocked, isHolidayLike)}
+                      onDragLeave={() => handleShiftDragLeave(row.day, "day")}
+                      onDrop={(e) => handleShiftDrop(e, row.day, "day", dayLocked, isHolidayLike)}
+                      className={`min-h-9 rounded-md border px-1.5 py-1 flex items-center justify-between gap-1.5 ${
+                        dayHoverInvalid
+                          ? "border-red-300 bg-red-200 cursor-not-allowed"
+                          : dayLocked
+                          ? "border-amber-300 bg-amber-50"
+                          : "border-transparent hover:border-gray-200"
+                      }`}
+                    >
+                      {row.day_shift !== null && row.day_shift !== undefined ? (
+                        <span
+                          draggable={!dayLocked}
+                          onDragStart={(e) => {
+                            const payload = JSON.stringify({ day: row.day, shiftType: "day" as const });
+                            e.dataTransfer.setData("text/plain", payload);
+                            e.dataTransfer.effectAllowed = "move";
+                            setDragSourceKey(payload);
+                            setDraggingDoctorId(row.day_shift ?? null);
+                            setInvalidHoverShiftKey(null);
+                          }}
+                          onDragEnd={clearDragState}
+                          className={`min-w-0 flex-1 truncate px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
+                            dayLocked ? "bg-amber-100 text-amber-900" : "bg-orange-100 text-orange-800"
+                          }`}
+                        >
+                          {getDoctorName(row.day_shift)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => toggleShiftLock(row.day, "day")}
+                        disabled={!row.day_shift}
+                        className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={dayLocked ? "ロック解除" : "ロック"}
+                      >
+                        {dayLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onDragEnter={handleDisabledDayDragOver}
+                      onDragOver={handleDisabledDayDragOver}
+                      className="min-h-9 rounded-md border border-gray-200 bg-gray-100 px-1.5 py-1 flex items-center justify-center text-[11px] font-semibold text-gray-400 cursor-not-allowed"
+                    >
+                      -
+                    </div>
+                  )}
+                </td>
+                <td className="w-[37%] py-1.5 px-1.5 md:px-2 align-middle">
+                  <div
+                    onDragEnter={(e) => handleShiftDragOver(e, row.day, "night", nightLocked, isHolidayLike)}
+                    onDragOver={(e) => handleShiftDragOver(e, row.day, "night", nightLocked, isHolidayLike)}
+                    onDragLeave={() => handleShiftDragLeave(row.day, "night")}
+                    onDrop={(e) => handleShiftDrop(e, row.day, "night", nightLocked, isHolidayLike)}
+                    className={`min-h-9 rounded-md border px-1.5 py-1 flex items-center justify-between gap-1.5 ${
+                      nightHoverInvalid
+                        ? "border-red-300 bg-red-200 cursor-not-allowed"
+                        : nightLocked
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-transparent hover:border-gray-200"
+                    }`}
+                  >
+                    {row.night_shift !== null && row.night_shift !== undefined ? (
+                      <span
+                        draggable={!nightLocked}
+                        onDragStart={(e) => {
+                          const payload = JSON.stringify({ day: row.day, shiftType: "night" as const });
+                          e.dataTransfer.setData("text/plain", payload);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDragSourceKey(payload);
+                          setDraggingDoctorId(row.night_shift ?? null);
+                          setInvalidHoverShiftKey(null);
+                        }}
+                        onDragEnd={clearDragState}
+                        className={`min-w-0 flex-1 truncate px-2 py-1 rounded-full text-[11px] font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
+                          nightLocked ? "bg-amber-100 text-amber-900" : "bg-indigo-100 text-indigo-800"
+                        }`}
+                      >
+                        {getDoctorName(row.night_shift)}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleShiftLock(row.day, "night")}
+                      disabled={!row.night_shift}
+                      className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                      title={nightLocked ? "ロック解除" : "ロック"}
+                    >
+                      {nightLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
   return (
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
-      <main className="w-full max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-4 md:p-8">
+      <main className="w-full max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-3 md:p-6 xl:p-8">
         <h1 className="text-xl md:text-3xl font-bold text-gray-800 mb-4 md:mb-8 border-b pb-4">🏥 当直表 自動生成ダッシュボード</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 mb-4 md:mb-8">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,0.98fr)_minmax(0,1.32fr)] lg:items-start mb-4 md:mb-6">
           {/* --- 左側：条件設定フォーム --- */}
           <div
-  className={`bg-blue-50 p-6 rounded-lg border border-blue-100 col-span-1 h-fit relative transition ${
+  className={`bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 col-span-1 h-fit min-w-0 relative transition lg:sticky lg:top-24 ${
     isLoading ? "opacity-80" : "opacity-100"
   }`}
 >
@@ -1381,7 +1660,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
           </div>
 
           {/* --- 右側：結果表示エリア --- */}
-          <div className="col-span-1 md:col-span-2 relative"></div><div className="col-span-1 md:col-span-2">
+          <div className="relative min-w-0">
           {isLoading && (
   <div className="absolute inset-0 z-20 rounded-lg bg-white/70 backdrop-blur-[1px] flex items-center justify-center p-4">
     <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white shadow-xl px-4 py-6 md:px-6">
@@ -1404,7 +1683,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                 type="button"
                 onClick={saveAllDoctorsSettings}
                 disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-                className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
+                className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
                 title="全医師のスコア設定＋休み希望（単発/固定）をまとめて保存します"
               >
                 {isBulkSavingDoctors ? "保存中..." : "💾 全員の休み希望を一括保存"}
@@ -1413,7 +1692,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
             </div>
 
             {/* 医師別スコア設定 */}
-            <div className="bg-orange-50 p-3 md:p-6 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-6">
+            <div className="bg-orange-50 p-3 md:p-4 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-5">
               <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
                 <span>🎯 医師別 スコア設定</span>
                 <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
@@ -1487,7 +1766,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
               </div>
             </div>
 
-            {error && <div className="bg-red-100 text-red-700 p-3 mb-4 md:mb-6 rounded border-l-4 border-red-500">{error}</div>}
+            {dragNotice && <div className="bg-amber-50 text-amber-800 p-3 mb-4 rounded-xl border border-amber-200">{dragNotice}</div>}
 
             {!schedule.length && !isLoading && !error && (
               <div className="flex items-center justify-center h-full min-h-[400px] border-2 border-dashed border-gray-300 rounded-lg text-gray-400 bg-gray-50 p-4 text-center">
@@ -1521,139 +1800,11 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-lg border shadow-sm">
-                  <table className="min-w-full bg-white text-center text-sm">
-                    <thead className="bg-gray-100 whitespace-nowrap">
-                      <tr>
-                        <th className="py-2 px-2 md:px-3 border-b">日付</th>
-                        <th className="py-2 px-2 md:px-3 border-b">曜日</th>
-                        <th className="py-2 px-2 md:px-3 border-b bg-orange-50">日直</th>
-                        <th className="py-2 px-2 md:px-3 border-b bg-indigo-50">当直</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {schedule.map((row) => {
-                        const wd = getWeekday(year, month, row.day);
-                        const isSun = wd === "日";
-                        const isSat = wd === "土";
-                        const ymd = toYmd(year, month, row.day);
-const isAutoHoliday = holidaySet.has(ymd);
-const isManualHoliday = manualHolidaySetInMonth.has(ymd);
-const isHolidayLike = row.is_holiday || isSun || isAutoHoliday || isManualHoliday;
-                        const dayLocked = isShiftLocked(row.day, "day");
-                        const nightLocked = isShiftLocked(row.day, "night");
-                        return (
-                          <tr key={row.day} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50" : ""}`}>
-                            <td className="py-2 px-2 md:px-3 whitespace-nowrap">{row.day}日</td>
-                            <td className={`py-2 px-2 md:px-3 font-bold ${isSun ? "text-red-500" : isSat ? "text-blue-500" : ""}`}>{wd}</td>`r`n                            <td className="py-2 px-2 md:px-3">
-                              <div
-                                onDragOver={(e) => {
-                                  if (!dayLocked) e.preventDefault();
-                                }}
-                                onDrop={(e) => {
-                                  if (dayLocked) return;
-                                  e.preventDefault();
-                                  const raw = e.dataTransfer.getData("text/plain") || dragSourceKey;
-                                  if (!raw) return;
-                                  try {
-                                    const parsed = JSON.parse(raw) as { day: number; shiftType: "day" | "night" };
-                                    moveOrSwapShift(parsed.day, parsed.shiftType, row.day, "day");
-                                  } catch {
-                                    // no-op
-                                  }
-                                  setDragSourceKey(null);
-                                }}
-                                className={`min-h-10 rounded-lg border p-1 flex items-center justify-between gap-1 ${
-                                  dayLocked ? "border-amber-300 bg-amber-50" : "border-transparent"
-                                }`}
-                              >
-                                {row.day_shift !== null && row.day_shift !== undefined ? (
-                                  <span
-                                    draggable={!dayLocked}
-                                    onDragStart={(e) => {
-                                      const payload = JSON.stringify({ day: row.day, shiftType: "day" as const });
-                                      e.dataTransfer.setData("text/plain", payload);
-                                      e.dataTransfer.effectAllowed = "move";
-                                      setDragSourceKey(payload);
-                                    }}
-                                    onDragEnd={() => setDragSourceKey(null)}
-                                    className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
-                                      dayLocked ? "bg-amber-100 text-amber-900" : "bg-orange-100 text-orange-800"
-                                    }`}
-                                  >
-                                    {getDoctorName(row.day_shift)}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleShiftLock(row.day, "day")}
-                                  disabled={!row.day_shift}
-                                  className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                                  title={dayLocked ? "ロック解除" : "ロック"}
-                                >
-                                  {dayLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                                </button>
-                              </div>
-                            </td>
-                            <td className="py-2 px-2 md:px-3">
-                              <div
-                                onDragOver={(e) => {
-                                  if (!nightLocked) e.preventDefault();
-                                }}
-                                onDrop={(e) => {
-                                  if (nightLocked) return;
-                                  e.preventDefault();
-                                  const raw = e.dataTransfer.getData("text/plain") || dragSourceKey;
-                                  if (!raw) return;
-                                  try {
-                                    const parsed = JSON.parse(raw) as { day: number; shiftType: "day" | "night" };
-                                    moveOrSwapShift(parsed.day, parsed.shiftType, row.day, "night");
-                                  } catch {
-                                    // no-op
-                                  }
-                                  setDragSourceKey(null);
-                                }}
-                                className={`min-h-10 rounded-lg border p-1 flex items-center justify-between gap-1 ${
-                                  nightLocked ? "border-amber-300 bg-amber-50" : "border-transparent"
-                                }`}
-                              >
-                                {row.night_shift !== null && row.night_shift !== undefined ? (
-                                  <span
-                                    draggable={!nightLocked}
-                                    onDragStart={(e) => {
-                                      const payload = JSON.stringify({ day: row.day, shiftType: "night" as const });
-                                      e.dataTransfer.setData("text/plain", payload);
-                                      e.dataTransfer.effectAllowed = "move";
-                                      setDragSourceKey(payload);
-                                    }}
-                                    onDragEnd={() => setDragSourceKey(null)}
-                                    className={`px-2 py-1 rounded-full text-xs font-bold whitespace-nowrap cursor-grab active:cursor-grabbing ${
-                                      nightLocked ? "bg-amber-100 text-amber-900" : "bg-indigo-100 text-indigo-800"
-                                    }`}
-                                  >
-                                    {getDoctorName(row.night_shift)}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-400">-</span>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => toggleShiftLock(row.day, "night")}
-                                  disabled={!row.night_shift}
-                                  className="p-1 rounded border border-gray-200 bg-white text-gray-500 hover:text-amber-700 disabled:opacity-40 disabled:cursor-not-allowed"
-                                  title={nightLocked ? "ロック解除" : "ロック"}
-                                >
-                                  {nightLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="space-y-4 lg:hidden">
+                  {renderScheduleTable(schedule, "mobile")}
+                </div>
+                <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4">
+                  {scheduleColumns.map((rows, index) => renderScheduleTable(rows, `desktop-${index}`))}
                 </div>
 
                 <div className="mt-6 flex flex-col items-center">
