@@ -2,6 +2,7 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AppHeader from "./components/AppHeader";
+import ServerStatusBanner from "./components/ServerStatusBanner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +28,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <AppHeader />
+        <ServerStatusBanner />
         {children}
       </body>
     </html>
