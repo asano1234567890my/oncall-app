@@ -1,74 +1,71 @@
-// src/app/entry/[token]/page.tsx
+﻿// src/app/entry/[token]/page.tsx
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
 import { format, parseISO } from "date-fns";
+import TargetShiftPopover from "../../components/TargetShiftPopover";
+import type {
+  FixedUnavailableWeekdayEntry,
+  UnavailableDateEntry,
+  UnavailableDayRecord,
+} from "../../types/dashboard";
+import {
+  getUnavailableDateTargetShift,
+  normalizeUnavailableDateEntries,
+  setUnavailableDateTargetShift,
+} from "../../utils/unavailableSettings";
 import { useCustomHolidays } from "../../hooks/useCustomHolidays";
 import { useHolidays } from "../../hooks/useHolidays";
 import "react-day-picker/dist/style.css";
-
-type UnavailableDay = {
-  date: string | null;
-  day_of_week: number | null;
-  is_fixed: boolean;
-};
 
 type PublicDoctor = {
   name: string;
   is_locked?: boolean;
   unavailable_dates?: string[];
-  unavailable_days?: UnavailableDay[];
-  fixed_weekdays?: number[];
+  unavailable_days?: UnavailableDayRecord[];
+  fixed_weekdays?: FixedUnavailableWeekdayEntry[];
 };
 
 const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 
-function uniqSort(arr: string[]) {
-  return Array.from(new Set(arr.filter(Boolean))).sort();
-}
+function toUnavailableEntriesFromDoctor(data: PublicDoctor): UnavailableDateEntry[] {
+  const legacyEntries = Array.isArray(data.unavailable_dates)
+    ? data.unavailable_dates.map((date) => ({ date: String(date), target_shift: "all" as const }))
+    : [];
+  const structuredEntries = Array.isArray(data.unavailable_days)
+    ? data.unavailable_days
+        .filter((entry) => entry && entry.is_fixed === false && typeof entry.date === "string" && entry.date)
+        .map((entry) => ({
+          date: String(entry.date),
+          target_shift: entry.target_shift ?? "all",
+        }))
+    : [];
 
-function toSelectedFromDoctor(data: PublicDoctor): string[] {
-  if (Array.isArray(data.unavailable_dates) && data.unavailable_dates.length > 0) {
-    return uniqSort(data.unavailable_dates);
-  }
-  if (Array.isArray(data.unavailable_days)) {
-    const dates = data.unavailable_days
-      .filter((u) => u && u.is_fixed === false && typeof u.date === "string" && u.date)
-      .map((u) => String(u.date));
-    return uniqSort(dates);
-  }
-  return [];
+  return normalizeUnavailableDateEntries([...legacyEntries, ...structuredEntries]);
 }
 
 export default function EntryPage() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
   const router = useRouter();
+  const calendarRef = useRef<HTMLDivElement | null>(null);
 
   const [doctor, setDoctor] = useState<PublicDoctor | null>(null);
   const [invalid, setInvalid] = useState(false);
-  const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
-  const selectedDates = useMemo(() => {
-    const list = Array.from(selectedSet).map((s) => {
-      try {
-        return parseISO(s);
-      } catch {
-        return null;
-      }
-    });
-    return list.filter(Boolean) as Date[];
-  }, [selectedSet]);
-
+  const [selectedEntries, setSelectedEntries] = useState<UnavailableDateEntry[]>([]);
   const [month, setMonth] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [popover, setPopover] = useState<{
+    dateKey: string;
+    position: { top: number; left: number };
+  } | null>(null);
 
   const locked = Boolean(doctor?.is_locked);
   const displayedYear = month.getFullYear();
@@ -94,13 +91,29 @@ export default function EntryPage() {
     return next;
   }, [customError, disabledSet, displayedYear, manualSet, standardHolidaySet]);
 
+  const unavailableCounts = useMemo(
+    () =>
+      selectedEntries.reduce(
+        (acc, entry) => {
+          acc.total += 1;
+          acc[entry.target_shift] += 1;
+          return acc;
+        },
+        { total: 0, all: 0, day: 0, night: 0 }
+      ),
+    [selectedEntries]
+  );
+
   const calendarModifiers = useMemo(
     () => ({
       saturday: (day: Date) => day.getDay() === 6,
       sunday: (day: Date) => day.getDay() === 0,
       holiday: (day: Date) => mergedHolidaySet.has(ymd(day)),
+      allUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "all",
+      dayUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "day",
+      nightUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "night",
     }),
-    [mergedHolidaySet]
+    [mergedHolidaySet, selectedEntries]
   );
 
   const title = useMemo(() => {
@@ -129,12 +142,12 @@ export default function EntryPage() {
       const data: PublicDoctor = await res.json();
       setDoctor(data);
 
-      const selected = toSelectedFromDoctor(data);
-      setSelectedSet(new Set(selected));
+      const selected = toUnavailableEntriesFromDoctor(data);
+      setSelectedEntries(selected);
 
       if (selected.length > 0) {
         try {
-          setMonth(parseISO(selected[0]));
+          setMonth(parseISO(selected[0].date));
         } catch {
           // ignore
         }
@@ -152,21 +165,41 @@ export default function EntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
-  const onDayClick = (day: Date) => {
+  useEffect(() => {
+    setPopover(null);
+  }, [month]);
+
+  const isHolidayLikeDate = (date: Date) => date.getDay() === 0 || mergedHolidaySet.has(ymd(date));
+
+  const getAnchorPosition = (target: HTMLElement) => {
+    const targetRect = target.getBoundingClientRect();
+    const containerRect = calendarRef.current?.getBoundingClientRect();
+    return {
+      top: targetRect.bottom - (containerRect?.top ?? 0) + 8,
+      left: targetRect.left - (containerRect?.left ?? 0) + targetRect.width / 2,
+    };
+  };
+
+  const handleDayClick = (day: Date, _modifiers: unknown, event: ReactMouseEvent<Element>) => {
     if (locked) return;
 
-    const key = ymd(day);
-    setSelectedSet((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
+    const dateKey = ymd(day);
+    if (isHolidayLikeDate(day)) {
+      setPopover({
+        dateKey,
+        position: getAnchorPosition(event.currentTarget as HTMLElement),
+      });
+      return;
+    }
+
+    setSelectedEntries((prev) => {
+      const currentValue = getUnavailableDateTargetShift(prev, dateKey);
+      return setUnavailableDateTargetShift(prev, dateKey, currentValue ? null : "all");
     });
   };
 
   const handleSave = async () => {
-    if (!token) return;
-    if (locked) return;
+    if (!token || locked) return;
 
     setIsSaving(true);
     setMessage("");
@@ -174,7 +207,10 @@ export default function EntryPage() {
 
     try {
       const payload = {
-        unavailable_dates: uniqSort(Array.from(selectedSet)),
+        unavailable_days: selectedEntries.map((entry) => ({
+          date: entry.date,
+          target_shift: entry.target_shift,
+        })),
         fixed_weekdays: doctor?.fixed_weekdays ?? [],
       };
 
@@ -256,20 +292,27 @@ export default function EntryPage() {
               <section className="mt-6">
                 <div className="text-sm font-bold text-gray-700">個別不可日（カレンダー）</div>
                 <div className="mt-1 text-xs text-gray-500">
-                  日付をタップして選択/解除できます。<br />
+                  平日・土曜は1タップで終日不可、日曜・祝日は日直/当直を分けて設定できます。<br />
                   前提条件として研究日とその前日は当直には入りません。<br />
                   外来日前日は当直に含まれるため、ご自身で不可日指定をお願いします。
-                  {locked ? <><br />現在はロック中です。</> : null}
+                  {locked ? (
+                    <>
+                      <br />現在はロック中です。
+                    </>
+                  ) : null}
                 </div>
 
                 <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
-                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4">
+                  <div ref={calendarRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4 relative">
+                    <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">終日</span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = 日直のみ</span>
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = 当直のみ</span>
+                    </div>
                     <DayPicker
-                      mode="multiple"
                       month={month}
                       onMonthChange={setMonth}
-                      selected={selectedDates}
-                      onDayClick={onDayClick}
+                      onDayClick={handleDayClick}
                       navLayout="after"
                       modifiers={calendarModifiers}
                       className={[
@@ -309,8 +352,12 @@ export default function EntryPage() {
                           "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
                         holiday:
                           "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
-                        selected:
+                        allUnavailable:
                           "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
+                        dayUnavailable:
+                          "[&>button]:relative [&>button]:border-amber-300 [&>button]:bg-amber-50 [&>button]:text-amber-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-amber-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['D']",
+                        nightUnavailable:
+                          "[&>button]:relative [&>button]:border-sky-300 [&>button]:bg-sky-50 [&>button]:text-sky-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-sky-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['N']",
                         today:
                           "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
                         outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
@@ -318,12 +365,26 @@ export default function EntryPage() {
                           "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
                       }}
                     />
+                    <TargetShiftPopover
+                      open={Boolean(popover)}
+                      position={popover?.position ?? null}
+                      title={popover ? `${month.getMonth() + 1}月${Number(popover.dateKey.slice(-2))}日の不可設定` : "不可設定"}
+                      currentValue={popover ? getUnavailableDateTargetShift(selectedEntries, popover.dateKey) : null}
+                      onSelect={(value) => {
+                        if (!popover) return;
+                        setSelectedEntries((prev) => setUnavailableDateTargetShift(prev, popover.dateKey, value));
+                      }}
+                      onClose={() => setPopover(null)}
+                    />
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                  <span>選択中の日数</span>
-                  <span className="text-sm font-bold text-slate-900">{selectedSet.size}日</span>
+                <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  <span>選択中</span>
+                  <span className="text-sm font-bold text-slate-900">{unavailableCounts.total}件</span>
+                  <span>終日 {unavailableCounts.all}</span>
+                  <span className="text-amber-700">日直のみ {unavailableCounts.day}</span>
+                  <span className="text-sky-700">当直のみ {unavailableCounts.night}</span>
                 </div>
               </section>
 

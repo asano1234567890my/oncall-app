@@ -14,10 +14,18 @@ import { useRealtimeScores } from "./hooks/useRealtimeScores";
 import {
   DEFAULT_OBJECTIVE_WEIGHTS,
   type Doctor,
+  type FixedUnavailableWeekdayMap,
   type ObjectiveWeights,
+  type TargetShift,
   type UnavailableDateMap,
 } from "./types/dashboard";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
+import {
+  getFixedWeekdayTargetShift,
+  getUnavailableDateTargetShift,
+  setFixedWeekdayTargetShift,
+  setUnavailableDateTargetShift,
+} from "./utils/unavailableSettings";
 
 export default function DashboardPage() {
   const defaultTargetMonth = getDefaultTargetMonth();
@@ -34,7 +42,7 @@ export default function DashboardPage() {
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [unavailableMap, setUnavailableMap] = useState<UnavailableDateMap>({});
-  const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<string, number[]>>({});
+  const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<FixedUnavailableWeekdayMap>({});
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<string, number[]>>({});
   const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
   const [maxScoreMap, setMaxScoreMap] = useState<Record<string, number>>({});
@@ -51,8 +59,8 @@ export default function DashboardPage() {
 
   const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
   const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"];
-  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日"];
-  const pyWeekdays = [0, 1, 2, 3, 4, 5, 6];
+  const pyWeekdaysJp = ["月", "火", "水", "木", "金", "土", "日", "祝"];
+  const pyWeekdays = [0, 1, 2, 3, 4, 5, 6, 7];
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
   const getWeekday = (y: number, m: number, day: number) => weekdaysJp[new Date(y, m - 1, day).getDay()];
@@ -357,12 +365,17 @@ export default function DashboardPage() {
     });
   };
 
-  const toggleUnavailable = (doctorId: string, ymd: string) => {
+  const toggleUnavailable = (doctorId: string, ymd: string, targetShift?: TargetShift | null) => {
     if (!doctorId) return;
     setUnavailableMap((prev) => {
-      const currentDates = prev[doctorId] || [];
-      const nextDates = currentDates.includes(ymd) ? currentDates.filter((value) => value !== ymd) : [...currentDates, ymd];
-      return { ...prev, [doctorId]: Array.from(new Set(nextDates)).sort() };
+      const currentEntries = prev[doctorId] || [];
+      const currentTargetShift = getUnavailableDateTargetShift(currentEntries, ymd);
+      const nextEntries = setUnavailableDateTargetShift(
+        currentEntries,
+        ymd,
+        targetShift === undefined ? (currentTargetShift ? null : "all") : targetShift
+      );
+      return { ...prev, [doctorId]: nextEntries };
     });
   };
 
@@ -371,26 +384,34 @@ export default function DashboardPage() {
 
     const currentMonthPrefix = `${year}-${pad2(month)}-`;
     setUnavailableMap((prev) => {
-      const currentDates = prev[selectedDoctorId] || [];
-      const otherMonthDates = currentDates.filter((value) => !value.startsWith(currentMonthPrefix));
-      const currentMonthDates = currentDates.filter((value) => value.startsWith(currentMonthPrefix));
-      const nextCurrentMonthDates =
-        currentMonthDates.length > 0
+      const currentEntries = prev[selectedDoctorId] || [];
+      const otherMonthEntries = currentEntries.filter((entry) => !entry.date.startsWith(currentMonthPrefix));
+      const currentMonthEntries = currentEntries.filter((entry) => entry.date.startsWith(currentMonthPrefix));
+      const nextCurrentMonthEntries =
+        currentMonthEntries.length > 0
           ? []
-          : Array.from({ length: getDaysInMonth(year, month) }, (_, index) => toYmd(year, month, index + 1));
+          : Array.from({ length: getDaysInMonth(year, month) }, (_, index) => ({
+              date: toYmd(year, month, index + 1),
+              target_shift: "all" as const,
+            }));
 
       return {
         ...prev,
-        [selectedDoctorId]: Array.from(new Set([...otherMonthDates, ...nextCurrentMonthDates])).sort(),
+        [selectedDoctorId]: [...otherMonthEntries, ...nextCurrentMonthEntries],
       };
     });
   };
 
-  const toggleFixedWeekday = (doctorId: string, weekdayPy: number) => {
+  const toggleFixedWeekday = (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => {
     if (!doctorId) return;
     setFixedUnavailableWeekdaysMap((prev) => {
       const current = prev[doctorId] || [];
-      const next = current.includes(weekdayPy) ? current.filter((value) => value !== weekdayPy) : [...current, weekdayPy].sort((a, b) => a - b);
+      const currentTargetShift = getFixedWeekdayTargetShift(current, weekdayPy);
+      const next = setFixedWeekdayTargetShift(
+        current,
+        weekdayPy,
+        targetShift === undefined ? (currentTargetShift ? null : "all") : targetShift
+      );
       return { ...prev, [doctorId]: next };
     });
   };
@@ -611,6 +632,7 @@ export default function DashboardPage() {
     </div>
   );
 }
+
 
 
 

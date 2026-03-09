@@ -12,6 +12,7 @@ from models.doctor import Doctor
 from models.unavailable_day import UnavailableDay
 from schemas.doctor import DoctorCreate, DoctorUpdate
 from services.unavailable_day_service import (
+    FixedWeekdayEntry,
     UnavailableDateEntry,
     replace_doctor_unavailable_days,
 )
@@ -177,6 +178,16 @@ async def update_doctor(
                 for item in (doc.unavailable_days or [])
             ]
 
+        fixed_weekday_entries: list[FixedWeekdayEntry] | None = None
+        if has_fixed_weekdays:
+            fixed_weekday_entries = [
+                FixedWeekdayEntry(
+                    weekday=item.weekday,
+                    target_shift=item.target_shift,
+                )
+                for item in (doc.fixed_weekdays or [])
+            ]
+
         if has_unavailable_dates or has_unavailable_days or has_fixed_weekdays:
             try:
                 await replace_doctor_unavailable_days(
@@ -184,7 +195,7 @@ async def update_doctor(
                     doctor_id=doctor_uuid,
                     unavailable_entries=unavailable_entries,
                     replace_date_entries=has_unavailable_dates or has_unavailable_days,
-                    fixed_weekdays=doc.fixed_weekdays if has_fixed_weekdays else None,
+                    fixed_weekdays=fixed_weekday_entries,
                     replace_fixed_weekdays=has_fixed_weekdays,
                     unavailable_year=doc.unavailable_year,
                     unavailable_month=doc.unavailable_month,

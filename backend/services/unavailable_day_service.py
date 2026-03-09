@@ -18,6 +18,12 @@ class UnavailableDateEntry:
     is_soft_penalty: bool = False
 
 
+@dataclass(frozen=True)
+class FixedWeekdayEntry:
+    weekday: int
+    target_shift: str = "all"
+
+
 def _month_bounds(year: int, month: int) -> tuple[datetime.date, datetime.date]:
     if year < 1900 or year > 2200:
         raise ValueError("unavailable_year must be between 1900 and 2200")
@@ -70,7 +76,7 @@ async def replace_doctor_unavailable_days(
     doctor_id: uuid.UUID,
     unavailable_entries: Sequence[UnavailableDateEntry] | None,
     replace_date_entries: bool,
-    fixed_weekdays: Sequence[int] | None,
+    fixed_weekdays: Sequence[FixedWeekdayEntry] | None,
     replace_fixed_weekdays: bool,
     unavailable_year: int | None = None,
     unavailable_month: int | None = None,
@@ -115,10 +121,16 @@ async def replace_doctor_unavailable_days(
             )
         )
 
-        normalized_weekdays = sorted({int(weekday) for weekday in (fixed_weekdays or [])})
-        for weekday in normalized_weekdays:
-            if weekday < 0 or weekday > 6:
-                raise ValueError("fixed_weekdays must contain values between 0 and 6")
+        normalized_weekdays = sorted(
+            {
+                (int(entry.weekday), entry.target_shift)
+                for entry in (fixed_weekdays or [])
+            },
+            key=lambda item: (item[0], item[1]),
+        )
+        for weekday, _target_shift in normalized_weekdays:
+            if weekday < 0 or weekday > 7:
+                raise ValueError("fixed_weekdays must contain values between 0 and 7")
 
         if normalized_weekdays:
             db.add_all(
@@ -128,9 +140,9 @@ async def replace_doctor_unavailable_days(
                         date=None,
                         day_of_week=weekday,
                         is_fixed=True,
-                        target_shift="all",
+                        target_shift=target_shift,
                         is_soft_penalty=False,
                     )
-                    for weekday in normalized_weekdays
+                    for weekday, target_shift in normalized_weekdays
                 ]
             )

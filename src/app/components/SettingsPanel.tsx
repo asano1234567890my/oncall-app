@@ -1,18 +1,24 @@
-"use client";
+﻿"use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
-import type { ObjectiveWeights, UnavailableDateMap } from "../types/dashboard";
+import TargetShiftPopover from "./TargetShiftPopover";
+import type {
+  FixedUnavailableWeekdayMap,
+  ObjectiveWeights,
+  TargetShift,
+  UnavailableDateMap,
+} from "../types/dashboard";
+import { getFixedWeekdayTargetShift, getUnavailableDateTargetShift } from "../utils/unavailableSettings";
 
 type DashboardDoctor = {
   id: string;
   name: string;
   is_active?: boolean;
 };
-
 
 type WeightChangeSummary = {
   isDefault: boolean;
@@ -48,7 +54,7 @@ type GenerationSettingsPanelProps = {
   daysInMonth: number;
   selectedDoctorId: string;
   unavailableMap: UnavailableDateMap;
-  fixedUnavailableWeekdaysMap: Record<string, number[]>;
+  fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
   pyWeekdays: number[];
   pyWeekdaysJp: string[];
   prevMonthLastDay: number;
@@ -68,8 +74,8 @@ type GenerationSettingsPanelProps = {
   onSaveCustomHolidays: () => void;
   onSelectedDoctorChange: (doctorId: string) => void;
   onToggleAllUnavailable: () => void;
-  onToggleUnavailable: (doctorId: string, ymd: string) => void;
-  onToggleFixedWeekday: (doctorId: string, weekdayPy: number) => void;
+  onToggleUnavailable: (doctorId: string, ymd: string, targetShift?: TargetShift | null) => void;
+  onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
   onPrevMonthLastDayChange: (value: number) => void;
   onTogglePrevMonthWorkedDay: (doctorId: string, prevDay: number) => void;
   onGenerate: () => void;
@@ -92,12 +98,17 @@ type DoctorSettingsPanelProps = {
 };
 
 const weightInputs = [
-  { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
-  { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
-  { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
-  { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
-  { key: "score_balance", label: "スコア公平性", min: 0, max: 200, step: 5, hint: "中" },
-  { key: "target", label: "個別ターゲット", min: 0, max: 200, step: 5, hint: "弱" },
+  { key: "gap5", label: "5日間隔", min: 0, max: 200, step: 5, hint: "勤務間隔" },
+  { key: "soft_unavailable", label: "忌避日のソフト回避", min: 0, max: 200, step: 5, hint: "希望日の尊重" },
+  { key: "sat_consec", label: "2か月連続土曜回避", min: 0, max: 200, step: 5, hint: "連続土曜抑制" },
+  { key: "sunhol_3rd", label: "日祝3回目", min: 0, max: 200, step: 5, hint: "日祝回数抑制" },
+  { key: "gap6", label: "6日間隔", min: 0, max: 200, step: 5, hint: "余裕を持つ" },
+  { key: "month_fairness", label: "同月のスコア平準化", min: 0, max: 200, step: 5, hint: "同月の偏り抑制" },
+  { key: "target", label: "目標スコアへの近似度", min: 0, max: 200, step: 5, hint: "個別目標寄せ" },
+  { key: "score_balance", label: "過去数か月のスコア平準化", min: 0, max: 200, step: 5, hint: "負担バランス" },
+  { key: "sunhol_fairness", label: "同月の日祝回数平準化", min: 0, max: 200, step: 5, hint: "日祝回数の均等化" },
+  { key: "past_sat_gap", label: "過去数か月の土曜勤務平準化", min: 0, max: 200, step: 5, hint: "過去実績考慮" },
+  { key: "past_sunhol_gap", label: "過去数か月の日祝勤務平準化", min: 0, max: 200, step: 5, hint: "過去実績考慮" },
 ] as const satisfies ReadonlyArray<{
   key: keyof ObjectiveWeights;
   label: string;
@@ -112,6 +123,77 @@ const toDateKey = (date: Date) => format(date, "yyyy-MM-dd");
 const parseDateKey = (value: string) => {
   const parsed = parseISO(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const dayPickerBaseClassName = [
+  "w-full",
+  "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
+  "[--rdp-day_button-width:2.35rem] [--rdp-day_button-height:2.35rem]",
+  "[--rdp-months-gap:0px]",
+  "sm:[--rdp-day-width:2.65rem] sm:[--rdp-day-height:2.65rem]",
+  "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
+].join(" ");
+
+const dayPickerClassNames = {
+  root: "w-full",
+  months: "block w-full max-w-none",
+  month: "w-full space-y-3",
+  month_caption: "flex min-w-0 items-center justify-center text-center",
+  caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
+  nav: "hidden",
+  month_grid: "w-full table-fixed border-collapse",
+  weekdays: "border-b border-slate-200/80",
+  weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
+  week: "border-b border-slate-100 last:border-b-0",
+  day: "p-0 text-center align-middle",
+  day_button:
+    "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+};
+
+const baseCalendarModifierClasses = {
+  saturday:
+    "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
+  sunday:
+    "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+  today:
+    "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
+  outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
+  disabled:
+    "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
+};
+
+const getTargetShiftSummaryLabel = (targetShift: TargetShift | null) => {
+  if (targetShift === "all") return "終日休み";
+  if (targetShift === "day") return "日直のみ休み";
+  if (targetShift === "night") return "当直のみ休み";
+  return "設定なし";
+};
+
+const getAnchorPosition = (target: HTMLElement, container: HTMLElement | null) => {
+  const targetRect = target.getBoundingClientRect();
+  const containerRect = container?.getBoundingClientRect();
+  return {
+    top: targetRect.bottom - (containerRect?.top ?? 0) + 8,
+    left: targetRect.left - (containerRect?.left ?? 0) + targetRect.width / 2,
+  };
+};
+
+const getFixedWeekdayButtonTone = (weekday: number, targetShift: TargetShift | null) => {
+  const isSun = weekday === 6;
+  const isHoliday = weekday === 7;
+  const isSat = weekday === 5;
+
+  if (targetShift === "all") {
+    if (isSun || isHoliday) return "border-red-600 bg-red-500 text-white";
+    if (isSat) return "border-blue-700 bg-blue-600 text-white";
+    return "border-gray-900 bg-gray-900 text-white";
+  }
+
+  if (targetShift === "day") return "border-amber-300 bg-amber-50 text-amber-900";
+  if (targetShift === "night") return "border-sky-300 bg-sky-50 text-sky-900";
+  if (isSun || isHoliday) return "border-red-200 bg-red-50 text-red-400 hover:bg-red-100";
+  if (isSat) return "border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100";
+  return "border-gray-200 bg-white text-gray-500 hover:bg-gray-50";
 };
 
 export function GenerationSettingsPanel({
@@ -162,26 +244,79 @@ export function GenerationSettingsPanel({
 }: GenerationSettingsPanelProps) {
   const displayMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
   const currentMonthPrefix = `${year}-${pad2(month)}-`;
+  const selectedDoctor = activeDoctors.find((doctor) => doctor.id === selectedDoctorId) ?? null;
+  const unavailableSectionRef = useRef<HTMLDivElement | null>(null);
+  const fixedWeekdaySectionRef = useRef<HTMLDivElement | null>(null);
+  const [unavailablePopover, setUnavailablePopover] = useState<{
+    dateKey: string;
+    position: { top: number; left: number };
+  } | null>(null);
+  const [fixedWeekdayPopover, setFixedWeekdayPopover] = useState<{
+    doctorId: string;
+    weekday: number;
+    position: { top: number; left: number };
+  } | null>(null);
+
   const selectedUnavailableInMonth = useMemo(() => {
     const selectedDoctorUnavailable = unavailableMap[selectedDoctorId] ?? [];
-    return selectedDoctorUnavailable.filter((value) => value.startsWith(currentMonthPrefix)).sort();
+    return selectedDoctorUnavailable
+      .filter((entry) => entry.date.startsWith(currentMonthPrefix))
+      .slice()
+      .sort((left, right) => left.date.localeCompare(right.date));
   }, [currentMonthPrefix, selectedDoctorId, unavailableMap]);
+
   const selectedUnavailableDates = useMemo(
-    () => selectedUnavailableInMonth.map(parseDateKey).filter((value): value is Date => value !== null),
+    () =>
+      selectedUnavailableInMonth
+        .map((entry) => parseDateKey(entry.date))
+        .filter((value): value is Date => value instanceof Date),
     [selectedUnavailableInMonth]
   );
-  const calendarModifiers = useMemo(
-    () => ({
-      saturday: (date: Date) => date.getDay() === 6,
-      sunday: (date: Date) => date.getDay() === 0,
-      holiday: (date: Date) => {
-        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
-        const info = isHolidayLikeDay(date.getDate());
-        return info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd));
-      },
-    }),
-    [holidayWorkdayOverrides, isHolidayLikeDay, month, year]
+
+  const selectedFixedWeekdays = useMemo(
+    () => (selectedDoctorId ? fixedUnavailableWeekdaysMap[selectedDoctorId] ?? [] : []),
+    [fixedUnavailableWeekdaysMap, selectedDoctorId]
   );
+
+  const unavailableCounts = useMemo(
+    () =>
+      selectedUnavailableInMonth.reduce(
+        (acc, entry) => {
+          acc.total += 1;
+          acc[entry.target_shift] += 1;
+          return acc;
+        },
+        { total: 0, all: 0, day: 0, night: 0 }
+      ),
+    [selectedUnavailableInMonth]
+  );
+
+  const holidayCounts = useMemo(() => {
+    let autoCount = 0;
+    let manualCount = 0;
+    let overrideCount = 0;
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const info = isHolidayLikeDay(day);
+      if (info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd)) overrideCount += 1;
+      else if (info.isAutoHoliday) autoCount += 1;
+      if (info.isManualHoliday) manualCount += 1;
+    }
+
+    return { autoCount, manualCount, overrideCount };
+  }, [daysInMonth, holidayWorkdayOverrides, isHolidayLikeDay]);
+
+  const holidaySelectedDates = useMemo(() => {
+    const dates: Date[] = [];
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const info = isHolidayLikeDay(day);
+      if (info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd))) {
+        dates.push(new Date(year, month - 1, day));
+      }
+    }
+    return dates;
+  }, [daysInMonth, holidayWorkdayOverrides, isHolidayLikeDay, month, year]);
+
   const holidayCalendarModifiers = useMemo(
     () => ({
       saturday: (date: Date) => date.getDay() === 6,
@@ -203,20 +338,46 @@ export function GenerationSettingsPanel({
     }),
     [holidayWorkdayOverrides, isHolidayLikeDay, month, year]
   );
-  const holidayCounts = useMemo(() => {
-    let autoCount = 0;
-    let manualCount = 0;
-    let overrideCount = 0;
 
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const info = isHolidayLikeDay(day);
-      if (info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd)) overrideCount += 1;
-      else if (info.isAutoHoliday) autoCount += 1;
-      if (info.isManualHoliday) manualCount += 1;
-    }
+  const unavailableCalendarModifiers = useMemo(
+    () => ({
+      saturday: (date: Date) => date.getDay() === 6,
+      sunday: (date: Date) => date.getDay() === 0,
+      holiday: (date: Date) => {
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
+        const info = isHolidayLikeDay(date.getDate());
+        return info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd));
+      },
+      allUnavailable: (date: Date) =>
+        getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "all",
+      dayUnavailable: (date: Date) =>
+        getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "day",
+      nightUnavailable: (date: Date) =>
+        getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "night",
+    }),
+    [holidayWorkdayOverrides, isHolidayLikeDay, month, selectedUnavailableInMonth, year]
+  );
 
-    return { autoCount, manualCount, overrideCount };
-  }, [daysInMonth, holidayWorkdayOverrides, isHolidayLikeDay]);
+  const closePopovers = () => {
+    setUnavailablePopover(null);
+    setFixedWeekdayPopover(null);
+  };
+
+  const handleYearInputChange = (value: number) => {
+    closePopovers();
+    onYearChange(value);
+  };
+
+  const handleMonthInputChange = (value: number) => {
+    closePopovers();
+    onMonthChange(value);
+  };
+
+  const handleDoctorSelection = (doctorId: string) => {
+    closePopovers();
+    onSelectedDoctorChange(doctorId);
+  };
+
 
   const handleHolidayDateClick = (date: Date) => {
     if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
@@ -233,456 +394,454 @@ export function GenerationSettingsPanel({
     onToggleHoliday(day);
   };
 
+  const handleUnavailableDayClick = (date: Date, _modifiers: unknown, event: ReactMouseEvent<Element>) => {
+    if (!selectedDoctorId) return;
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
+
+    const dateKey = toDateKey(date);
+    const info = isHolidayLikeDay(date.getDate());
+    if (info.isHolidayLike) {
+      setUnavailablePopover({
+        dateKey,
+        position: getAnchorPosition(event.currentTarget as HTMLElement, unavailableSectionRef.current),
+      });
+      return;
+    }
+
+    onToggleUnavailable(selectedDoctorId, dateKey);
+  };
+
+  const handleFixedWeekdayClick = (
+    doctorId: string,
+    weekday: number,
+    currentValue: TargetShift | null,
+    event: ReactMouseEvent<HTMLButtonElement>
+  ) => {
+    closePopovers();
+
+    if (weekday <= 5) {
+      onToggleFixedWeekday(doctorId, weekday, currentValue ? null : "all");
+      return;
+    }
+
+    setFixedWeekdayPopover({
+      doctorId,
+      weekday,
+      position: getAnchorPosition(event.currentTarget, fixedWeekdaySectionRef.current),
+    });
+  };
+
   return (
     <div
-      className={`bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 col-span-1 h-fit min-w-0 relative transition lg:sticky lg:top-24 ${
+      className={`relative h-fit min-w-0 rounded-xl border border-blue-100 bg-blue-50 p-4 transition md:p-5 lg:sticky lg:top-24 ${
         isLoading ? "opacity-80" : "opacity-100"
       }`}
     >
-      {isLoading && (
-        <div className="absolute inset-0 z-10 rounded-lg bg-white/50 backdrop-blur-[1px] pointer-events-auto flex items-start justify-center p-4">
+      {isLoading ? (
+        <div className="pointer-events-auto absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-white/50 p-4 backdrop-blur-[1px]">
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>生成中は入力を一時ロックしています</span>
           </div>
         </div>
-      )}
+      ) : null}
 
-      <h2 className="text-xl font-bold text-blue-800 mb-4">⚙️ 生成条件</h2>
-
-      {(isLoadingCustom || customError) && (
-        <div
-          className={`mb-3 rounded-lg border px-3 py-2 text-[12px] font-bold ${
-            customError ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-blue-50 border-blue-200 text-blue-700"
-          }`}
-        >
-          {customError ? `休日設定の同期エラー: ${customError}` : "休日設定を同期中..."}
+      <div className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-blue-900">生成条件と休日設定</h2>
+          <p className="mt-1 text-sm text-blue-700">対象月と不可条件を整えてから未固定枠を再生成します。</p>
         </div>
-      )}
+        <div className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">
+          {format(displayMonth, "yyyy年M月")}
+        </div>
+      </div>
 
-      <div className="mb-6 p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-        <div className="text-sm font-bold text-gray-700 mb-2 text-center">📌 適用中の主要条件</div>
-
-        <ul className="text-xs text-gray-700 space-y-1.5">
-          <li className="flex gap-2">
-            <span className="font-bold text-blue-700 shrink-0">ハード</span>
-            <span>4日間隔(月跨ぎ含) / 土曜月1回 / 日祝同日禁止 / 日直上限2回 / 研究日・前日禁止</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="font-bold text-blue-700 shrink-0">スコア</span>
-            <span>
-              共通範囲: {scoreMin} 〜 {scoreMax} <span className="text-[10px] text-orange-600">(個別設定優先)</span>
+      <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-sm font-bold text-gray-800">最適化サマリー</div>
+            <div className="text-xs text-gray-500">スコア帯と重みの状態をここで確認できます。</div>
+          </div>
+          {weightChanges.isDefault ? (
+            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
+              既定値
             </span>
-          </li>
+          ) : (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800">
+              変更あり {weightChanges.changedCount}件
+            </span>
+          )}
+        </div>
 
-          <li className="flex gap-2 items-start">
-            <span className="font-bold text-blue-700 shrink-0">重み</span>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-1 text-[11px] font-bold text-gray-700">score_min</div>
+            <input
+              type="number"
+              step="0.1"
+              value={scoreMin}
+              onChange={(event) => onScoreMinChange(Number(event.target.value))}
+              className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm"
+            />
+          </label>
+          <label className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+            <div className="mb-1 text-[11px] font-bold text-gray-700">score_max</div>
+            <input
+              type="number"
+              step="0.1"
+              value={scoreMax}
+              onChange={(event) => onScoreMaxChange(Number(event.target.value))}
+              className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm"
+            />
+          </label>
+        </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <span className="flex flex-wrap items-center gap-1">
-                  {weightChanges.isDefault ? (
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      現在：標準設定
-                    </span>
-                  ) : (
-                    <>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                        変更あり：{weightChanges.changedCount}件
-                      </span>
-                      {weightChanges.top.map((item) => (
-                        <span key={item} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-50 text-gray-700 border border-gray-200">
-                          {item}
-                        </span>
-                      ))}
-                    </>
-                  )}
-                </span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          {weightChanges.top.length > 0 ? (
+            weightChanges.top.map((item) => (
+              <span key={item} className="rounded-full border border-gray-200 bg-gray-50 px-2 py-1 font-bold text-gray-700">
+                {item}
+              </span>
+            ))
+          ) : (
+            <span className="text-gray-500">重みは既定値のままです。</span>
+          )}
+        </div>
 
-                <button
-                  type="button"
-                  onClick={onToggleWeights}
-                  className="shrink-0 text-[11px] font-bold px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-[0.99] transition"
-                >
-                  設定
-                </button>
-              </div>
+        <div className="mt-3 text-[11px] text-gray-500">
+          人数が少ない月は score_max を少し広げると解なしを避けやすくなります。
+        </div>
 
-              {isWeightsOpen && (
-                <div className="mt-3 rounded-lg border border-blue-100 bg-white shadow-sm overflow-hidden">
-                  <div className="flex items-center justify-between gap-2 px-3 py-2 bg-blue-50 border-b border-blue-100">
-                    <div className="text-[12px] font-bold text-blue-800">⚙️ 最適化の詳細設定（重み調整）</div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={onResetWeights}
-                        className="text-[10px] font-bold text-blue-700 hover:text-blue-800 px-2 py-1 rounded border border-blue-200 bg-white"
-                        title="重みだけ初期値に戻します"
-                      >
-                        初期値
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onCloseWeights}
-                        className="text-[10px] font-bold text-gray-600 hover:text-gray-800 px-2 py-1 rounded border border-gray-200 bg-white"
-                      >
-                        閉じる
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-3 space-y-3">
-                    {weightInputs.map((weight) => (
-                      <div key={weight.key} className="rounded-lg border border-gray-100 p-3">
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <div className="min-w-0">
-                            <div className="text-[12px] font-bold text-gray-700 truncate">
-                              {weight.label}
-                              <span className="ml-2 text-[10px] font-bold text-gray-400">{weight.hint}</span>
-                            </div>
-                          </div>
-
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            value={objectiveWeights[weight.key]}
-                            onChange={(e) => onWeightChange(weight.key, Number(e.target.value))}
-                            className="w-20 p-2 text-sm font-bold text-center border rounded bg-gray-50"
-                            min={weight.min}
-                            max={weight.max}
-                            step={weight.step}
-                          />
-                        </div>
-
-                        <input
-                          type="range"
-                          value={objectiveWeights[weight.key]}
-                          onChange={(e) => onWeightChange(weight.key, Number(e.target.value))}
-                          min={weight.min}
-                          max={weight.max}
-                          step={weight.step}
-                          className="w-full accent-blue-600"
-                        />
-
-                        <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-                          <span>{weight.min}</span>
-                          <span>{weight.max}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+        <div className="mt-4 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onToggleWeights}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
+          >
+            {isWeightsOpen ? "重み設定を閉じる" : "重み設定を開く"}
+          </button>
+          {isWeightsOpen ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onResetWeights}
+                className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50"
+              >
+                既定値に戻す
+              </button>
+              <button
+                type="button"
+                onClick={onCloseWeights}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
+              >
+                閉じる
+              </button>
             </div>
-          </li>
-
-          <li className="flex gap-2">
-            <span className="font-bold text-blue-700 shrink-0">目的</span>
-            <span>
-              ５日間隔 ({objectiveWeights.gap5}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd}) ✕連続土曜({objectiveWeights.sat_consec}) ✕ ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
-            </span>
-          </li>
-        </ul>
-
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-[11px] font-bold text-gray-700 mb-1">score_min</label>
-            <input type="number" step="0.1" value={scoreMin} onChange={(e) => onScoreMinChange(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold text-gray-700 mb-1">score_max</label>
-            <input type="number" step="0.1" value={scoreMax} onChange={(e) => onScoreMaxChange(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-          </div>
+          ) : null}
         </div>
-        <div className="mt-2 text-[10px] text-gray-500">人数が少ない月は score_max を上げないと解なしになりやすいです。</div>
+
+        {isWeightsOpen ? (
+          <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+            {weightInputs.map((weight) => (
+              <div key={weight.key} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-gray-800">{weight.label}</div>
+                    <div className="text-[11px] text-gray-500">{weight.hint}</div>
+                  </div>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={objectiveWeights[weight.key]}
+                    onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
+                    className="w-20 rounded-lg border border-gray-200 bg-gray-50 p-2 text-center text-sm font-bold"
+                    min={weight.min}
+                    max={weight.max}
+                    step={weight.step}
+                  />
+                </div>
+                <input
+                  type="range"
+                  value={objectiveWeights[weight.key]}
+                  onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
+                  min={weight.min}
+                  max={weight.max}
+                  step={weight.step}
+                  className="w-full accent-blue-600"
+                />
+                <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                  <span>{weight.min}</span>
+                  <span>{weight.max}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 mb-3 md:mb-4">
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">年</label>
-          <input type="number" value={year} onChange={(e) => onYearChange(Number(e.target.value))} className="border rounded p-2 w-full" />
-        </div>
-        <div>
-          <label className="block text-sm font-bold text-gray-700 mb-1">月</label>
-          <input type="number" value={month} onChange={(e) => onMonthChange(Number(e.target.value))} className="border rounded p-2 w-full" />
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <label className="block text-sm font-bold text-gray-700 mb-1">医師の人数</label>
-        <div className="flex items-center gap-2">
-          <input type="number" value={numDoctors} readOnly className="border rounded p-2 w-full bg-gray-100 text-gray-500 cursor-not-allowed" />
-          <span className="text-sm font-bold text-blue-600">人</span>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {activeDoctors.map((doc) => (
-            <span key={doc.id} className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
-              {doc.name}
-            </span>
-          ))}
+      <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+        <label>
+          <div className="mb-1 text-sm font-bold text-gray-700">年</div>
+          <input
+            type="number"
+            value={year}
+            onChange={(event) => handleYearInputChange(Number(event.target.value))}
+            className="w-full rounded-lg border border-gray-200 p-2"
+          />
+        </label>
+        <label>
+          <div className="mb-1 text-sm font-bold text-gray-700">月</div>
+          <input
+            type="number"
+            value={month}
+            onChange={(event) => handleMonthInputChange(Number(event.target.value))}
+            className="w-full rounded-lg border border-gray-200 p-2"
+          />
+        </label>
+        <div className="col-span-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          稼働医師数: <span className="font-bold text-gray-800">{numDoctors}名</span>
         </div>
       </div>
 
-        <div className="mb-4 md:mb-6 rounded-lg border border-blue-100 bg-white p-3 shadow-sm md:p-4">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <label className="block text-sm font-bold text-gray-700">病院共通の祝日・休日設定</label>
-            <div className="mt-1 text-[11px] text-gray-500">通常日を押すと追加休日、祝日を押すと平日扱いへ切り替えます。日曜は固定休日です。</div>
+            <h3 className="text-sm font-bold text-gray-800">祝日・休日設定</h3>
+            <p className="mt-1 text-[11px] text-gray-500">
+              通常日を押すと追加休日、標準祝日を押すと通常出勤へ切り替えます。
+            </p>
           </div>
-
           <button
             type="button"
             onClick={onSaveCustomHolidays}
-            disabled={isLoadingCustom || isSavingCustom || !hasUnsavedCustomChanges}
-            className={`rounded-xl px-4 py-2 text-[12px] font-bold text-white shadow-sm transition ${
-              isLoadingCustom || isSavingCustom || !hasUnsavedCustomChanges
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-rose-600 hover:bg-rose-700"
+            disabled={isSavingCustom || isLoadingCustom}
+            className={`rounded-lg px-3 py-2 text-xs font-bold text-white transition ${
+              isSavingCustom || isLoadingCustom
+                ? "cursor-not-allowed bg-gray-400"
+                : hasUnsavedCustomChanges
+                  ? "bg-rose-600 hover:bg-rose-700"
+                  : "bg-slate-600 hover:bg-slate-700"
             }`}
           >
             {isSavingCustom ? "保存中..." : "祝日設定を保存"}
           </button>
         </div>
 
-        <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
-          <span className="rounded-full border border-red-200 bg-white px-2 py-1 text-red-700">標準祝日</span>
-          <span className="rounded-full border border-red-600 bg-red-500 px-2 py-1 text-white">追加休日</span>
-          <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-amber-800">祝日だが通常出勤</span>
-          <span
-            className={`rounded-full border px-2 py-1 ${
-              hasUnsavedCustomChanges
-                ? "border-blue-200 bg-blue-50 text-blue-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+        {(isLoadingCustom || customError || customSaveMessage) ? (
+          <div
+            className={`mb-3 rounded-xl border px-3 py-2 text-[12px] font-bold ${
+              customError
+                ? "border-amber-200 bg-amber-50 text-amber-800"
+                : customSaveMessage
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : "border-blue-200 bg-blue-50 text-blue-700"
             }`}
           >
-            {hasUnsavedCustomChanges ? "未保存の変更あり" : "保存済み"}
+            {customError
+              ? `祝日設定の保存に失敗しました: ${customError}`
+              : customSaveMessage || "祝日設定を読み込み中です..."}
+          </div>
+        ) : null}
+
+        <DayPicker
+          mode="multiple"
+          month={displayMonth}
+          selected={holidaySelectedDates}
+          onDayClick={handleHolidayDateClick}
+          showOutsideDays
+          className={dayPickerBaseClassName}
+          classNames={dayPickerClassNames}
+          modifiers={holidayCalendarModifiers}
+          modifiersClassNames={{
+            ...baseCalendarModifierClasses,
+            autoHoliday:
+              "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+            manualHoliday:
+              "[&>button]:bg-rose-500 [&>button]:text-white hover:[&>button]:bg-rose-600",
+            overrideHoliday:
+              "[&>button]:border-emerald-300 [&>button]:bg-emerald-50 [&>button]:text-emerald-700 hover:[&>button]:bg-emerald-100/80",
+          }}
+        />
+
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+          <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-600">
+            標準祝日 {holidayCounts.autoCount}
           </span>
+          <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">
+            追加休日 {holidayCounts.manualCount}
+          </span>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
+            平日扱い {holidayCounts.overrideCount}
+          </span>
+          {hasUnsavedCustomChanges ? (
+            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
+              未保存の変更があります
+            </span>
+          ) : null}
         </div>
-
-        <div className="overflow-hidden rounded-2xl border border-rose-100 bg-rose-50/30 p-3 shadow-sm">
-          <DayPicker
-            month={displayMonth}
-            disableNavigation
-            onDayClick={handleHolidayDateClick}
-            modifiers={holidayCalendarModifiers}
-            className={[
-              "w-full",
-              "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
-              "[--rdp-day_button-width:2.35rem] [--rdp-day_button-height:2.35rem]",
-              "[--rdp-months-gap:0px]",
-              "sm:[--rdp-day-width:2.65rem] sm:[--rdp-day-height:2.65rem]",
-              "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
-            ].join(" ")}
-            classNames={{
-              root: "w-full",
-              months: "block w-full max-w-none",
-              month: "w-full space-y-3",
-              month_caption: "flex min-w-0 items-center justify-center text-center",
-              caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
-              nav: "hidden",
-              month_grid: "w-full table-fixed border-collapse",
-              weekdays: "border-b border-slate-200/80",
-              weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
-              week: "border-b border-slate-100 last:border-b-0",
-              day: "p-0 text-center align-middle",
-              day_button:
-                "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
-            }}
-            modifiersClassNames={{
-              saturday:
-                "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
-              sunday:
-                "[&>button]:!bg-red-100 [&>button]:!text-red-600 [&>button]:!border-red-200",
-              autoHoliday:
-                "[&>button]:border [&>button]:border-red-300 [&>button]:bg-white [&>button]:text-red-700 hover:[&>button]:bg-red-50",
-              manualHoliday:
-                "[&>button]:!border-red-600 [&>button]:!bg-red-500 [&>button]:!text-white hover:[&>button]:!bg-red-600",
-              overrideHoliday:
-                "[&>button]:!border-amber-300 [&>button]:!bg-amber-100 [&>button]:!text-amber-800 hover:[&>button]:!bg-amber-200",
-              today:
-                "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
-              outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
-            }}
-          />
-        </div>
-
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
-          <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2 text-red-700">
-            <div className="font-bold">標準祝日</div>
-            <div className="mt-1 text-sm font-bold">{holidayCounts.autoCount}日</div>
-          </div>
-          <div className="rounded-xl border border-rose-100 bg-rose-50 px-2 py-2 text-rose-700">
-            <div className="font-bold">追加休日</div>
-            <div className="mt-1 text-sm font-bold">{holidayCounts.manualCount}日</div>
-          </div>
-          <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2 text-amber-700">
-            <div className="font-bold">平日扱い</div>
-            <div className="mt-1 text-sm font-bold">{holidayCounts.overrideCount}日</div>
-          </div>
-        </div>
-
-        {customSaveMessage && (
-          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700">
-            {customSaveMessage}
-          </div>
-        )}
       </div>
 
-
-      <div className="mb-4 md:mb-6 rounded-lg border border-blue-100 bg-white p-3 shadow-sm relative md:p-4">
+      <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <label className="text-sm font-bold text-gray-700">個別休み希望</label>
+          <div>
+            <h3 className="text-sm font-bold text-gray-800">医師別不可日設定</h3>
+            <p className="mt-1 text-[11px] text-gray-500">
+              平日・土曜は1タップで終日休み、日曜・祝日はポップアップで日直/当直別に設定できます。
+            </p>
+          </div>
           <button
             type="button"
             onClick={onToggleAllUnavailable}
-            className="rounded border border-transparent px-2 py-1 text-[10px] text-gray-400 transition-all hover:border-red-200 hover:text-red-600"
-            title="対象月だけを一括クリアまたは一括選択します"
+            disabled={!selectedDoctorId}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
           >
-            ↺ 対象月を一括クリア/一括選択
+            対象月を一括トグル
           </button>
         </div>
 
-        <select
-          value={selectedDoctorId}
-          onChange={(e) => onSelectedDoctorChange(String(e.target.value))}
-          className="mb-3 w-full rounded border bg-blue-50 p-2 font-bold text-blue-700 outline-none"
-        >
-          {activeDoctors.map((doc) => (
-            <option key={doc.id} value={doc.id}>
-              {doc.name} 先生
-            </option>
+        <div className="mb-3 flex flex-wrap gap-2">
+          {activeDoctors.map((doctor) => (
+            <button
+              key={doctor.id}
+              type="button"
+              onClick={() => handleDoctorSelection(doctor.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+                selectedDoctorId === doctor.id
+                  ? "border-blue-700 bg-blue-600 text-white"
+                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {doctor.name}
+            </button>
           ))}
-        </select>
+        </div>
 
-        <div className="mb-3 text-[11px] text-gray-500">対象年月と連動します。</div>
-
-        <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3 shadow-sm">
+        <div ref={unavailableSectionRef} className="relative">
           <DayPicker
             mode="multiple"
             month={displayMonth}
-            disableNavigation
             selected={selectedUnavailableDates}
-            onDayClick={(date) => {
-              if (!selectedDoctorId) return;
-              onToggleUnavailable(selectedDoctorId, toDateKey(date));
-            }}
-            modifiers={calendarModifiers}
-            className={[
-              "w-full",
-              "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
-              "[--rdp-day_button-width:2.35rem] [--rdp-day_button-height:2.35rem]",
-              "[--rdp-months-gap:0px]",
-              "sm:[--rdp-day-width:2.65rem] sm:[--rdp-day-height:2.65rem]",
-              "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
-            ].join(" ")}
-            classNames={{
-              root: "w-full",
-              months: "block w-full max-w-none",
-              month: "w-full space-y-3",
-              month_caption: "flex min-w-0 items-center justify-center text-center",
-              caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
-              nav: "hidden",
-              month_grid: "w-full table-fixed border-collapse",
-              weekdays: "border-b border-slate-200/80",
-              weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
-              week: "border-b border-slate-100 last:border-b-0",
-              day: "p-0 text-center align-middle",
-              day_button:
-                "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
-            }}
+            onDayClick={handleUnavailableDayClick}
+            showOutsideDays
+            disabled={!selectedDoctorId}
+            className={dayPickerBaseClassName}
+            classNames={dayPickerClassNames}
+            modifiers={unavailableCalendarModifiers}
             modifiersClassNames={{
-              saturday:
-                "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
-              sunday:
-                "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+              ...baseCalendarModifierClasses,
               holiday:
                 "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
-              selected:
+              allUnavailable:
                 "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
-              today:
-                "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
-              outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
-              disabled:
-                "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
+              dayUnavailable:
+                "[&>button]:relative [&>button]:border-amber-300 [&>button]:bg-amber-50 [&>button]:text-amber-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-amber-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['D']",
+              nightUnavailable:
+                "[&>button]:relative [&>button]:border-sky-300 [&>button]:bg-sky-50 [&>button]:text-sky-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-sky-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['N']",
             }}
+          />
+          <TargetShiftPopover
+            open={Boolean(unavailablePopover)}
+            position={unavailablePopover?.position ?? null}
+            title={
+              unavailablePopover
+                ? `${month}月${Number(unavailablePopover.dateKey.slice(-2))}日の不可設定`
+                : "不可設定"
+            }
+            currentValue={
+              unavailablePopover
+                ? getUnavailableDateTargetShift(selectedUnavailableInMonth, unavailablePopover.dateKey)
+                : null
+            }
+            onSelect={(value) => {
+              if (!selectedDoctorId || !unavailablePopover) return;
+              onToggleUnavailable(selectedDoctorId, unavailablePopover.dateKey, value);
+            }}
+            onClose={() => setUnavailablePopover(null)}
           />
         </div>
 
-        <div className="mt-3 flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-gray-600">
-          <span className="font-bold">{year}年{month}月</span>
-          <span className="font-bold text-indigo-600">選択中: {selectedUnavailableInMonth.length} 日</span>
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-gray-600">
+          <span className="font-bold">{selectedDoctor?.name ?? "医師未選択"}</span>
+          <span className="font-bold text-indigo-600">選択中: {unavailableCounts.total}件</span>
+          <span className="text-gray-500">終日 {unavailableCounts.all}</span>
+          <span className="text-amber-700">日直のみ {unavailableCounts.day}</span>
+          <span className="text-sky-700">当直のみ {unavailableCounts.night}</span>
         </div>
       </div>
 
-      <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-        <label className="block text-sm font-bold text-gray-700 mb-3 text-center">📅 固定不可曜日 一括入力</label>
+      <div
+        ref={fixedWeekdaySectionRef}
+        className="relative mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm"
+      >
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-gray-800">固定不可曜日</h3>
+          <p className="mt-1 text-[11px] text-gray-500">
+            月〜土は1タップで終日不可、日曜と祝日はポップアップでシフト別に設定できます。
+          </p>
+        </div>
 
-        <div className="text-[10px] text-gray-500 text-center mb-3">各医師の「毎週入れない曜日」をチェックしてください。</div>
+        <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
+          <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">終 = 終日</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = 日直のみ</span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = 当直のみ</span>
+        </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[200px]">
-            <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center mb-2">
+          <div className="min-w-[320px]">
+            <div className="mb-2 grid grid-cols-[88px_repeat(8,1fr)] items-center gap-1">
               <div className="text-[11px] font-bold text-gray-600">医師</div>
-              {pyWeekdays.map((pyWd) => {
-                const label = pyWeekdaysJp[pyWd];
-                const isSun = pyWd === 6;
-                const isSat = pyWd === 5;
+              {pyWeekdays.map((weekday) => {
+                const isSat = weekday === 5;
+                const isSun = weekday === 6;
+                const isHoliday = weekday === 7;
                 return (
                   <div
-                    key={pyWd}
-                    className={`text-[11px] font-bold text-center rounded py-1 border ${
-                      isSun
-                        ? "bg-red-50 text-red-500 border-red-100"
+                    key={weekday}
+                    className={`rounded border py-1 text-center text-[11px] font-bold ${
+                      isSun || isHoliday
+                        ? "border-red-100 bg-red-50 text-red-500"
                         : isSat
-                        ? "bg-blue-50 text-blue-600 border-blue-100"
-                        : "bg-gray-50 text-gray-700 border-gray-100"
+                          ? "border-blue-100 bg-blue-50 text-blue-600"
+                          : "border-gray-100 bg-gray-50 text-gray-700"
                     }`}
                   >
-                    {label}
+                    {pyWeekdaysJp[weekday]}
                   </div>
                 );
               })}
             </div>
 
             <div className="space-y-1">
-              {activeDoctors.map((doc) => (
-                <div key={doc.id} className="grid grid-cols-[80px_repeat(7,1fr)] gap-1 items-center">
+              {activeDoctors.map((doctor) => (
+                <div key={doctor.id} className="grid grid-cols-[88px_repeat(8,1fr)] items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => onSelectedDoctorChange(doc.id)}
-                    className={`text-left text-[11px] font-bold px-2 py-2 rounded border truncate transition ${
-                      selectedDoctorId === doc.id ? "bg-blue-600 text-white border-blue-700" : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    onClick={() => handleDoctorSelection(doctor.id)}
+                    className={`truncate rounded border px-2 py-2 text-left text-[11px] font-bold transition ${
+                      selectedDoctorId === doctor.id
+                        ? "border-blue-700 bg-blue-600 text-white"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                     }`}
                   >
-                    {doc.name}
+                    {doctor.name}
                   </button>
-
-                  {pyWeekdays.map((pyWd) => {
-                    const selected = (fixedUnavailableWeekdaysMap[doc.id] || []).includes(pyWd);
-                    const isSun = pyWd === 6;
-                    const isSat = pyWd === 5;
-
+                  {pyWeekdays.map((weekday) => {
+                    const targetShift = getFixedWeekdayTargetShift(
+                      fixedUnavailableWeekdaysMap[doctor.id] ?? [],
+                      weekday
+                    );
                     return (
                       <button
-                        key={`${doc.id}-${pyWd}`}
+                        key={`${doctor.id}-${weekday}`}
                         type="button"
-                        onClick={() => onToggleFixedWeekday(doc.id, pyWd)}
-                        className={`h-9 rounded border text-[12px] font-bold transition ${
-                          selected
-                            ? isSun
-                              ? "bg-red-500 text-white border-red-600"
-                              : isSat
-                              ? "bg-blue-600 text-white border-blue-700"
-                              : "bg-gray-900 text-white border-gray-900"
-                            : isSun
-                            ? "bg-red-50 text-red-400 border-red-200 hover:bg-red-100"
-                            : isSat
-                            ? "bg-blue-50 text-blue-500 border-blue-200 hover:bg-blue-100"
-                            : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
-                        }`}
+                        onClick={(event) => handleFixedWeekdayClick(doctor.id, weekday, targetShift, event)}
+                        title={getTargetShiftSummaryLabel(targetShift)}
+                        className={`h-9 rounded border text-[12px] font-bold transition ${getFixedWeekdayButtonTone(
+                          weekday,
+                          targetShift
+                        )}`}
                       >
-                        {selected ? "×" : ""}
+                        {targetShift === "all" ? "終" : targetShift === "day" ? "D" : targetShift === "night" ? "N" : ""}
                       </button>
                     );
                   })}
@@ -692,54 +851,94 @@ export function GenerationSettingsPanel({
           </div>
         </div>
 
-        <div className="mt-3 text-[10px] text-center text-gray-500">
-          選択中: <span className="font-bold text-gray-700">{activeDoctors.find((doctor) => doctor.id === selectedDoctorId)?.name || "未選択"}</span> ／ 固定不可:{" "}
-          {(fixedUnavailableWeekdaysMap[selectedDoctorId] || []).length === 0
-            ? "なし"
-            : (fixedUnavailableWeekdaysMap[selectedDoctorId] || [])
-                .slice()
-                .sort((a, b) => a - b)
-                .map((weekday) => pyWeekdaysJp[weekday])
-                .join(" / ")}
+        <TargetShiftPopover
+          open={Boolean(fixedWeekdayPopover)}
+          position={fixedWeekdayPopover?.position ?? null}
+          title={
+            fixedWeekdayPopover
+              ? `${activeDoctors.find((doctor) => doctor.id === fixedWeekdayPopover.doctorId)?.name ?? ""} / ${pyWeekdaysJp[fixedWeekdayPopover.weekday] ?? ""}`
+              : "固定不可設定"
+          }
+          currentValue={
+            fixedWeekdayPopover
+              ? getFixedWeekdayTargetShift(
+                  fixedUnavailableWeekdaysMap[fixedWeekdayPopover.doctorId] ?? [],
+                  fixedWeekdayPopover.weekday
+                )
+              : null
+          }
+          onSelect={(value) => {
+            if (!fixedWeekdayPopover) return;
+            onToggleFixedWeekday(fixedWeekdayPopover.doctorId, fixedWeekdayPopover.weekday, value);
+          }}
+          onClose={() => setFixedWeekdayPopover(null)}
+        />
+
+        <div className="mt-3 text-[11px] text-gray-500">
+          選択中:
+          <span className="ml-1 font-bold text-gray-700">{selectedDoctor?.name ?? "未選択"}</span>
+          <span className="ml-2">
+            {selectedFixedWeekdays.length === 0
+              ? "固定不可なし"
+              : selectedFixedWeekdays
+                  .slice()
+                  .sort((left, right) => left.day_of_week - right.day_of_week)
+                  .map((entry) => `${pyWeekdaysJp[entry.day_of_week]}(${getTargetShiftSummaryLabel(entry.target_shift)})`)
+                  .join(" / ")}
+          </span>
         </div>
       </div>
 
-      <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm">
-        <label className="block text-sm font-bold text-gray-700 mb-3 text-center">⏮️ 前月末勤務</label>
+      <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-gray-800">前月末勤務</h3>
+          <p className="mt-1 text-[11px] text-gray-500">対象月の連続勤務判定に使う前月末の勤務を指定します。</p>
+        </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div>
-            <label className="block text-[11px] font-bold text-gray-700 mb-1">前月の最終日</label>
-            <input type="number" value={prevMonthLastDay} onChange={(e) => onPrevMonthLastDayChange(Number(e.target.value))} className="border rounded p-2 w-full text-sm" />
-          </div>
-          <div className="text-[10px] text-gray-500 flex items-end">※年月変更時は自動計算されます</div>
+        <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+          <label>
+            <div className="mb-1 text-[11px] font-bold text-gray-700">前月の最終日</div>
+            <input
+              type="number"
+              value={prevMonthLastDay}
+              onChange={(event) => onPrevMonthLastDayChange(Number(event.target.value))}
+              className="w-full rounded-lg border border-gray-200 p-2 text-sm"
+            />
+          </label>
+          <div className="text-[10px] text-gray-500">年月変更時は自動計算されます</div>
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[200px]">
-            <div className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center mb-2">
+          <div className="min-w-[220px]">
+            <div className="mb-2 grid grid-cols-[90px_repeat(4,1fr)] items-center gap-1">
               <div className="text-[11px] font-bold text-gray-600">医師</div>
               {prevMonthTailDays.map((day) => (
-                <div key={day} className="text-[11px] font-bold text-center rounded py-1 border bg-gray-50 text-gray-700 border-gray-100">
+                <div
+                  key={day}
+                  className="rounded border border-gray-100 bg-gray-50 py-1 text-center text-[11px] font-bold text-gray-700"
+                >
                   {day}日
                 </div>
               ))}
             </div>
 
             <div className="space-y-1">
-              {activeDoctors.map((doc) => (
-                <div key={doc.id} className="grid grid-cols-[90px_repeat(4,1fr)] gap-1 items-center">
-                  <div className="text-left text-[11px] font-bold px-2 py-2 rounded border bg-white text-gray-700 border-gray-200 truncate">{doc.name}</div>
-
+              {activeDoctors.map((doctor) => (
+                <div key={doctor.id} className="grid grid-cols-[90px_repeat(4,1fr)] items-center gap-1">
+                  <div className="truncate rounded border border-gray-200 bg-white px-2 py-2 text-[11px] font-bold text-gray-700">
+                    {doctor.name}
+                  </div>
                   {prevMonthTailDays.map((day) => {
-                    const selected = (prevMonthWorkedDaysMap[doc.id] || []).includes(day);
+                    const selected = (prevMonthWorkedDaysMap[doctor.id] || []).includes(day);
                     return (
                       <button
-                        key={`${doc.id}-prev-${day}`}
+                        key={`${doctor.id}-prev-${day}`}
                         type="button"
-                        onClick={() => onTogglePrevMonthWorkedDay(doc.id, day)}
+                        onClick={() => onTogglePrevMonthWorkedDay(doctor.id, day)}
                         className={`h-9 rounded border text-[12px] font-bold transition ${
-                          selected ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                          selected
+                            ? "border-gray-900 bg-gray-900 text-white"
+                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
                         }`}
                       >
                         {selected ? "×" : ""}
@@ -754,10 +953,11 @@ export function GenerationSettingsPanel({
       </div>
 
       <button
+        type="button"
         onClick={onGenerate}
         disabled={isLoading || activeDoctors.length === 0}
-        className={`w-full min-h-12 px-4 py-3 rounded font-bold text-white shadow-md transition flex items-center justify-center gap-2 ${
-          isLoading ? "bg-gray-400 cursor-not-allowed" : "bg-blue-600 hover:bg-blue-700"
+        className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold text-white shadow-md transition ${
+          isLoading ? "cursor-not-allowed bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
         }`}
       >
         {isLoading ? (
@@ -766,7 +966,7 @@ export function GenerationSettingsPanel({
             <span>生成中...</span>
           </>
         ) : (
-          <span>✨ シフトを自動生成</span>
+          <span>未固定枠を再作成</span>
         )}
       </button>
     </div>
@@ -795,79 +995,84 @@ export function DoctorSettingsPanel({
           type="button"
           onClick={onSaveAllDoctorsSettings}
           disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-          className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition ${isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"}`}
-          title="全医師のスコア設定＋休み希望（単発/固定）をまとめて保存します"
+          className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
+            isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+          }`}
+          title="全医師のスコア設定、休み希望、固定不可をまとめて保存します"
         >
-          {isBulkSavingDoctors ? "保存中..." : "💾 全員の休み希望を一括保存"}
+          {isBulkSavingDoctors ? "保存中..." : "全員の休み希望を一括保存"}
         </button>
-        <div className="mt-2 text-[11px] text-gray-500">※ 現在の「スコア設定（Min/Max/目標）」「固定不可曜日」「個別不可日」を全員分まとめて保存します。</div>
+        <div className="mt-2 text-[11px] text-gray-500">
+          ※ 現在の「スコア設定」「Min/Max/目標」「固定不可曜日」「個別不可日」を全員まとめて保存します。
+        </div>
       </div>
 
-      <div className="bg-orange-50 p-3 md:p-4 rounded-lg border border-orange-100 shadow-sm mb-4 md:mb-5">
-        <h3 className="text-md font-bold text-orange-800 mb-3 flex flex-wrap items-center gap-2">
-          <span>🎯 医師別 スコア設定</span>
-          <span className="text-xs font-normal text-orange-600 bg-orange-100 px-2 py-1 rounded">※空欄は全体設定を適用</span>
-          <span className="text-xs font-normal text-gray-500 bg-white px-2 py-1 rounded border border-orange-200">※保存は上の「一括保存」ボタン</span>
+      <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm md:mb-5 md:p-4">
+        <h3 className="mb-3 flex flex-wrap items-center gap-2 text-md font-bold text-orange-800">
+          <span>医師別 スコア設定</span>
+          <span className="rounded bg-orange-100 px-2 py-1 text-xs font-normal text-orange-600">
+            ※ 最適化で直接使う値です
+          </span>
+          <span className="rounded border border-orange-200 bg-white px-2 py-1 text-xs font-normal text-gray-500">
+            ※ 保存後の再生成に反映されます
+          </span>
         </h3>
-        
-        <div className="overflow-x-auto bg-white border rounded-lg">
+
+        <div className="overflow-x-auto rounded-lg border bg-white">
           <table className="min-w-full text-center text-[12px]">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="py-2 px-2 border-b text-left">医師名</th>
-                <th className="py-2 px-2 border-b">Min</th>
-                <th className="py-2 px-2 border-b">Max</th>
-                <th className="py-2 px-2 border-b">目標</th>
-                <th className="py-2 px-2 border-b text-orange-700">前月土曜当直</th>
+                <th className="border-b px-2 py-2 text-left">医師名</th>
+                <th className="border-b px-2 py-2">Min</th>
+                <th className="border-b px-2 py-2">Max</th>
+                <th className="border-b px-2 py-2">目標</th>
+                <th className="border-b px-2 py-2 text-orange-700">前週土曜当直</th>
               </tr>
             </thead>
             <tbody>
-              {activeDoctors.map((doc) => (
-                <tr key={doc.id} className="border-b hover:bg-gray-50">
-                  <td className="py-1 px-2 text-left font-bold text-gray-700 whitespace-nowrap">{doc.name}</td>
-
-                  <td className="py-1 px-2">
+              {activeDoctors.map((doctor) => (
+                <tr key={doctor.id} className="border-b hover:bg-gray-50">
+                  <td className="whitespace-nowrap px-2 py-1 text-left font-bold text-gray-700">{doctor.name}</td>
+                  <td className="px-2 py-1">
                     <input
                       type="number"
                       step="0.5"
-                      className="w-12 md:w-14 border rounded p-1 text-center"
-                      value={minScoreMap[doc.id] === undefined ? "" : minScoreMap[doc.id]}
-                      onChange={(e) => onMinScoreChange(doc.id, e.target.value)}
+                      className="w-12 rounded border p-1 text-center md:w-14"
+                      value={minScoreMap[doctor.id] === undefined ? "" : minScoreMap[doctor.id]}
+                      onChange={(event) => onMinScoreChange(doctor.id, event.target.value)}
                       placeholder={String(scoreMin)}
                     />
                   </td>
-
-                  <td className="py-1 px-2">
+                  <td className="px-2 py-1">
                     <input
                       type="number"
                       step="0.5"
-                      className="w-12 md:w-14 border rounded p-1 text-center"
-                      value={maxScoreMap[doc.id] === undefined ? "" : maxScoreMap[doc.id]}
-                      onChange={(e) => onMaxScoreChange(doc.id, e.target.value)}
+                      className="w-12 rounded border p-1 text-center md:w-14"
+                      value={maxScoreMap[doctor.id] === undefined ? "" : maxScoreMap[doctor.id]}
+                      onChange={(event) => onMaxScoreChange(doctor.id, event.target.value)}
                       placeholder={String(scoreMax)}
                     />
                   </td>
-
-                  <td className="py-1 px-2">
+                  <td className="px-2 py-1">
                     <input
                       type="number"
-                      step="0.5"
-                      className="w-12 md:w-16 border rounded p-1 text-center bg-blue-50"
-                      value={targetScoreMap[doc.id] === undefined ? "" : targetScoreMap[doc.id]}
-                      onChange={(e) => onTargetScoreChange(doc.id, e.target.value)}
+                      className="w-12 rounded border bg-blue-50 p-1 text-center md:w-16"
+                      value={targetScoreMap[doctor.id] === undefined ? "" : targetScoreMap[doctor.id]}
+                      onChange={(event) => onTargetScoreChange(doctor.id, event.target.value)}
                       placeholder="任意"
                     />
                   </td>
-
-                  <td className="py-1 px-2">
+                  <td className="px-2 py-1">
                     <button
                       type="button"
-                      onClick={() => onToggleSatPrev(doc.id)}
-                      className={`px-2 py-1 rounded text-[10px] font-bold border ${
-                        satPrevMap[doc.id] ? "bg-orange-500 text-white border-orange-600" : "bg-white text-gray-400 border-gray-200"
+                      onClick={() => onToggleSatPrev(doctor.id)}
+                      className={`rounded border px-2 py-1 text-[10px] font-bold ${
+                        satPrevMap[doctor.id]
+                          ? "border-orange-600 bg-orange-500 text-white"
+                          : "border-gray-200 bg-white text-gray-400"
                       }`}
                     >
-                      {satPrevMap[doc.id] ? "連続回避" : "なし"}
+                      {satPrevMap[doctor.id] ? "考慮あり" : "なし"}
                     </button>
                   </td>
                 </tr>
@@ -879,3 +1084,4 @@ export function DoctorSettingsPanel({
     </>
   );
 }
+

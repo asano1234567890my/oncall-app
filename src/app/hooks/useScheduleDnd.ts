@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
+  FixedUnavailableWeekdayEntry,
+  FixedUnavailableWeekdayMap,
   HolidayLikeDayInfo,
   LockedShiftPayload,
-  UnavailableDateMap,
   ScheduleRow,
   ShiftType,
   SwapSource,
+  UnavailableDateEntry,
+  UnavailableDateMap,
 } from "../types/dashboard";
+import { matchesTargetShift } from "../utils/unavailableSettings";
 
 type DragSourceType = "calendar" | "list" | null;
 type DraggingListMode = "doctor" | "erase" | null;
@@ -38,7 +42,7 @@ type UseScheduleDndParams = {
   month: number;
   prevMonthLastDay: number;
   unavailableMap: UnavailableDateMap;
-  fixedUnavailableWeekdaysMap: Record<string, number[]>;
+  fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
   prevMonthWorkedDaysMap: Record<string, number[]>;
   getDoctorName: (doctorId: string | null | undefined) => string;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
@@ -132,20 +136,66 @@ export function useScheduleDnd({
     setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
   };
 
-  const isDoctorManuallyUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
-    if (!doctorId) return false;
+  const getManualUnavailableEntry = (
+    doctorId: string | null | undefined,
+    day: number,
+    shiftType: ShiftType
+  ): UnavailableDateEntry | null => {
+    if (!doctorId) return null;
     const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
-    return (unavailableMap[doctorId] || []).includes(ymd);
+    return (
+      (unavailableMap[doctorId] || []).find(
+        (entry) => entry.date === ymd && matchesTargetShift(entry.target_shift, shiftType)
+      ) ?? null
+    );
   };
 
-  const isDoctorFixedUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
+  const getFixedUnavailableEntry = (
+    doctorId: string | null | undefined,
+    day: number,
+    shiftType: ShiftType
+  ): FixedUnavailableWeekdayEntry | null => {
+    if (!doctorId) return null;
+    const weekdayPy = getWeekdayPy(year, month, day);
+    const holidayInfo = isHolidayLikeDay(day);
+    return (
+      (fixedUnavailableWeekdaysMap[doctorId] || []).find((entry) => {
+        if (!matchesTargetShift(entry.target_shift, shiftType)) return false;
+        if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
+        return entry.day_of_week === weekdayPy;
+      }) ?? null
+    );
+  };
+
+  const hasAnyManualUnavailableEntry = (doctorId: string | null | undefined, day: number) => {
+    if (!doctorId) return false;
+    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
+    return (unavailableMap[doctorId] || []).some((entry) => entry.date === ymd);
+  };
+
+  const hasAnyFixedUnavailableEntry = (doctorId: string | null | undefined, day: number) => {
     if (!doctorId) return false;
     const weekdayPy = getWeekdayPy(year, month, day);
-    return (fixedUnavailableWeekdaysMap[doctorId] || []).includes(weekdayPy);
+    const holidayInfo = isHolidayLikeDay(day);
+    return (fixedUnavailableWeekdaysMap[doctorId] || []).some((entry) => {
+      if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
+      return entry.day_of_week === weekdayPy;
+    });
+  };
+
+  const getConstraintScopeLabel = (targetShift: "all" | "day" | "night") => {
+    if (targetShift === "day") return "日直のみ不可";
+    if (targetShift === "night") return "当直のみ不可";
+    return "終日不可";
+  };
+
+  const getFixedWeekdayLabel = (dayOfWeek: number) => {
+    if (dayOfWeek === 7) return "祝日";
+    return `${weekdayLabelsPy[dayOfWeek] ?? "?"}曜日`;
   };
 
   const isDoctorBlockedByManualConstraints = (doctorId: string | null | undefined, day: number) =>
-    isDoctorManuallyUnavailableOnDay(doctorId, day) || isDoctorFixedUnavailableOnDay(doctorId, day);
+    hasAnyManualUnavailableEntry(doctorId, day) || hasAnyFixedUnavailableEntry(doctorId, day);
 
   const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
 
@@ -176,18 +226,18 @@ export function useScheduleDnd({
     const scheduleRows = options?.scheduleRows ?? schedule;
     const ignoreShiftKeys = options?.ignoreShiftKeys ?? new Set<string>();
     const doctorName = getDoctorName(doctorId);
-
     if (shiftType === "day" && !isHolidayLikeDay(day).isHolidayLike) {
       return "平日の日直には配置できません";
     }
 
-    if (isDoctorManuallyUnavailableOnDay(doctorId, day)) {
-      return `${doctorName}先生は${month}月${day}日の個別不可日です`;
+    const manualUnavailableEntry = getManualUnavailableEntry(doctorId, day, shiftType);
+    if (manualUnavailableEntry) {
+      return `${doctorName}先生は${month}月${day}日に${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}を設定しています`;
     }
 
-    if (isDoctorFixedUnavailableOnDay(doctorId, day)) {
-      const weekdayPy = getWeekdayPy(year, month, day);
-      return `${doctorName}先生は${weekdayLabelsPy[weekdayPy]}曜日を固定不可に設定しています`;
+    const fixedUnavailableEntry = getFixedUnavailableEntry(doctorId, day, shiftType);
+    if (fixedUnavailableEntry) {
+      return `${doctorName}先生は${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}を${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}に設定しています`;
     }
 
     const prevMonthWorkedDays = prevMonthWorkedDaysMap[doctorId] || [];
@@ -332,7 +382,7 @@ export function useScheduleDnd({
     const fromDoctorId = fromRow[fromField] ?? null;
     const toDoctorId = toRow[toField] ?? null;
     if (!fromDoctorId) {
-      return { nextSchedule: null, errorMessage: "入れ替え元に医師が入っている枠を選択してください" };
+      return { nextSchedule: null, errorMessage: "元の枠に医師が入っていないため操作できません" };
     }
 
     const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
@@ -693,13 +743,13 @@ export function useScheduleDnd({
 
     if (!swapSource) {
       if (locked) {
-        showToast("ロック済みの枠は入れ替え元にできません");
+        showToast("繝ｭ繝・け貂医∩縺ｮ譫縺ｯ蜈･繧梧崛縺亥・縺ｫ縺ｧ縺阪∪縺帙ｓ");
         return;
       }
 
       const doctorId = getScheduleDoctorId(day, shiftType);
       if (!doctorId) {
-        showToast("入れ替え元に医師が入っている枠を選択してください");
+        showToast("蜈･繧梧崛縺亥・縺ｫ蛹ｻ蟶ｫ縺悟・縺｣縺ｦ縺・ｋ譫繧帝∈謚槭＠縺ｦ縺上□縺輔＞");
         return;
       }
 
@@ -1069,6 +1119,9 @@ export function useScheduleDnd({
     buildLockedShiftsPayload,
   };
 }
+
+
+
 
 
 

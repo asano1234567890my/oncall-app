@@ -4,7 +4,13 @@ from datetime import date
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    model_validator,
+)
 
 
 TargetShift = Literal["all", "day", "night"]
@@ -32,6 +38,25 @@ class UnavailableDayUpdatePayload(BaseModel):
     date: date
     target_shift: TargetShift = "all"
     is_soft_penalty: bool = False
+
+
+class FixedWeekdayUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    weekday: int = Field(
+        ...,
+        ge=0,
+        le=7,
+        validation_alias=AliasChoices("weekday", "day_of_week"),
+    )
+    target_shift: TargetShift = "all"
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_legacy_int(cls, value):
+        if isinstance(value, int):
+            return {"weekday": value}
+        return value
 
 
 class DoctorBase(BaseModel):
@@ -62,7 +87,7 @@ class DoctorUpdate(BaseModel):
 
     unavailable_dates: Optional[List[date]] = None
     unavailable_days: Optional[List[UnavailableDayUpdatePayload]] = None
-    fixed_weekdays: Optional[List[int]] = None
+    fixed_weekdays: Optional[List[FixedWeekdayUpdatePayload]] = None
     unavailable_year: Optional[int] = None
     unavailable_month: Optional[int] = None
 
@@ -72,7 +97,7 @@ class PublicDoctorUpdate(BaseModel):
 
     unavailable_dates: Optional[List[date]] = None
     unavailable_days: Optional[List[UnavailableDayUpdatePayload]] = None
-    fixed_weekdays: Optional[List[int]] = None
+    fixed_weekdays: Optional[List[FixedWeekdayUpdatePayload]] = None
     unavailable_year: Optional[int] = None
     unavailable_month: Optional[int] = None
 

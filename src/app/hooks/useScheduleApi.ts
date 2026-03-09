@@ -1,12 +1,17 @@
 ﻿import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   Doctor,
+  FixedUnavailableWeekdayMap,
   HolidayLikeDayInfo,
   LockedShiftPayload,
   ObjectiveWeights,
   ScheduleRow,
   UnavailableDateMap,
 } from "../types/dashboard";
+import {
+  normalizeFixedUnavailableWeekdayEntries,
+  normalizeUnavailableDateEntries,
+} from "../utils/unavailableSettings";
 
 type UseScheduleApiParams = {
   year: number;
@@ -20,7 +25,7 @@ type UseScheduleApiParams = {
   scoreMax: number;
   objectiveWeights: ObjectiveWeights;
   unavailableMap: UnavailableDateMap;
-  fixedUnavailableWeekdaysMap: Record<string, number[]>;
+  fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
   prevMonthWorkedDaysMap: Record<string, number[]>;
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
@@ -34,7 +39,7 @@ type UseScheduleApiParams = {
   setDoctors: Dispatch<SetStateAction<Doctor[]>>;
   setSelectedDoctorId: Dispatch<SetStateAction<string>>;
   setUnavailableMap: Dispatch<SetStateAction<UnavailableDateMap>>;
-  setFixedUnavailableWeekdaysMap: Dispatch<SetStateAction<Record<string, number[]>>>;
+  setFixedUnavailableWeekdaysMap: Dispatch<SetStateAction<FixedUnavailableWeekdayMap>>;
   setMinScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
   setMaxScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
   setTargetScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
@@ -48,7 +53,6 @@ type UseScheduleApiParams = {
 
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const uniqSortedNumbers = (values: number[]) => Array.from(new Set(values)).sort((a, b) => a - b);
-const uniqSortedStrings = (values: string[]) => Array.from(new Set(values.filter(Boolean))).sort();
 const pad2 = (value: number) => String(value).padStart(2, "0");
 
 export function useScheduleApi({
@@ -115,11 +119,11 @@ export function useScheduleApi({
     const prefix = `${year}-${pad2(month)}-`;
     const next: Record<string, number[]> = {};
 
-    Object.entries(filtered).forEach(([doctorId, dates]) => {
+    Object.entries(filtered).forEach(([doctorId, entries]) => {
       const days = uniqSortedNumbers(
-        (dates ?? [])
-          .filter((value) => value.startsWith(prefix))
-          .map((value) => Number(value.slice(-2)))
+        (entries ?? [])
+          .filter((entry) => entry.target_shift === "all" && entry.date.startsWith(prefix))
+          .map((entry) => Number.parseInt(entry.date.slice(-2), 10))
           .filter((day) => Number.isFinite(day))
       );
 
@@ -131,30 +135,57 @@ export function useScheduleApi({
     return next;
   };
 
+  const formatFixedWeekdaysForOptimize = (input: FixedUnavailableWeekdayMap) => {
+    const filtered = filterRecordByActiveDoctors(input);
+    const next: Record<string, number[]> = {};
+
+    Object.entries(filtered).forEach(([doctorId, entries]) => {
+      const weekdays = uniqSortedNumbers(
+        (entries ?? [])
+          .filter((entry) => entry.target_shift === "all" && entry.day_of_week >= 0 && entry.day_of_week <= 6)
+          .map((entry) => entry.day_of_week)
+      );
+
+      if (weekdays.length > 0) {
+        next[doctorId] = weekdays;
+      }
+    });
+
+    return next;
+  };
+
   const applyUnavailableDaysFromDoctors = (docs: Doctor[]) => {
     const nextUnavailable: UnavailableDateMap = {};
-    const nextFixedWeekdays: Record<string, number[]> = {};
+    const nextFixedWeekdays: FixedUnavailableWeekdayMap = {};
 
     docs.forEach((doc) => {
-      const datesFromResponse = Array.isArray(doc.unavailable_dates) ? doc.unavailable_dates.map(String) : [];
+      const datesFromResponse = Array.isArray(doc.unavailable_dates)
+        ? doc.unavailable_dates.map((date) => ({ date: String(date), target_shift: "all" as const }))
+        : [];
       const list = doc.unavailable_days ?? [];
-      const datesFromEntries: string[] = [];
-      const weekdays: number[] = [];
+      const datesFromEntries = [] as UnavailableDateMap[string];
+      const weekdays = [] as FixedUnavailableWeekdayMap[string];
 
       list.forEach((entry) => {
         if (entry.is_fixed === false) {
           if (!entry.date) return;
-          datesFromEntries.push(String(entry.date));
+          datesFromEntries.push({
+            date: String(entry.date),
+            target_shift: entry.target_shift ?? "all",
+          });
           return;
         }
 
         if (entry.day_of_week !== null && entry.day_of_week !== undefined) {
-          weekdays.push(entry.day_of_week);
+          weekdays.push({
+            day_of_week: entry.day_of_week,
+            target_shift: entry.target_shift ?? "all",
+          });
         }
       });
 
-      const unavailableDates = uniqSortedStrings([...datesFromResponse, ...datesFromEntries]);
-      const fixedWeekdays = uniqSortedNumbers(weekdays);
+      const unavailableDates = normalizeUnavailableDateEntries([...datesFromResponse, ...datesFromEntries]);
+      const fixedWeekdays = normalizeFixedUnavailableWeekdayEntries([...(doc.fixed_weekdays ?? []), ...weekdays]);
 
       if (unavailableDates.length > 0) nextUnavailable[doc.id] = unavailableDates;
       if (fixedWeekdays.length > 0) nextFixedWeekdays[doc.id] = fixedWeekdays;
@@ -215,15 +246,21 @@ export function useScheduleApi({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
       const tasks = activeDoctors.map((doc) => {
-        const fixedWeekdays = fixedUnavailableWeekdaysMap[doc.id] ?? [];
-        const unavailableDates = uniqSortedStrings(unavailableMap[doc.id] ?? []);
+        const fixedWeekdays = normalizeFixedUnavailableWeekdayEntries(fixedUnavailableWeekdaysMap[doc.id] ?? []);
+        const unavailableDays = normalizeUnavailableDateEntries(unavailableMap[doc.id] ?? []).map((entry) => ({
+          date: entry.date,
+          target_shift: entry.target_shift,
+        }));
 
         const payload = {
           min_score: minScoreMap[doc.id] ?? null,
           max_score: maxScoreMap[doc.id] ?? null,
           target_score: targetScoreMap[doc.id] ?? null,
-          fixed_weekdays: fixedWeekdays,
-          unavailable_dates: unavailableDates,
+          fixed_weekdays: fixedWeekdays.map((entry) => ({
+            day_of_week: entry.day_of_week,
+            target_shift: entry.target_shift,
+          })),
+          unavailable_days: unavailableDays,
         };
 
         return fetch(`${apiUrl}/api/doctors/${doc.id}`, {
@@ -297,7 +334,7 @@ export function useScheduleApi({
       const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))).sort((a, b) => a - b);
 
       const formattedUnavailable = formatUnavailableForOptimize(unavailableMap);
-      const formattedFixedWeekdays = filterRecordByActiveDoctors(fixedUnavailableWeekdaysMap);
+      const formattedFixedWeekdays = formatFixedWeekdaysForOptimize(fixedUnavailableWeekdaysMap);
       const formattedPrevMonthWorked = filterRecordByActiveDoctors(prevMonthWorkedDaysMap);
       const formattedMinScore = filterRecordByActiveDoctors(minScoreMap);
       const formattedMaxScore = filterRecordByActiveDoctors(maxScoreMap);
@@ -396,3 +433,6 @@ export function useScheduleApi({
     handleSaveToDB,
   };
 }
+
+
+
