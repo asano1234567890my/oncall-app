@@ -168,3 +168,20 @@ def test_score_bounds_enforced_or_infeasible():
             assert abs(s - 2.0) < 1e-9
     else:
         assert "隗｣縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ" in res["message"]
+
+def test_sunhol_fairness_keeps_monthly_gap_within_one_when_evenly_feasible():
+    opt = OnCallOptimizer(num_doctors=10, year=2024, month=4, holidays=[29])
+    opt.build_model()
+    res = opt.solve()
+    assert res["success"] is True
+
+    counts = {d: 0 for d in range(10)}
+    for row in res["schedule"]:
+        if not row["is_sunhol"]:
+            continue
+        counts[row["night_shift"]] += 1
+        if row["day_shift"] is not None:
+            counts[row["day_shift"]] += 1
+
+    spread = max(counts.values()) - min(counts.values())
+    assert spread <= 1

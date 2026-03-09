@@ -21,6 +21,7 @@ class ObjectiveWeights:
     sat_consec: int = 80
     score_balance: int = 30
     target: int = 10
+    sunhol_fairness: int = 200
     sunhol_3rd: int = 80
     soft_unavailable: int = 100
 
@@ -54,6 +55,7 @@ class OnCallOptimizer:
     - 土曜2ヶ月連続回避
     - 個別ターゲットへの近似
     - 過去累積スコアを含む公平性（score_balance）
+    - 日祝勤務回数の均等化（当月 max-min）
     - 日祝3回目ペナルティ
     - 忌避日のソフト制約ペナルティ（soft_unavailable）
     """
@@ -127,6 +129,7 @@ class OnCallOptimizer:
             sat_consec=int(ow.get("sat_consec", 80)),
             score_balance=int(ow.get("score_balance", 30)),
             target=int(ow.get("target", 10)),
+            sunhol_fairness=int(ow.get("sunhol_fairness", 200)),
             sunhol_3rd=int(ow.get("sunhol_3rd", 80)),
             soft_unavailable=int(ow.get("soft_unavailable", 100)),
         )
@@ -509,23 +512,34 @@ class OnCallOptimizer:
         sat_gap = self.model.NewIntVar(0, 999, "sat_gap")
         self.model.Add(sat_gap == sat_max - sat_min)
 
-        sunhol_totals: List[cp_model.IntVar] = []
+        sunhol_shift_counts: List[cp_model.IntVar] = []
         for d in doctors:
             sh_count = self.model.NewIntVar(0, 62, f"sunhol_count_d{d}")
             self.model.Add(
                 sh_count == sum(self.day_shifts[(d, day)] + self.night_shifts[(d, day)] for day in sunhol_days)
             )
+            sunhol_shift_counts.append(sh_count)
+
+        sunhol_month_max = self.model.NewIntVar(0, 62, "sunhol_month_max")
+        sunhol_month_min = self.model.NewIntVar(0, 62, "sunhol_month_min")
+        self.model.AddMaxEquality(sunhol_month_max, sunhol_shift_counts)
+        self.model.AddMinEquality(sunhol_month_min, sunhol_shift_counts)
+        sunhol_month_gap = self.model.NewIntVar(0, 62, "sunhol_month_gap")
+        self.model.Add(sunhol_month_gap == sunhol_month_max - sunhol_month_min)
+
+        sunhol_totals: List[cp_model.IntVar] = []
+        for d in doctors:
             base = self._get_past(self.past_sunhol_counts, d)
             total = self.model.NewIntVar(0, 999, f"sunhol_total_d{d}")
-            self.model.Add(total == sh_count + base)
+            self.model.Add(total == sunhol_shift_counts[d] + base)
             sunhol_totals.append(total)
 
-        sh_max = self.model.NewIntVar(0, 999, "sunhol_max")
-        sh_min = self.model.NewIntVar(0, 999, "sunhol_min")
-        self.model.AddMaxEquality(sh_max, sunhol_totals)
-        self.model.AddMinEquality(sh_min, sunhol_totals)
+        sunhol_total_max = self.model.NewIntVar(0, 999, "sunhol_total_max")
+        sunhol_total_min = self.model.NewIntVar(0, 999, "sunhol_total_min")
+        self.model.AddMaxEquality(sunhol_total_max, sunhol_totals)
+        self.model.AddMinEquality(sunhol_total_min, sunhol_totals)
         sunhol_gap = self.model.NewIntVar(0, 999, "sunhol_gap")
-        self.model.Add(sunhol_gap == sh_max - sh_min)
+        self.model.Add(sunhol_gap == sunhol_total_max - sunhol_total_min)
 
         # E-2. 過去累積スコアを含めた公平性（score_balance）
         total_score_with_past: List[cp_model.IntVar] = []
@@ -566,6 +580,7 @@ class OnCallOptimizer:
             w.month_fairness * fairness
             + w.past_sat_gap * sat_gap
             + w.past_sunhol_gap * sunhol_gap
+            + w.sunhol_fairness * sunhol_month_gap
             + w.gap5 * gap5_sum
             + w.gap6 * gap6_sum
             + w.pre_clinic * pre_clinic_sum

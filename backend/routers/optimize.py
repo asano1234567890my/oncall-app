@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, Dict
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_db
 from models.doctor import Doctor
-from services.optimizer import OnCallOptimizer
 from schemas.optimize import OptimizeRequest, OptimizeResponse
+from services.optimizer import OnCallOptimizer
+from services.optimizer_history import build_past_total_scores
 
 router = APIRouter(prefix="/api/optimize", tags=["Optimize"])
 
@@ -14,35 +16,34 @@ router = APIRouter(prefix="/api/optimize", tags=["Optimize"])
 @router.post("/", response_model=OptimizeResponse)
 async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get_db)):
     try:
-        # 0) Doctor一覧をDBから取得し、id(UUID)昇順で確定ソート → 双方向マッピング生成
-        result = await db.execute(select(Doctor).order_by(Doctor.id))
+        # Optimize targets active doctors only. Frontend sends num_doctors for the active set.
+        result = await db.execute(
+            select(Doctor)
+            .where(Doctor.is_active.is_(True))
+            .order_by(Doctor.id)
+        )
         doctors = result.scalars().all()
 
         if len(doctors) < req.num_doctors:
-            raise HTTPException(status_code=400, detail="num_doctors exceeds registered doctors")
+            raise HTTPException(status_code=400, detail="num_doctors exceeds registered active doctors")
 
         doctors = doctors[: req.num_doctors]
 
-        # idx_to_uuid: {0: "<uuid>", ...}
         idx_to_uuid: Dict[int, str] = {i: str(d.id) for i, d in enumerate(doctors)}
-        # uuid_to_idx: {"<uuid>": 0, ...}
         uuid_to_idx: Dict[str, int] = {str(d.id): i for i, d in enumerate(doctors)}
 
         def _key_to_idx(key: Any) -> int:
             k = str(key)
 
-            # "0" 等の数字文字列は index として扱う
             if k.isdigit():
                 idx = int(k)
                 if 0 <= idx < req.num_doctors:
                     return idx
                 raise HTTPException(status_code=400, detail=f"doctor index out of range: {k}")
 
-            # UUID文字列は uuid_to_idx で変換
             if k in uuid_to_idx:
                 return uuid_to_idx[k]
 
-            # どちらでもない / 存在しない医師ID
             raise HTTPException(status_code=400, detail=f"unknown doctor key: {k}")
 
         def _remap_keys(src: Dict[str, Any]) -> Dict[int, Any]:
@@ -51,13 +52,25 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
                 out[_key_to_idx(k)] = v
             return out
 
-        # 1) 各辞書キーを正規化（int index 0..N-1 に統一）
+        historical_past_total_scores = await build_past_total_scores(
+            db,
+            doctor_ids=[doctor.id for doctor in doctors],
+            target_year=req.year,
+            target_month=req.month,
+        )
+        merged_past_total_scores: Dict[str, float] = {
+            str(doctor_id): score
+            for doctor_id, score in historical_past_total_scores.items()
+        }
+        merged_past_total_scores.update(req.past_total_scores)
+
         formatted_prev_month = _remap_keys(req.prev_month_worked_days)
         formatted_min_score = _remap_keys(req.min_score_by_doctor)
         formatted_max_score = _remap_keys(req.max_score_by_doctor)
         formatted_target_score = _remap_keys(req.target_score_by_doctor)
-        formatted_past_total_scores = _remap_keys(req.past_total_scores)
+        formatted_past_total_scores = _remap_keys(merged_past_total_scores)
         formatted_sat_prev = _remap_keys(req.sat_prev)
+
         locked_shifts_idx = [
             {
                 "date": (
@@ -70,22 +83,25 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
             }
             for locked in req.locked_shifts
         ]
-        # 2) unavailable / fixed_unavailable_weekdays はキー正規化 + 属性付与（ステルス実装）
-        # - unavailable: {"date": day, "target_shift": "all", "is_soft_penalty": False}
-        # - fixed: {"day_of_week": wd, "target_shift": "all", "is_soft_penalty": False}
-        _u = _remap_keys(req.unavailable)  # -> Dict[int, List[int]]
+
+        _u = _remap_keys(req.unavailable)
         formatted_unavailable: Dict[int, Any] = {
-            idx: [{"date": day, "target_shift": "all", "is_soft_penalty": False} for day in (days or [])]
+            idx: [
+                {"date": day, "target_shift": "all", "is_soft_penalty": False}
+                for day in (days or [])
+            ]
             for idx, days in _u.items()
         }
 
-        _fw = _remap_keys(req.fixed_unavailable_weekdays)  # -> Dict[int, List[int]]
+        _fw = _remap_keys(req.fixed_unavailable_weekdays)
         formatted_fixed_weekdays: Dict[int, Any] = {
-            idx: [{"day_of_week": wd, "target_shift": "all", "is_soft_penalty": False} for wd in (wds or [])]
+            idx: [
+                {"day_of_week": wd, "target_shift": "all", "is_soft_penalty": False}
+                for wd in (wds or [])
+            ]
             for idx, wds in _fw.items()
         }
 
-        # 目的関数の重み（Pydanticモデルから辞書に変換。v1/v2両対応）
         weights_dict = (
             req.objective_weights.model_dump()
             if hasattr(req.objective_weights, "model_dump")
@@ -115,18 +131,16 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
         )
 
         optimizer.build_model()
-        result = optimizer.solve()
+        solve_result = optimizer.solve()
 
-        if not result.get("success"):
+        if not solve_result.get("success"):
             raise HTTPException(
                 status_code=400,
-                detail=result.get("message", "最適化に失敗しました"),
+                detail=solve_result.get("message", "最適化に失敗しました"),
             )
 
-        # 3) Post-processing: schedule / scores を idx -> UUID に復元
-        if isinstance(result.get("schedule"), list):
-            for row in result["schedule"]:
-                # 既存optimizer仕様: day_shift/night_shift に index(int) が入る想定
+        if isinstance(solve_result.get("schedule"), list):
+            for row in solve_result["schedule"]:
                 if row.get("day_shift") is not None:
                     try:
                         idx = int(row["day_shift"])
@@ -141,18 +155,17 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
                     except Exception:
                         pass
 
-        if isinstance(result.get("scores"), dict):
+        if isinstance(solve_result.get("scores"), dict):
             new_scores: Dict[str, Any] = {}
-            for k, v in result["scores"].items():
+            for k, v in solve_result["scores"].items():
                 try:
                     idx = int(k)
                     new_scores[idx_to_uuid.get(idx, str(k))] = v
                 except Exception:
-                    # すでにUUIDキーなどならそのまま
                     new_scores[str(k)] = v
-            result["scores"] = new_scores
+            solve_result["scores"] = new_scores
 
-        return result
+        return solve_result
 
     except HTTPException:
         raise

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Lock, Trash2, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
@@ -378,13 +378,13 @@ export default function ScheduleBoard({
       {schedule.length > 0 && (
         <div className="animate-fade-in">
           <div className="sticky top-0 z-40 mb-2 space-y-2 bg-white/95 pb-2 backdrop-blur shadow-sm">
-            <div className="flex items-start justify-between gap-1">
-            <div className="min-w-0 text-[9px] leading-tight text-gray-500">
-              D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモードでタップ操作が使えます。
-              {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
-              {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
-            </div>
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div className="w-full min-w-0 text-[9px] leading-tight text-gray-500">
+                D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモードでタップ操作が使えます。
+                {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
+                {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
+              </div>
+              <div className="flex w-full flex-wrap items-center gap-1.5 md:w-auto md:shrink-0 md:justify-end">
               <button
                 type="button"
                 onClick={onToggleSwapMode}
