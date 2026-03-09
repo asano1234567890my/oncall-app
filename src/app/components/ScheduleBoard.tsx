@@ -2,11 +2,11 @@
 
 import { Lock, Trash2, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
-import type { DoctorScoreEntry, ScheduleRow, ShiftType } from "../types/dashboard";
+import type { DoctorScoreEntry, ScheduleRow, ShiftType, SwapSource } from "../types/dashboard";
 
 type ScheduleBoardProps = {
   isLoading: boolean;
-  dragNotice: string;
+  toastMessage: string | null;
   dragSourceType: "calendar" | "list" | null;
   error: string;
   schedule: ScheduleRow[];
@@ -23,7 +23,9 @@ type ScheduleBoardProps = {
   isHighlightedDoctorBlockedDay: (day: number) => boolean;
   isShiftLocked: (day: number, shiftType: ShiftType) => boolean;
   invalidHoverShiftKey: string | null;
-  hoverErrorMessage: string;
+  isSwapMode: boolean;
+  swapSource: SwapSource | null;
+  isSwapSourceSelected: (day: number, shiftType: ShiftType) => boolean;
   onHandleShiftDragOver: (
     event: DragEvent<HTMLDivElement>,
     day: number,
@@ -48,9 +50,11 @@ type ScheduleBoardProps = {
     doctorId: string | null | undefined
   ) => void;
   onDoctorListDragStart: (event: DragEvent<HTMLElement>, doctorId: string) => void;
+  onShiftTap: (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => void;
   onToggleHighlightedDoctor: (doctorId: string | null | undefined) => void;
   onClearDragState: () => void;
   onToggleShiftLock: (day: number, shiftType: ShiftType) => void;
+  onToggleSwapMode: () => void;
   onLockAll: () => void;
   onUnlockAll: () => void;
   onTrashDragOver: (event: DragEvent<HTMLDivElement>) => void;
@@ -65,7 +69,7 @@ type ScheduleBoardProps = {
 
 export default function ScheduleBoard({
   isLoading,
-  dragNotice,
+  toastMessage,
   dragSourceType,
   error,
   schedule,
@@ -82,7 +86,9 @@ export default function ScheduleBoard({
   isHighlightedDoctorBlockedDay,
   isShiftLocked,
   invalidHoverShiftKey,
-  hoverErrorMessage,
+  isSwapMode,
+  swapSource,
+  isSwapSourceSelected,
   onHandleShiftDragOver,
   onHandleShiftDragLeave,
   onHandleShiftDrop,
@@ -90,9 +96,11 @@ export default function ScheduleBoard({
   onHandleDisabledDayDragLeave,
   onShiftDragStart,
   onDoctorListDragStart,
+  onShiftTap,
   onToggleHighlightedDoctor,
   onClearDragState,
   onToggleShiftLock,
+  onToggleSwapMode,
   onLockAll,
   onUnlockAll,
   onTrashDragOver,
@@ -105,16 +113,9 @@ export default function ScheduleBoard({
   saveMessage,
 }: ScheduleBoardProps) {
   const highlightedDoctorName = highlightedDoctorId ? getDoctorName(highlightedDoctorId) : null;
-
-  const renderHoverTooltip = (show: boolean) => {
-    if (!show || !hoverErrorMessage) return null;
-
-    return (
-      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-0.5 w-40 -translate-x-1/2 rounded-md border border-red-200 bg-red-600 px-1.5 py-1 text-[9px] leading-tight whitespace-pre-line text-white shadow-lg">
-        {hoverErrorMessage}
-      </div>
-    );
-  };
+  const swapSourceLabel = swapSource
+    ? `${swapSource.day}日 ${swapSource.shiftType === "day" ? "日直" : "当直"} ${getDoctorName(swapSource.doctorId)}`
+    : null;
 
   const getDoctorBadgeClass = (doctorId: string | null | undefined, shiftType: ShiftType, locked: boolean) => {
     const isHighlighted = doctorId != null && doctorId === highlightedDoctorId;
@@ -127,7 +128,7 @@ export default function ScheduleBoard({
           ? "bg-amber-100 text-amber-900"
           : "bg-indigo-100 text-indigo-800";
 
-    return `${tone} min-w-0 flex-1 truncate rounded-full px-1 py-0.5 text-[9px] font-bold leading-tight whitespace-nowrap ${
+    return `${tone} min-w-0 flex-1 truncate rounded-full px-1 py-0.5 text-left text-[9px] font-bold leading-tight whitespace-nowrap ${
       locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
     } ${isHighlighted ? "ring-1 ring-sky-500 ring-offset-1" : ""}`;
   };
@@ -148,11 +149,11 @@ export default function ScheduleBoard({
 
   const renderScheduleTable = (rows: ScheduleRow[], columnKey: string) => (
     <div key={columnKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="w-full table-fixed bg-white text-center text-[9px] leading-tight md:text-[10px]">
+      <table className="w-full table-fixed bg-white text-center text-[8px] leading-tight sm:text-[10px]">
         <thead className="bg-gray-100 text-[8px] text-gray-600">
           <tr>
-            <th className="border-b px-0.5 py-0.5">日付</th>
-            <th className="border-b px-0.5 py-0.5">曜日</th>
+            <th className="w-6 border-b px-0.5 py-0.5 sm:w-8">日付</th>
+            <th className="w-4 border-b px-0.5 py-0.5 sm:w-5">曜</th>
             <th className="border-b bg-orange-50 px-0.5 py-0.5">日直</th>
             <th className="border-b bg-indigo-50 px-0.5 py-0.5">当直</th>
           </tr>
@@ -173,6 +174,8 @@ export default function ScheduleBoard({
             const nightShiftKey = `${row.day}_night`;
             const dayHoverInvalid = invalidHoverShiftKey === dayShiftKey;
             const nightHoverInvalid = invalidHoverShiftKey === nightShiftKey;
+            const daySwapSelected = isSwapSourceSelected(row.day, "day");
+            const nightSwapSelected = isSwapSourceSelected(row.day, "night");
             const highlightBlocked = isHighlightedDoctorBlockedDay(row.day);
             const dateCellClass = isHolidayLike
               ? "border-red-100 bg-red-50 text-red-700"
@@ -184,42 +187,52 @@ export default function ScheduleBoard({
               : isSat
                 ? "border-blue-100 bg-blue-50 text-blue-600"
                 : "text-gray-500";
-            const dayCellClass = dayHoverInvalid
-              ? "cursor-not-allowed border-red-300 bg-red-200"
-              : dayLocked
-                ? highlightBlocked
-                  ? "border-amber-300 bg-red-100"
-                  : "border-amber-300 bg-amber-50"
+            const dayCellClass = daySwapSelected
+              ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
+              : dayHoverInvalid
+                ? "cursor-not-allowed border-red-300 bg-red-200"
+                : dayLocked
+                  ? highlightBlocked
+                    ? "border-amber-300 bg-red-100"
+                    : "border-amber-300 bg-amber-50"
+                  : highlightBlocked
+                    ? "border-red-200 bg-red-100"
+                    : "border-transparent bg-white hover:border-gray-200";
+            const nightCellClass = nightSwapSelected
+              ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
+              : nightHoverInvalid
+                ? "cursor-not-allowed border-red-300 bg-red-200"
+                : nightLocked
+                  ? highlightBlocked
+                    ? "border-amber-300 bg-red-100"
+                    : "border-amber-300 bg-amber-50"
+                  : highlightBlocked
+                    ? "border-red-200 bg-red-100"
+                    : "border-transparent bg-white hover:border-gray-200";
+            const disabledDayCellClass = daySwapSelected
+              ? "border-sky-400 bg-sky-50 text-sky-700 ring-1 ring-sky-300"
+              : dayHoverInvalid
+                ? "cursor-not-allowed border-red-300 bg-red-200 text-red-700"
                 : highlightBlocked
-                  ? "border-red-200 bg-red-100"
-                  : "border-transparent bg-white hover:border-gray-200";
-            const nightCellClass = nightHoverInvalid
-              ? "cursor-not-allowed border-red-300 bg-red-200"
-              : nightLocked
-                ? highlightBlocked
-                  ? "border-amber-300 bg-red-100"
-                  : "border-amber-300 bg-amber-50"
-                : highlightBlocked
-                  ? "border-red-200 bg-red-100"
-                  : "border-transparent bg-white hover:border-gray-200";
-            const disabledDayCellClass = dayHoverInvalid
-              ? "cursor-not-allowed border-red-300 bg-red-200 text-red-700"
-              : highlightBlocked
-                ? "cursor-not-allowed border-red-200 bg-red-100 text-red-500"
-                : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400";
+                  ? "cursor-not-allowed border-red-200 bg-red-100 text-red-500"
+                  : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400";
 
             return (
               <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50/30" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
-                <td className={`w-9 px-0.5 py-0.5 align-middle text-[9px] font-semibold ${dateCellClass}`}>{row.day}日</td>
-                <td className={`w-6 px-0.5 py-0.5 align-middle text-[9px] font-bold ${weekdayCellClass}`}>{wd}</td>
-                <td className="w-[42%] px-0.5 py-0.5 align-middle">
+                <td className={`w-6 px-0.5 py-0.5 align-middle text-[8px] font-semibold sm:w-8 sm:text-[9px] ${dateCellClass}`}>
+                  <span className="sm:hidden">{row.day}</span>
+                  <span className="hidden sm:inline">{row.day}日</span>
+                </td>
+                <td className={`w-4 px-0.5 py-0.5 align-middle text-[8px] font-bold sm:w-5 sm:text-[9px] ${weekdayCellClass}`}>{wd}</td>
+                <td className="px-0.5 py-0.5 align-middle">
                   {isDayShiftEnabled ? (
                     <div
+                      onClick={() => onShiftTap(row.day, "day", dayLocked, isHolidayLike)}
                       onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
                       onDragOver={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
                       onDragLeave={() => onHandleShiftDragLeave(row.day, "day")}
                       onDrop={(event) => onHandleShiftDrop(event, row.day, "day", dayLocked, isHolidayLike)}
-                      className={`relative flex min-h-6 items-center justify-between gap-0.5 rounded border px-0.5 py-0.5 ${dayCellClass}`}
+                      className={`relative flex min-h-6 w-full items-center justify-between gap-1 rounded border px-0.5 py-0.5 ${dayCellClass}`}
                     >
                       {row.day_shift ? (
                         <button
@@ -229,6 +242,10 @@ export default function ScheduleBoard({
                           onDragEnd={onClearDragState}
                           onClick={(event) => {
                             event.stopPropagation();
+                            if (isSwapMode) {
+                              onShiftTap(row.day, "day", dayLocked, isHolidayLike);
+                              return;
+                            }
                             onToggleHighlightedDoctor(row.day_shift);
                           }}
                           className={getDoctorBadgeClass(row.day_shift, "day", dayLocked)}
@@ -237,38 +254,41 @@ export default function ScheduleBoard({
                           {getDoctorName(row.day_shift)}
                         </button>
                       ) : (
-                        <span className="text-[9px] text-gray-400">-</span>
+                        <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
                       )}
                       <button
                         type="button"
-                        onClick={() => onToggleShiftLock(row.day, "day")}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleShiftLock(row.day, "day");
+                        }}
                         disabled={!row.day_shift}
-                        className="rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
                         title={dayLocked ? "ロック解除" : "ロック"}
                       >
                         {dayLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                       </button>
-                      {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   ) : (
                     <div
+                      onClick={() => onShiftTap(row.day, "day", dayLocked, false)}
                       onDragEnter={(event) => onHandleDisabledDayDragOver(event, row.day)}
                       onDragOver={(event) => onHandleDisabledDayDragOver(event, row.day)}
                       onDragLeave={() => onHandleDisabledDayDragLeave(row.day)}
-                      className={`relative flex min-h-6 items-center justify-center rounded border px-0.5 py-0.5 text-[9px] font-semibold ${disabledDayCellClass}`}
+                      className={`relative flex min-h-6 w-full items-center justify-center rounded border px-0.5 py-0.5 text-[9px] font-semibold ${disabledDayCellClass}`}
                     >
                       -
-                      {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   )}
                 </td>
-                <td className="w-[42%] px-0.5 py-0.5 align-middle">
+                <td className="px-0.5 py-0.5 align-middle">
                   <div
+                    onClick={() => onShiftTap(row.day, "night", nightLocked, isHolidayLike)}
                     onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
                     onDragOver={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
                     onDragLeave={() => onHandleShiftDragLeave(row.day, "night")}
                     onDrop={(event) => onHandleShiftDrop(event, row.day, "night", nightLocked, isHolidayLike)}
-                    className={`relative flex min-h-6 items-center justify-between gap-0.5 rounded border px-0.5 py-0.5 ${nightCellClass}`}
+                    className={`relative flex min-h-6 w-full items-center justify-between gap-1 rounded border px-0.5 py-0.5 ${nightCellClass}`}
                   >
                     {row.night_shift ? (
                       <button
@@ -278,6 +298,10 @@ export default function ScheduleBoard({
                         onDragEnd={onClearDragState}
                         onClick={(event) => {
                           event.stopPropagation();
+                          if (isSwapMode) {
+                            onShiftTap(row.day, "night", nightLocked, isHolidayLike);
+                            return;
+                          }
                           onToggleHighlightedDoctor(row.night_shift);
                         }}
                         className={getDoctorBadgeClass(row.night_shift, "night", nightLocked)}
@@ -286,18 +310,20 @@ export default function ScheduleBoard({
                         {getDoctorName(row.night_shift)}
                       </button>
                     ) : (
-                      <span className="text-[9px] text-gray-400">-</span>
+                      <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
                     )}
                     <button
                       type="button"
-                      onClick={() => onToggleShiftLock(row.day, "night")}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onToggleShiftLock(row.day, "night");
+                      }}
                       disabled={!row.night_shift}
-                      className="rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
                       title={nightLocked ? "ロック解除" : "ロック"}
                     >
                       {nightLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                     </button>
-                    {renderHoverTooltip(nightHoverInvalid)}
                   </div>
                 </td>
               </tr>
@@ -310,7 +336,13 @@ export default function ScheduleBoard({
 
   return (
     <>
-      {dragNotice && <div className="mb-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] whitespace-pre-line text-amber-800">{dragNotice}</div>}
+      {toastMessage && (
+        <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3">
+          <div className="max-w-[92vw] rounded-2xl border border-red-200 bg-white/95 px-3 py-2 text-[11px] font-bold leading-tight whitespace-pre-line text-red-700 shadow-2xl backdrop-blur">
+            {toastMessage}
+          </div>
+        </div>
+      )}
 
       {!schedule.length && !isLoading && !error && (
         <div className="flex min-h-[160px] items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-center text-[10px] text-gray-400">
@@ -322,10 +354,22 @@ export default function ScheduleBoard({
         <div className="animate-fade-in">
           <div className="mb-1.5 flex items-start justify-between gap-1">
             <div className="min-w-0 text-[9px] leading-tight text-gray-500">
-              D&amp;D で移動・入替・上書きできます。スコア表から直接割当、ゴミ箱へドロップで解除できます。
+              D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモードでタップ操作が使えます。
               {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
+              {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
             </div>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+              <button
+                type="button"
+                onClick={onToggleSwapMode}
+                className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
+                  isSwapMode
+                    ? "border-sky-300 bg-sky-100 text-sky-800"
+                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                🔄 入れ替えモード
+              </button>
               <button
                 type="button"
                 onClick={onLockAll}
@@ -369,13 +413,13 @@ export default function ScheduleBoard({
 
           <div className="mb-2 rounded-lg border bg-gray-50 p-1.5">
             <div className="mb-1 text-[9px] font-bold text-gray-700">医師別スコア</div>
-            <div className="text-[10px] flex flex-wrap items-center gap-3 mt-1 mb-2 px-1">
-  <span className="text-gray-500">【スコアの目安】</span>
-  <span className="text-green-600 font-bold">目標±0.5以内</span>
-  <span className="text-gray-700 font-bold">目標±1.5未満</span>
-  <span className="text-orange-500 font-bold">目標±1.5以上</span>
-  <span className="text-red-600 font-bold">上限/下限エラー</span>
-</div>
+            <div className="mb-2 mt-1 flex flex-wrap items-center gap-3 px-1 text-[10px]">
+              <span className="text-gray-500">スコアの目安:</span>
+              <span className="font-bold text-green-600">目標差0.5以内</span>
+              <span className="font-bold text-gray-700">通常</span>
+              <span className="font-bold text-orange-500">目標差1.5以上</span>
+              <span className="font-bold text-red-600">Min / Max逸脱</span>
+            </div>
             <div className="flex flex-wrap gap-1">
               {scoreEntries.map((entry) => {
                 const isSelected = entry.doctorId === highlightedDoctorId;

@@ -1,5 +1,12 @@
 import { useEffect, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
-import type { DragPayload, HolidayLikeDayInfo, LockedShiftPayload, ScheduleRow, ShiftType } from "../types/dashboard";
+import type {
+  DragPayload,
+  HolidayLikeDayInfo,
+  LockedShiftPayload,
+  ScheduleRow,
+  ShiftType,
+  SwapSource,
+} from "../types/dashboard";
 
 type DragSourceType = "calendar" | "list" | null;
 
@@ -18,6 +25,13 @@ type UseScheduleDndParams = {
   isActiveDoctorId: (doctorId: string | null | undefined) => boolean;
 };
 
+type ScheduleMutationResult = {
+  nextSchedule: ScheduleRow[] | null;
+  errorMessage: string | null;
+};
+
+const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
+
 export function useScheduleDnd({
   schedule,
   setSchedule,
@@ -35,11 +49,12 @@ export function useScheduleDnd({
   const [lockedShiftKeys, setLockedShiftKeys] = useState<Set<string>>(() => new Set());
   const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
   const [dragSourceType, setDragSourceType] = useState<DragSourceType>(null);
-  const [dragNotice, setDragNotice] = useState<string>("");
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
   const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
-  const [hoverErrorMessage, setHoverErrorMessage] = useState<string>("");
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSwapMode, setIsSwapMode] = useState(false);
+  const [swapSource, setSwapSource] = useState<SwapSource | null>(null);
 
   const getShiftKey = (day: number, shiftType: ShiftType) => `${day}_${shiftType}`;
   const getWeekdayPy = (y: number, m: number, d: number) => (new Date(y, m - 1, d).getDay() + 6) % 7;
@@ -68,6 +83,13 @@ export function useScheduleDnd({
   };
 
   const isShiftLocked = (day: number, shiftType: ShiftType) => lockedShiftKeys.has(getShiftKey(day, shiftType));
+  const isSwapSourceSelected = (day: number, shiftType: ShiftType) =>
+    swapSource?.day === day && swapSource?.shiftType === shiftType;
+
+  const showToast = (message: string | null) => {
+    if (!message) return;
+    setToastMessage(message);
+  };
 
   const toggleHighlightedDoctor = (doctorId: string | null | undefined) => {
     if (!doctorId) return;
@@ -89,11 +111,6 @@ export function useScheduleDnd({
     isDoctorManuallyUnavailableOnDay(doctorId, day) || isDoctorFixedUnavailableOnDay(doctorId, day);
 
   const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
-
-  const setHoverErrorState = (shiftKey: string | null, message = "") => {
-    setInvalidHoverShiftKey(shiftKey);
-    setHoverErrorMessage(message);
-  };
 
   const parseDragPayload = (raw: string | null): DragPayload | null => {
     if (!raw) return null;
@@ -182,7 +199,7 @@ export function useScheduleDnd({
     return null;
   };
 
-  const formatConstraintForTooltip = (doctorId: string, message: string) => {
+  const formatConstraintForToast = (doctorId: string, message: string) => {
     const doctorName = getDoctorName(doctorId);
     const prefixWithHa = `${doctorName}先生は`;
     const prefixWithNo = `${doctorName}先生の`;
@@ -217,7 +234,7 @@ export function useScheduleDnd({
     });
 
     if (sourceMessage) {
-      messages.push(formatConstraintForTooltip(sourceDoctorId, sourceMessage));
+      messages.push(formatConstraintForToast(sourceDoctorId, sourceMessage));
     }
 
     const targetRow = scheduleRows.find((row) => row.day === toDay);
@@ -231,7 +248,7 @@ export function useScheduleDnd({
       });
 
       if (targetMessage) {
-        messages.push(formatConstraintForTooltip(targetDoctorId, targetMessage));
+        messages.push(formatConstraintForToast(targetDoctorId, targetMessage));
       }
     }
 
@@ -243,82 +260,113 @@ export function useScheduleDnd({
     setDragSourceKey(null);
     setDragSourceType(null);
     setDraggingDoctorId(null);
-    setHoverErrorState(null);
+    setInvalidHoverShiftKey(null);
+  };
+
+  const clearSwapState = () => {
+    setSwapSource(null);
+    setIsSwapMode(false);
+    setInvalidHoverShiftKey(null);
+  };
+
+  const toggleSwapMode = () => {
+    clearDragState();
+    setSwapSource(null);
+    setIsSwapMode((prev) => !prev);
+  };
+
+  const buildAssignSchedule = (day: number, shiftType: ShiftType, doctorId: string): ScheduleMutationResult => {
+    const next = cloneSchedule(schedule);
+    const targetRow = next.find((row) => row.day === day);
+    if (!targetRow) {
+      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+    }
+
+    const targetField = shiftType === "day" ? "day_shift" : "night_shift";
+    const currentDoctorId = targetRow[targetField] ?? null;
+    if (currentDoctorId === doctorId) {
+      return { nextSchedule: null, errorMessage: null };
+    }
+
+    const ignoreShiftKeys = getPlacementIgnoreShiftKeys(doctorId, day, shiftType, next);
+    const constraintMessage = getPlacementConstraintMessage(doctorId, day, shiftType, {
+      scheduleRows: next,
+      ignoreShiftKeys,
+    });
+
+    if (constraintMessage) {
+      return { nextSchedule: null, errorMessage: formatConstraintForToast(doctorId, constraintMessage) };
+    }
+
+    targetRow[targetField] = doctorId;
+    return { nextSchedule: next, errorMessage: null };
+  };
+
+  const buildSwapSchedule = (fromDay: number, fromType: ShiftType, toDay: number, toType: ShiftType): ScheduleMutationResult => {
+    if (fromDay === toDay && fromType === toType) {
+      return { nextSchedule: null, errorMessage: null };
+    }
+
+    if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) {
+      return { nextSchedule: null, errorMessage: "ロック済みのため移動できません" };
+    }
+
+    const next = cloneSchedule(schedule);
+    const fromRow = next.find((row) => row.day === fromDay);
+    const toRow = next.find((row) => row.day === toDay);
+    if (!fromRow || !toRow) {
+      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+    }
+
+    const fromField = fromType === "day" ? "day_shift" : "night_shift";
+    const toField = toType === "day" ? "day_shift" : "night_shift";
+    const fromDoctorId = fromRow[fromField] ?? null;
+    const toDoctorId = toRow[toField] ?? null;
+    if (!fromDoctorId) {
+      return { nextSchedule: null, errorMessage: "入れ替え元に担当医がいません" };
+    }
+
+    const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
+      scheduleRows: next,
+    });
+    if (moveTargetConflict) {
+      return { nextSchedule: null, errorMessage: moveTargetConflict };
+    }
+
+    fromRow[fromField] = toDoctorId;
+    toRow[toField] = fromDoctorId;
+    return { nextSchedule: next, errorMessage: null };
+  };
+
+  const buildClearSchedule = (day: number, shiftType: ShiftType): ScheduleMutationResult => {
+    if (isShiftLocked(day, shiftType)) {
+      return { nextSchedule: null, errorMessage: "ロック済みのため解除できません" };
+    }
+
+    const next = cloneSchedule(schedule);
+    const row = next.find((entry) => entry.day === day);
+    if (!row) {
+      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+    }
+
+    if (shiftType === "day") row.day_shift = null;
+    else row.night_shift = null;
+
+    return { nextSchedule: next, errorMessage: null };
   };
 
   const handleDisabledDayDragOver = (event: DragEvent<HTMLDivElement>, day: number) => {
     if (!draggingDoctorId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
-    setHoverErrorState(getShiftKey(day, "day"), "平日の日直には配置できません");
+    setInvalidHoverShiftKey(getShiftKey(day, "day"));
   };
 
   const handleDisabledDayDragLeave = (day: number) => {
     const shiftKey = getShiftKey(day, "day");
     if (invalidHoverShiftKey === shiftKey) {
-      setHoverErrorState(null);
+      setInvalidHoverShiftKey(null);
     }
-  };
-
-  const assignDoctorToShift = (day: number, shiftType: ShiftType, doctorId: string) => {
-    setSchedule((prev) => {
-      const next = prev.map((row) => ({ ...row }));
-      const targetRow = next.find((row) => row.day === day);
-      if (!targetRow) return prev;
-
-      const targetField = shiftType === "day" ? "day_shift" : "night_shift";
-      const currentDoctorId = targetRow[targetField] ?? null;
-      const ignoreShiftKeys = getPlacementIgnoreShiftKeys(doctorId, day, shiftType, next);
-      const constraintMessage = getPlacementConstraintMessage(doctorId, day, shiftType, {
-        scheduleRows: next,
-        ignoreShiftKeys,
-      });
-
-      if (constraintMessage) {
-        setDragNotice(formatConstraintForTooltip(doctorId, constraintMessage));
-        return prev;
-      }
-
-      if (currentDoctorId === doctorId) {
-        setDragNotice("");
-        return prev;
-      }
-
-      targetRow[targetField] = doctorId;
-      setDragNotice("");
-      return next;
-    });
-  };
-
-  const moveOrSwapShift = (fromDay: number, fromType: ShiftType, toDay: number, toType: ShiftType) => {
-    if (fromDay === toDay && fromType === toType) return;
-    if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) return;
-
-    setSchedule((prev) => {
-      const next = prev.map((row) => ({ ...row }));
-      const fromRow = next.find((row) => row.day === fromDay);
-      const toRow = next.find((row) => row.day === toDay);
-      if (!fromRow || !toRow) return prev;
-
-      const fromField = fromType === "day" ? "day_shift" : "night_shift";
-      const toField = toType === "day" ? "day_shift" : "night_shift";
-      const fromDoctorId = fromRow[fromField] ?? null;
-      const toDoctorId = toRow[toField] ?? null;
-      if (!fromDoctorId) return prev;
-
-      const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
-        scheduleRows: next,
-      });
-      if (moveTargetConflict) {
-        setDragNotice(moveTargetConflict);
-        return prev;
-      }
-
-      fromRow[fromField] = toDoctorId;
-      toRow[toField] = fromDoctorId;
-      setDragNotice("");
-      return next;
-    });
   };
 
   const handleShiftDragOver = (
@@ -334,14 +382,14 @@ export function useScheduleDnd({
     if (locked) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "none";
-      setHoverErrorState(shiftKey, "ロック済みのため移動できません");
+      setInvalidHoverShiftKey(shiftKey);
       return;
     }
 
     if (shiftType === "day" && !isHolidayLike) {
       event.preventDefault();
       event.dataTransfer.dropEffect = "none";
-      setHoverErrorState(shiftKey, "平日の日直には配置できません");
+      setInvalidHoverShiftKey(shiftKey);
       return;
     }
 
@@ -360,26 +408,23 @@ export function useScheduleDnd({
       constraintMessage = getPlacementConstraintMessage(draggingDoctorId, day, shiftType, {
         ignoreShiftKeys: getPlacementIgnoreShiftKeys(draggingDoctorId, day, shiftType),
       });
-      if (constraintMessage) {
-        constraintMessage = formatConstraintForTooltip(draggingDoctorId, constraintMessage);
-      }
     }
 
     event.preventDefault();
     if (constraintMessage) {
       event.dataTransfer.dropEffect = "none";
-      setHoverErrorState(shiftKey, constraintMessage);
+      setInvalidHoverShiftKey(shiftKey);
       return;
     }
 
     event.dataTransfer.dropEffect = dragSourceType === "list" ? "copy" : "move";
-    setHoverErrorState(null);
+    setInvalidHoverShiftKey(null);
   };
 
   const handleShiftDragLeave = (day: number, shiftType: ShiftType) => {
     const shiftKey = getShiftKey(day, shiftType);
     if (invalidHoverShiftKey === shiftKey) {
-      setHoverErrorState(null);
+      setInvalidHoverShiftKey(null);
     }
   };
 
@@ -393,13 +438,13 @@ export function useScheduleDnd({
     event.preventDefault();
 
     if (locked) {
-      setDragNotice("ロック済みのため移動できません");
+      showToast("ロック済みのため移動できません");
       clearDragState();
       return;
     }
 
     if (toType === "day" && !isHolidayLike) {
-      setDragNotice("平日の日直には配置できません");
+      showToast("平日の日直には配置できません");
       clearDragState();
       return;
     }
@@ -408,35 +453,81 @@ export function useScheduleDnd({
       if (dragSourceType === "list") {
         if (!draggingDoctorId) return;
 
-        const constraintMessage = getPlacementConstraintMessage(draggingDoctorId, toDay, toType, {
-          ignoreShiftKeys: getPlacementIgnoreShiftKeys(draggingDoctorId, toDay, toType),
-        });
-        if (constraintMessage) {
-          setDragNotice(formatConstraintForTooltip(draggingDoctorId, constraintMessage));
+        const result = buildAssignSchedule(toDay, toType, draggingDoctorId);
+        if (result.errorMessage) {
+          showToast(result.errorMessage);
           return;
         }
-
-        assignDoctorToShift(toDay, toType, draggingDoctorId);
+        if (result.nextSchedule) {
+          setSchedule(result.nextSchedule);
+        }
         return;
       }
 
       const parsed = parseDragPayload(event.dataTransfer.getData("text/plain") || dragSourceKey);
       if (!parsed) {
-        setDragNotice("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
+        showToast("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
         return;
       }
 
-      const doctorId = draggingDoctorId ?? getScheduleDoctorId(parsed.day, parsed.shiftType);
-      const constraintMessage = getSwapConstraintMessage(doctorId, parsed.day, parsed.shiftType, toDay, toType);
-      if (constraintMessage) {
-        setDragNotice(constraintMessage);
+      const result = buildSwapSchedule(parsed.day, parsed.shiftType, toDay, toType);
+      if (result.errorMessage) {
+        showToast(result.errorMessage);
         return;
       }
-
-      moveOrSwapShift(parsed.day, parsed.shiftType, toDay, toType);
+      if (result.nextSchedule) {
+        setSchedule(result.nextSchedule);
+      }
     } finally {
       clearDragState();
     }
+  };
+
+  const handleShiftTap = (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => {
+    if (!isSwapMode) return;
+
+    if (!swapSource) {
+      if (locked) {
+        showToast("ロック済みの枠は入れ替え元にできません");
+        return;
+      }
+
+      const doctorId = getScheduleDoctorId(day, shiftType);
+      if (!doctorId) {
+        showToast("入れ替え元は担当医が入っている枠を選択してください");
+        return;
+      }
+
+      setSwapSource({ day, shiftType, doctorId });
+      setHighlightedDoctorId(doctorId);
+      return;
+    }
+
+    if (swapSource.day === day && swapSource.shiftType === shiftType) {
+      setSwapSource(null);
+      return;
+    }
+
+    if (locked) {
+      showToast("ロック済みの枠には移動できません");
+      return;
+    }
+
+    if (shiftType === "day" && !isHolidayLike) {
+      showToast("平日の日直には配置できません");
+      return;
+    }
+
+    const result = buildSwapSchedule(swapSource.day, swapSource.shiftType, day, shiftType);
+    if (result.errorMessage) {
+      showToast(result.errorMessage);
+      return;
+    }
+
+    if (result.nextSchedule) {
+      setSchedule(result.nextSchedule);
+    }
+    clearSwapState();
   };
 
   const handleShiftDragStart = (
@@ -451,7 +542,9 @@ export function useScheduleDnd({
     setDragSourceKey(payload);
     setDragSourceType("calendar");
     setDraggingDoctorId(doctorId ?? null);
-    setHoverErrorState(null);
+    setInvalidHoverShiftKey(null);
+    setIsSwapMode(false);
+    setSwapSource(null);
   };
 
   const handleDoctorListDragStart = (event: DragEvent<HTMLElement>, doctorId: string) => {
@@ -460,14 +553,16 @@ export function useScheduleDnd({
     setDragSourceKey(null);
     setDragSourceType("list");
     setDraggingDoctorId(doctorId);
-    setHoverErrorState(null);
+    setInvalidHoverShiftKey(null);
+    setIsSwapMode(false);
+    setSwapSource(null);
   };
 
   const handleTrashDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (dragSourceType !== "calendar") return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setHoverErrorState(null);
+    setInvalidHoverShiftKey(null);
   };
 
   const handleTrashDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -478,32 +573,24 @@ export function useScheduleDnd({
 
       const parsed = parseDragPayload(event.dataTransfer.getData("text/plain") || dragSourceKey);
       if (!parsed) {
-        setDragNotice("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
+        showToast("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
         return;
       }
 
-      if (isShiftLocked(parsed.day, parsed.shiftType)) {
-        setDragNotice("ロック済みのため解除できません");
+      const result = buildClearSchedule(parsed.day, parsed.shiftType);
+      if (result.errorMessage) {
+        showToast(result.errorMessage);
         return;
       }
 
-      setSchedule((prev) => {
-        const next = prev.map((row) => ({ ...row }));
-        const row = next.find((entry) => entry.day === parsed.day);
-        if (!row) return prev;
-
-        if (parsed.shiftType === "day") row.day_shift = null;
-        else row.night_shift = null;
-
-        return next;
-      });
-
-      setLockedShiftKeys((prev) => {
-        const next = new Set(prev);
-        next.delete(getShiftKey(parsed.day, parsed.shiftType));
-        return next;
-      });
-      setDragNotice("");
+      if (result.nextSchedule) {
+        setSchedule(result.nextSchedule);
+        setLockedShiftKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(getShiftKey(parsed.day, parsed.shiftType));
+          return next;
+        });
+      }
     } finally {
       clearDragState();
     }
@@ -558,10 +645,9 @@ export function useScheduleDnd({
 
   useEffect(() => {
     setLockedShiftKeys(new Set());
-    setDragSourceKey(null);
-    setDragSourceType(null);
-    setDraggingDoctorId(null);
-    setHoverErrorState(null);
+    clearDragState();
+    clearSwapState();
+    setToastMessage(null);
   }, [year, month]);
 
   useEffect(() => {
@@ -587,26 +673,30 @@ export function useScheduleDnd({
   }, [schedule]);
 
   useEffect(() => {
-    if (!dragNotice) return;
+    if (!toastMessage) return;
 
     const timeoutId = window.setTimeout(() => {
-      setDragNotice("");
-    }, 4000);
+      setToastMessage(null);
+    }, 2500);
 
     return () => window.clearTimeout(timeoutId);
-  }, [dragNotice]);
+  }, [toastMessage]);
 
   return {
-    dragNotice,
+    toastMessage,
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
-    hoverErrorMessage,
     lockedShiftKeys,
     isShiftLocked,
+    isSwapMode,
+    swapSource,
+    isSwapSourceSelected,
     isHighlightedDoctorBlockedDay,
     toggleHighlightedDoctor,
     clearDragState,
+    toggleSwapMode,
+    handleShiftTap,
     handleDisabledDayDragOver,
     handleDisabledDayDragLeave,
     handleShiftDragOver,

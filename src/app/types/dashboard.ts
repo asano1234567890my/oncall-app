@@ -33,6 +33,12 @@ export type LockedShiftPayload = {
   doctor_id: string;
 };
 
+export type SwapSource = {
+  day: number;
+  shiftType: ShiftType;
+  doctorId: string;
+};
+
 export type HolidayLikeDayInfo = {
   ymd: string;
   wd: string;

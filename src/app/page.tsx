@@ -223,16 +223,20 @@ export default function DashboardPage() {
 
 
   const {
-    dragNotice,
+    toastMessage,
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
-    hoverErrorMessage,
     lockedShiftKeys,
     isShiftLocked,
+    isSwapMode,
+    swapSource,
+    isSwapSourceSelected,
     isHighlightedDoctorBlockedDay,
     toggleHighlightedDoctor,
     clearDragState,
+    toggleSwapMode,
+    handleShiftTap,
     handleDisabledDayDragOver,
     handleDisabledDayDragLeave,
     handleShiftDragOver,
@@ -509,7 +513,7 @@ export default function DashboardPage() {
 
             <ScheduleBoard
               isLoading={isLoading}
-              dragNotice={dragNotice}
+              toastMessage={toastMessage}
               dragSourceType={dragSourceType}
               error={error}
               schedule={schedule}
@@ -526,7 +530,9 @@ export default function DashboardPage() {
               isHighlightedDoctorBlockedDay={isHighlightedDoctorBlockedDay}
               isShiftLocked={isShiftLocked}
               invalidHoverShiftKey={invalidHoverShiftKey}
-              hoverErrorMessage={hoverErrorMessage}
+              isSwapMode={isSwapMode}
+              swapSource={swapSource}
+              isSwapSourceSelected={isSwapSourceSelected}
               onHandleShiftDragOver={handleShiftDragOver}
               onHandleShiftDragLeave={handleShiftDragLeave}
               onHandleShiftDrop={handleShiftDrop}
@@ -534,9 +540,11 @@ export default function DashboardPage() {
               onHandleDisabledDayDragLeave={handleDisabledDayDragLeave}
               onShiftDragStart={handleShiftDragStart}
               onDoctorListDragStart={handleDoctorListDragStart}
+              onShiftTap={handleShiftTap}
               onToggleHighlightedDoctor={toggleHighlightedDoctor}
               onClearDragState={clearDragState}
               onToggleShiftLock={toggleShiftLock}
+              onToggleSwapMode={toggleSwapMode}
               onLockAll={handleLockAll}
               onUnlockAll={handleUnlockAll}
               onTrashDragOver={handleTrashDragOver}
