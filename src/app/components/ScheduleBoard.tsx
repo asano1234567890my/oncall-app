@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { Lock, Trash2, Unlock } from "lucide-react";
-import type { DragEvent } from "react";
+import type { DragEvent, TouchEvent } from "react";
 import type { DoctorScoreEntry, ScheduleRow, ShiftType, SwapSource } from "../types/dashboard";
 
 type ScheduleBoardProps = {
@@ -15,6 +15,8 @@ type ScheduleBoardProps = {
   scoreEntries: DoctorScoreEntry[];
   getDoctorName: (doctorId: string | null | undefined) => string;
   highlightedDoctorId: string | null;
+  selectedManualDoctorId: string | null;
+  isEraseSelectionActive: boolean;
   year: number;
   month: number;
   holidaySet: Set<string>;
@@ -24,6 +26,7 @@ type ScheduleBoardProps = {
   isHighlightedDoctorBlockedDay: (day: number) => boolean;
   isShiftLocked: (day: number, shiftType: ShiftType) => boolean;
   invalidHoverShiftKey: string | null;
+  touchHoverShiftKey: string | null;
   isSwapMode: boolean;
   swapSource: SwapSource | null;
   isSwapSourceSelected: (day: number, shiftType: ShiftType) => boolean;
@@ -50,9 +53,21 @@ type ScheduleBoardProps = {
     shiftType: ShiftType,
     doctorId: string | null | undefined
   ) => void;
-  onDoctorListDragStart: (event: DragEvent<HTMLElement>, doctorId: string) => void;
+  onDoctorListDragStart: (event: DragEvent<HTMLElement>, doctorId: string | null) => void;
+  onShiftTouchStart: (
+    event: TouchEvent<HTMLElement>,
+    day: number,
+    shiftType: ShiftType,
+    doctorId: string | null | undefined
+  ) => void;
+  onDoctorListTouchStart: (event: TouchEvent<HTMLElement>, doctorId: string | null) => void;
+  onTouchDragMove: (event: TouchEvent<HTMLElement>) => void;
+  onTouchDragEnd: (event: TouchEvent<HTMLElement>) => void;
+  onTouchDragCancel: () => void;
   onShiftTap: (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => void;
   onToggleHighlightedDoctor: (doctorId: string | null | undefined) => void;
+  onSelectManualDoctor: (doctorId: string) => void;
+  onToggleEraseSelection: () => void;
   onClearDragState: () => void;
   onToggleShiftLock: (day: number, shiftType: ShiftType) => void;
   onToggleSwapMode: () => void;
@@ -84,6 +99,8 @@ export default function ScheduleBoard({
   scoreEntries,
   getDoctorName,
   highlightedDoctorId,
+  selectedManualDoctorId,
+  isEraseSelectionActive,
   year,
   month,
   holidaySet,
@@ -93,6 +110,7 @@ export default function ScheduleBoard({
   isHighlightedDoctorBlockedDay,
   isShiftLocked,
   invalidHoverShiftKey,
+  touchHoverShiftKey,
   isSwapMode,
   swapSource,
   isSwapSourceSelected,
@@ -103,8 +121,15 @@ export default function ScheduleBoard({
   onHandleDisabledDayDragLeave,
   onShiftDragStart,
   onDoctorListDragStart,
+  onShiftTouchStart,
+  onDoctorListTouchStart,
+  onTouchDragMove,
+  onTouchDragEnd,
+  onTouchDragCancel,
   onShiftTap,
   onToggleHighlightedDoctor,
+  onSelectManualDoctor,
+  onToggleEraseSelection,
   onClearDragState,
   onToggleShiftLock,
   onToggleSwapMode,
@@ -125,6 +150,7 @@ export default function ScheduleBoard({
   saveMessage,
 }: ScheduleBoardProps) {
   const highlightedDoctorName = highlightedDoctorId ? getDoctorName(highlightedDoctorId) : null;
+  const manualSelectionLabel = selectedManualDoctorId ? getDoctorName(selectedManualDoctorId) : null;
   const swapSourceLabel = swapSource
     ? `${swapSource.day}日 ${swapSource.shiftType === "day" ? "日直" : "当直"} ${getDoctorName(swapSource.doctorId)}`
     : null;
@@ -140,7 +166,7 @@ export default function ScheduleBoard({
           ? "bg-amber-100 text-amber-900"
           : "bg-indigo-100 text-indigo-800";
 
-    return `${tone} min-w-0 flex-1 truncate rounded-full px-1 py-0.5 text-left text-[9px] font-bold leading-tight whitespace-nowrap ${
+    return `${tone} min-w-0 flex-1 truncate rounded-full px-1 py-0.5 text-left text-[9px] font-bold leading-tight whitespace-nowrap touch-none ${
       locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
     } ${isHighlighted ? "ring-1 ring-sky-500 ring-offset-1" : ""}`;
   };
@@ -154,10 +180,15 @@ export default function ScheduleBoard({
     return "text-gray-700";
   };
 
-  const getScoreChipClass = (isSelected: boolean) =>
-    `flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm active:cursor-grabbing ${
-      isSelected ? "border-sky-300 bg-sky-50 ring-1 ring-sky-300" : "border-gray-200 bg-white text-gray-700"
-    }`;
+  const getScoreChipClass = (isSelected: boolean, variant: "doctor" | "erase" = "doctor") => {
+    const base = isSelected
+      ? "border-sky-300 bg-sky-50 ring-1 ring-sky-300"
+      : variant === "erase"
+        ? "border-red-200 bg-red-50 text-red-700"
+        : "border-gray-200 bg-white text-gray-700";
+
+    return `flex items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm touch-none ${base}`;
+  };
 
   const renderHoverTooltip = (isVisible: boolean) => {
     if (!isVisible || !hoverErrorMessage) return null;
@@ -196,6 +227,8 @@ export default function ScheduleBoard({
             const nightShiftKey = `${row.day}_night`;
             const dayHoverInvalid = invalidHoverShiftKey === dayShiftKey;
             const nightHoverInvalid = invalidHoverShiftKey === nightShiftKey;
+            const dayTouchHovered = touchHoverShiftKey === dayShiftKey;
+            const nightTouchHovered = touchHoverShiftKey === nightShiftKey;
             const daySwapSelected = isSwapSourceSelected(row.day, "day");
             const nightSwapSelected = isSwapSourceSelected(row.day, "night");
             const highlightBlocked = isHighlightedDoctorBlockedDay(row.day);
@@ -213,31 +246,37 @@ export default function ScheduleBoard({
               ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
               : dayHoverInvalid
                 ? "cursor-not-allowed border-red-300 bg-red-200"
-                : dayLocked
-                  ? highlightBlocked
-                    ? "border-amber-300 bg-red-100"
-                    : "border-amber-300 bg-amber-50"
-                  : highlightBlocked
-                    ? "border-red-200 bg-red-100"
-                    : "border-transparent bg-white hover:border-gray-200";
+                : dayTouchHovered
+                  ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+                  : dayLocked
+                    ? highlightBlocked
+                      ? "border-amber-300 bg-red-100"
+                      : "border-amber-300 bg-amber-50"
+                    : highlightBlocked
+                      ? "border-red-200 bg-red-100"
+                      : "border-transparent bg-white hover:border-gray-200";
             const nightCellClass = nightSwapSelected
               ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
               : nightHoverInvalid
                 ? "cursor-not-allowed border-red-300 bg-red-200"
-                : nightLocked
-                  ? highlightBlocked
-                    ? "border-amber-300 bg-red-100"
-                    : "border-amber-300 bg-amber-50"
-                  : highlightBlocked
-                    ? "border-red-200 bg-red-100"
-                    : "border-transparent bg-white hover:border-gray-200";
+                : nightTouchHovered
+                  ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+                  : nightLocked
+                    ? highlightBlocked
+                      ? "border-amber-300 bg-red-100"
+                      : "border-amber-300 bg-amber-50"
+                    : highlightBlocked
+                      ? "border-red-200 bg-red-100"
+                      : "border-transparent bg-white hover:border-gray-200";
             const disabledDayCellClass = daySwapSelected
               ? "border-sky-400 bg-sky-50 text-sky-700 ring-1 ring-sky-300"
               : dayHoverInvalid
                 ? "cursor-not-allowed border-red-300 bg-red-200 text-red-700"
-                : highlightBlocked
-                  ? "cursor-not-allowed border-red-200 bg-red-100 text-red-500"
-                  : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400";
+                : dayTouchHovered
+                  ? "border-sky-300 bg-sky-50 text-sky-700 ring-1 ring-sky-200"
+                  : highlightBlocked
+                    ? "cursor-not-allowed border-red-200 bg-red-100 text-red-500"
+                    : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400";
 
             return (
               <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50/30" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
@@ -249,6 +288,11 @@ export default function ScheduleBoard({
                 <td className="px-0.5 py-0.5 align-middle">
                   {isDayShiftEnabled ? (
                     <div
+                      data-touch-drop-target="shift"
+                      data-day={row.day}
+                      data-shift-type="day"
+                      data-locked={dayLocked ? "true" : "false"}
+                      data-holiday-like={isHolidayLike ? "true" : "false"}
                       onClick={() => onShiftTap(row.day, "day", dayLocked, isHolidayLike)}
                       onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
                       onDragOver={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
@@ -262,6 +306,10 @@ export default function ScheduleBoard({
                           draggable={!dayLocked}
                           onDragStart={(event) => onShiftDragStart(event, row.day, "day", row.day_shift)}
                           onDragEnd={onClearDragState}
+                          onTouchStart={!dayLocked ? (event) => onShiftTouchStart(event, row.day, "day", row.day_shift) : undefined}
+                          onTouchMove={!dayLocked ? onTouchDragMove : undefined}
+                          onTouchEnd={!dayLocked ? onTouchDragEnd : undefined}
+                          onTouchCancel={!dayLocked ? onTouchDragCancel : undefined}
                           onClick={(event) => {
                             event.stopPropagation();
                             if (isSwapMode) {
@@ -294,6 +342,11 @@ export default function ScheduleBoard({
                     </div>
                   ) : (
                     <div
+                      data-touch-drop-target="shift"
+                      data-day={row.day}
+                      data-shift-type="day"
+                      data-locked={dayLocked ? "true" : "false"}
+                      data-holiday-like="false"
                       onClick={() => onShiftTap(row.day, "day", dayLocked, false)}
                       onDragEnter={(event) => onHandleDisabledDayDragOver(event, row.day)}
                       onDragOver={(event) => onHandleDisabledDayDragOver(event, row.day)}
@@ -307,6 +360,11 @@ export default function ScheduleBoard({
                 </td>
                 <td className="px-0.5 py-0.5 align-middle">
                   <div
+                    data-touch-drop-target="shift"
+                    data-day={row.day}
+                    data-shift-type="night"
+                    data-locked={nightLocked ? "true" : "false"}
+                    data-holiday-like={isHolidayLike ? "true" : "false"}
                     onClick={() => onShiftTap(row.day, "night", nightLocked, isHolidayLike)}
                     onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
                     onDragOver={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
@@ -320,6 +378,10 @@ export default function ScheduleBoard({
                         draggable={!nightLocked}
                         onDragStart={(event) => onShiftDragStart(event, row.day, "night", row.night_shift)}
                         onDragEnd={onClearDragState}
+                        onTouchStart={!nightLocked ? (event) => onShiftTouchStart(event, row.day, "night", row.night_shift) : undefined}
+                        onTouchMove={!nightLocked ? onTouchDragMove : undefined}
+                        onTouchEnd={!nightLocked ? onTouchDragEnd : undefined}
+                        onTouchCancel={!nightLocked ? onTouchDragCancel : undefined}
                         onClick={(event) => {
                           event.stopPropagation();
                           if (isSwapMode) {
@@ -369,6 +431,11 @@ export default function ScheduleBoard({
         </div>
       )}
 
+      {error && (
+        <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[10px] font-bold text-red-700">
+          {error}
+        </div>
+      )}
       {!schedule.length && saveMessage && (
         <div className="mb-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[10px] font-bold text-green-800">
           {saveMessage}
@@ -382,123 +449,155 @@ export default function ScheduleBoard({
 
       {schedule.length > 0 && (
         <div className="animate-fade-in">
-          <div className="sticky top-0 z-40 mb-2 space-y-2 bg-white/95 pb-2 backdrop-blur shadow-sm">
+          <div className="sticky top-0 z-40 mb-2 space-y-2 bg-white/95 pb-2 shadow-sm backdrop-blur">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div className="w-full min-w-0 text-[9px] leading-tight text-gray-500">
-                D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモードでタップ操作が使えます。
+                D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモード中に医師や削除を選んでタップ配置できます。
                 {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
+                {manualSelectionLabel ? <div className="mt-0.5 font-semibold text-emerald-700">タップ配置: {manualSelectionLabel}</div> : null}
+                {isEraseSelectionActive ? <div className="mt-0.5 font-semibold text-red-600">タップ削除: 削除アイテム選択中</div> : null}
                 {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
               </div>
               <div className="flex w-full flex-wrap items-center gap-1.5 md:w-auto md:shrink-0 md:justify-end">
-              <button
-                type="button"
-                onClick={onToggleSwapMode}
-                className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
-                  isSwapMode
-                    ? "border-sky-300 bg-sky-100 text-sky-800"
-                    : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
-                }`}
-              >
-                🔄 入れ替えモード
-              </button>
-              <button
-                type="button"
-                onClick={onUndo}
-                disabled={!canUndo}
-                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                戻る
-              </button>
-              <button
-                type="button"
-                onClick={onRedo}
-                disabled={!canRedo}
-                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                進む
-              </button>
-              <button
-                type="button"
-                onClick={onLockAll}
-                disabled={!schedule.some((row) => row.day_shift || row.night_shift)}
-                className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] font-bold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                全ロック
-              </button>
-              <button
-                type="button"
-                onClick={onUnlockAll}
-                disabled={lockedShiftCount === 0}
-                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                全解除
-              </button>
-              <button
-                type="button"
-                onClick={onRegenerateUnlocked}
-                disabled={isLoading}
-                className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-1 text-[9px] font-bold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {lockedShiftCount > 0 ? "未固定枠を再生成" : "全体を自動生成"}
-              </button>
-              <button
-                type="button"
-                onClick={onDeleteMonthSchedule}
-                disabled={isDeletingMonthSchedule}
-                className="rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isDeletingMonthSchedule ? "削除中" : "全削除"}
-              </button>
-            </div>
+                <button
+                  type="button"
+                  onClick={onToggleSwapMode}
+                  className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
+                    isSwapMode
+                      ? "border-sky-300 bg-sky-100 text-sky-800"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  入れ替えモード
+                </button>
+                <button
+                  type="button"
+                  onClick={onUndo}
+                  disabled={!canUndo}
+                  className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={onRedo}
+                  disabled={!canRedo}
+                  className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  進む
+                </button>
+                <button
+                  type="button"
+                  onClick={onLockAll}
+                  disabled={!schedule.some((row) => row.day_shift || row.night_shift)}
+                  className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] font-bold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  全ロック
+                </button>
+                <button
+                  type="button"
+                  onClick={onUnlockAll}
+                  disabled={lockedShiftCount === 0}
+                  className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  全解除
+                </button>
+                <button
+                  type="button"
+                  onClick={onRegenerateUnlocked}
+                  disabled={isLoading}
+                  className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-1 text-[9px] font-bold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {lockedShiftCount > 0 ? "未固定枠を再生成" : "全体を自動生成"}
+                </button>
+                <button
+                  type="button"
+                  onClick={onDeleteMonthSchedule}
+                  disabled={isDeletingMonthSchedule}
+                  className="rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isDeletingMonthSchedule ? "削除中" : "全削除"}
+                </button>
+              </div>
             </div>
 
             <div
+              data-touch-drop-target="trash"
               onDragOver={onTrashDragOver}
-            onDrop={onTrashDrop}
-            className={`mb-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-1 text-[9px] font-bold transition ${
-              dragSourceType === "calendar"
-                ? "border-red-400 bg-red-50 text-red-700"
-                : "border-red-200 bg-red-50/70 text-red-500"
-            }`}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            <span>{dragSourceType === "calendar" ? "ここにドロップでシフト解除" : "ゴミ箱へドロップでシフト解除"}</span>
-            <span className="text-[8px] font-medium text-red-400">カレンダー枠のみ有効</span>
-          </div>
+              onDrop={onTrashDrop}
+              className={`mb-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-1 text-[9px] font-bold transition ${
+                dragSourceType === "calendar"
+                  ? "border-red-400 bg-red-50 text-red-700"
+                  : "border-red-200 bg-red-50/70 text-red-500"
+              }`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>{dragSourceType === "calendar" ? "ここにドロップでシフト解除" : "ゴミ箱へドロップでシフト解除"}</span>
+              <span className="text-[8px] font-medium text-red-400">カレンダー枠のみ有効</span>
+            </div>
 
             <div className="rounded-lg border bg-gray-50 p-1.5">
-            <div className="mb-1 text-[9px] font-bold text-gray-700">医師別スコア</div>
-            <div className="mb-2 mt-1 flex flex-wrap items-center gap-3 px-1 text-[10px]">
-              <span className="text-gray-500">スコアの目安:</span>
-              <span className="font-bold text-green-600">目標差0.5以内</span>
-              <span className="font-bold text-gray-700">通常</span>
-              <span className="font-bold text-orange-500">目標差1.5以上</span>
-              <span className="font-bold text-red-600">Min / Max逸脱</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {scoreEntries.map((entry) => {
-                const isSelected = entry.doctorId === highlightedDoctorId;
-                return (
-                  <button
-                    key={entry.doctorId}
-                    type="button"
-                    draggable
-                    onDragStart={(event) => onDoctorListDragStart(event, entry.doctorId)}
-                    onDragEnd={onClearDragState}
-                    onClick={() => onToggleHighlightedDoctor(entry.doctorId)}
-                    className={getScoreChipClass(isSelected)}
-                    title={`クリックでハイライト / ドラッグで割り当て / Min ${formatScore(entry.min)} / Target ${formatScore(entry.target)} / Max ${formatScore(entry.max)}`}
-                  >
-                    <span className="max-w-[4.5rem] truncate font-semibold text-gray-700">{getDoctorName(entry.doctorId)}</span>
-                    <span className={`font-bold ${getScoreTextClass(entry.tone)}`}>{formatScore(entry.score)}</span>
-                  </button>
-                );
-              })}
-            </div>
+              <div className="mb-1 text-[9px] font-bold text-gray-700">医師別スコア / 手動配置</div>
+              <div className="mb-2 mt-1 flex flex-wrap items-center gap-3 px-1 text-[10px]">
+                <span className="text-gray-500">スコアの目安:</span>
+                <span className="font-bold text-green-600">目標差0.5以内</span>
+                <span className="font-bold text-gray-700">通常</span>
+                <span className="font-bold text-orange-500">目標差1.5以上</span>
+                <span className="font-bold text-red-600">Min / Max逸脱</span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {scoreEntries.map((entry) => {
+                  const isSelected = entry.doctorId === highlightedDoctorId || entry.doctorId === selectedManualDoctorId;
+                  return (
+                    <button
+                      key={entry.doctorId}
+                      type="button"
+                      draggable
+                      onDragStart={(event) => onDoctorListDragStart(event, entry.doctorId)}
+                      onDragEnd={onClearDragState}
+                      onTouchStart={(event) => onDoctorListTouchStart(event, entry.doctorId)}
+                      onTouchMove={onTouchDragMove}
+                      onTouchEnd={onTouchDragEnd}
+                      onTouchCancel={onTouchDragCancel}
+                      onClick={() => {
+                        if (isSwapMode) {
+                          onSelectManualDoctor(entry.doctorId);
+                          return;
+                        }
+                        onToggleHighlightedDoctor(entry.doctorId);
+                      }}
+                      className={`${getScoreChipClass(isSelected)} ${!isSwapMode ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+                      title={`クリックでハイライト / ドラッグで割り当て / Min ${formatScore(entry.min)} / Target ${formatScore(entry.target)} / Max ${formatScore(entry.max)}`}
+                    >
+                      <span className="max-w-[4.5rem] truncate font-semibold text-gray-700">{getDoctorName(entry.doctorId)}</span>
+                      <span className={`font-bold ${getScoreTextClass(entry.tone)}`}>{formatScore(entry.score)}</span>
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  draggable
+                  onDragStart={(event) => onDoctorListDragStart(event, null)}
+                  onDragEnd={onClearDragState}
+                  onTouchStart={(event) => onDoctorListTouchStart(event, null)}
+                  onTouchMove={onTouchDragMove}
+                  onTouchEnd={onTouchDragEnd}
+                  onTouchCancel={onTouchDragCancel}
+                  onClick={() => {
+                    if (!isSwapMode) return;
+                    onToggleEraseSelection();
+                  }}
+                  className={`${getScoreChipClass(isEraseSelectionActive, "erase")} ${isSwapMode ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`}
+                  title="入れ替えモード中はタップで削除選択 / ドラッグでシフト解除"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  <span className="font-semibold">削除</span>
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-1">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
+          <div className="grid grid-cols-1 gap-1 lg:grid-cols-2">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
 
           <div className="mt-2 flex flex-col items-center gap-1">
             <button

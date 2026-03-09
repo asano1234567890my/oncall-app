@@ -1,4 +1,4 @@
-// src/app/page.tsx
+﻿// src/app/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
-  const { schedule, resetSchedule, commitSchedule, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
+  const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
@@ -121,7 +121,7 @@ export default function DashboardPage() {
 
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
-    return doctorNameById[doctorId] ?? "不明";
+    return doctorNameById[doctorId] ?? "荳肴・";
   };
 
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
@@ -200,7 +200,7 @@ export default function DashboardPage() {
   const isHolidayLikeDay = (day: number) => {
     const ymd = toYmd(year, month, day);
     const wd = getWeekday(year, month, day);
-    const isSun = wd === "日";
+    const isSun = wd === "譌･";
     const isAutoHoliday = holidaySet.has(ymd);
     const isManualHoliday = manualHolidaySetInMonth.has(ymd);
     return { ymd, wd, isSun, isAutoHoliday, isManualHoliday, isHolidayLike: isSun || isAutoHoliday || isManualHoliday };
@@ -228,13 +228,18 @@ export default function DashboardPage() {
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
+    touchHoverShiftKey,
     lockedShiftKeys,
     isShiftLocked,
     isSwapMode,
     swapSource,
+    selectedManualDoctorId,
+    isEraseSelectionActive,
     isSwapSourceSelected,
     isHighlightedDoctorBlockedDay,
     toggleHighlightedDoctor,
+    selectManualDoctor,
+    toggleEraseSelection,
     clearDragState,
     toggleSwapMode,
     handleShiftTap,
@@ -245,6 +250,11 @@ export default function DashboardPage() {
     handleShiftDrop,
     handleShiftDragStart,
     handleDoctorListDragStart,
+    handleShiftTouchStart,
+    handleDoctorListTouchStart,
+    handleTouchDragMove,
+    handleTouchDragEnd,
+    handleTouchDragCancel,
     handleTrashDragOver,
     handleTrashDrop,
     toggleShiftLock,
@@ -261,7 +271,6 @@ export default function DashboardPage() {
     fixedUnavailableWeekdaysMap,
     prevMonthWorkedDaysMap,
     getDoctorName,
-    getWeekday,
     isHolidayLikeDay,
     isActiveDoctorId,
   });
@@ -296,7 +305,9 @@ export default function DashboardPage() {
     targetScoreMap,
     satPrevMap,
     schedule,
-    setSchedule: resetSchedule,
+    setSchedule,
+    commitSchedule,
+    commitScheduleFrom,
     setScores,
     setDoctors,
     setSelectedDoctorId,
@@ -310,7 +321,7 @@ export default function DashboardPage() {
     isHolidayLikeDay,
     filterRecordByActiveDoctors,
     buildLockedShiftsPayload,
-    onResetLocks: handleUnlockAll,
+    lockedShiftKeys,
   });
 
   useEffect(() => {
@@ -331,7 +342,7 @@ export default function DashboardPage() {
 
   const toggleHoliday = (day: number) => {
     const ymd = toYmd(year, month, day);
-    if (getWeekday(year, month, day) === "日") return;
+    if (getWeekday(year, month, day) === "譌･") return;
 
     setManualHolidaySetYear((prev) => {
       const next = new Set(prev);
@@ -434,7 +445,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
       <main className="mx-auto w-full max-w-7xl rounded-xl bg-white p-3 shadow-lg md:p-6 xl:p-8">
-        <h1 className="mb-4 border-b pb-4 text-xl font-bold text-gray-800 md:mb-8 md:text-3xl">🏥 当直表 自動生成ダッシュボード</h1>
+        <h1 className="mb-4 border-b pb-4 text-xl font-bold text-gray-800 md:mb-8 md:text-3xl">当直表 自動生成ダッシュボード</h1>
 
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,0.98fr)_minmax(0,1.32fr)] lg:items-start md:mb-6">
           <GenerationSettingsPanel
@@ -487,8 +498,8 @@ export default function DashboardPage() {
                 <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl md:px-6">
                   <div className="flex flex-col items-center text-center">
                     <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
-                    <div className="text-base font-bold text-gray-800 md:text-lg">当直表を生成中です</div>
-                    <div className="mt-2 text-sm text-gray-500">AIが勤務条件をもとに候補を計算しています。</div>
+                    <div className="text-base font-bold text-gray-800 md:text-lg">当直表を自動生成しています</div>
+                    <div className="mt-2 text-sm text-gray-500">未固定枠を白紙化しつつ、条件をもとに再計算しています。</div>
                     <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                       <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
                     </div>
@@ -524,6 +535,8 @@ export default function DashboardPage() {
               scoreEntries={scoreEntries}
               getDoctorName={getDoctorName}
               highlightedDoctorId={highlightedDoctorId}
+              selectedManualDoctorId={selectedManualDoctorId}
+              isEraseSelectionActive={isEraseSelectionActive}
               year={year}
               month={month}
               holidaySet={holidaySet}
@@ -533,6 +546,7 @@ export default function DashboardPage() {
               isHighlightedDoctorBlockedDay={isHighlightedDoctorBlockedDay}
               isShiftLocked={isShiftLocked}
               invalidHoverShiftKey={invalidHoverShiftKey}
+              touchHoverShiftKey={touchHoverShiftKey}
               isSwapMode={isSwapMode}
               swapSource={swapSource}
               isSwapSourceSelected={isSwapSourceSelected}
@@ -543,8 +557,15 @@ export default function DashboardPage() {
               onHandleDisabledDayDragLeave={handleDisabledDayDragLeave}
               onShiftDragStart={handleShiftDragStart}
               onDoctorListDragStart={handleDoctorListDragStart}
+              onShiftTouchStart={handleShiftTouchStart}
+              onDoctorListTouchStart={handleDoctorListTouchStart}
+              onTouchDragMove={handleTouchDragMove}
+              onTouchDragEnd={handleTouchDragEnd}
+              onTouchDragCancel={handleTouchDragCancel}
               onShiftTap={handleShiftTap}
               onToggleHighlightedDoctor={toggleHighlightedDoctor}
+              onSelectManualDoctor={selectManualDoctor}
+              onToggleEraseSelection={toggleEraseSelection}
               onClearDragState={clearDragState}
               onToggleShiftLock={toggleShiftLock}
               onToggleSwapMode={toggleSwapMode}
@@ -570,4 +591,8 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+
+
+
 

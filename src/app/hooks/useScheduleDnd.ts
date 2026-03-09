@@ -1,4 +1,4 @@
-import { useEffect, useState, type DragEvent } from "react";
+﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   HolidayLikeDayInfo,
@@ -9,6 +9,26 @@ import type {
 } from "../types/dashboard";
 
 type DragSourceType = "calendar" | "list" | null;
+type DraggingListMode = "doctor" | "erase" | null;
+type ListSelection = { mode: "doctor"; doctorId: string } | { mode: "erase" } | null;
+type ActiveDragSource =
+  | { sourceType: "calendar"; day: number; shiftType: ShiftType; doctorId: string | null }
+  | { sourceType: "list"; mode: "doctor"; doctorId: string }
+  | { sourceType: "list"; mode: "erase" };
+type TouchDropTarget =
+  | { kind: "shift"; day: number; shiftType: ShiftType; locked: boolean; isHolidayLike: boolean }
+  | { kind: "trash" }
+  | null;
+type TouchPoint = {
+  clientX: number;
+  clientY: number;
+};
+type TouchDragState = {
+  source: ActiveDragSource;
+  startX: number;
+  startY: number;
+  moved: boolean;
+};
 
 type UseScheduleDndParams = {
   schedule: ScheduleRow[];
@@ -20,7 +40,6 @@ type UseScheduleDndParams = {
   fixedUnavailableWeekdaysMap: Record<string, number[]>;
   prevMonthWorkedDaysMap: Record<string, number[]>;
   getDoctorName: (doctorId: string | null | undefined) => string;
-  getWeekday: (year: number, month: number, day: number) => string;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
   isActiveDoctorId: (doctorId: string | null | undefined) => boolean;
 };
@@ -30,7 +49,14 @@ type ScheduleMutationResult = {
   errorMessage: string | null;
 };
 
+type DropFeedback = {
+  message: string | null;
+  dropEffect: "none" | "copy" | "move";
+};
+
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
+const pad2 = (value: number) => String(value).padStart(2, "0");
+const weekdayLabelsPy = ["月", "火", "水", "木", "金", "土", "日"];
 
 export function useScheduleDnd({
   schedule,
@@ -42,7 +68,6 @@ export function useScheduleDnd({
   fixedUnavailableWeekdaysMap,
   prevMonthWorkedDaysMap,
   getDoctorName,
-  getWeekday,
   isHolidayLikeDay,
   isActiveDoctorId,
 }: UseScheduleDndParams) {
@@ -50,15 +75,24 @@ export function useScheduleDnd({
   const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
   const [dragSourceType, setDragSourceType] = useState<DragSourceType>(null);
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
+  const [draggingListMode, setDraggingListMode] = useState<DraggingListMode>(null);
   const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
+  const [touchHoverShiftKey, setTouchHoverShiftKey] = useState<string | null>(null);
   const [hoverErrorMessage, setHoverErrorMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSwapMode, setIsSwapMode] = useState(false);
   const [swapSource, setSwapSource] = useState<SwapSource | null>(null);
+  const [selectedListSelection, setSelectedListSelection] = useState<ListSelection>(null);
+
+  const touchDragRef = useRef<TouchDragState | null>(null);
+  const touchDropTargetRef = useRef<TouchDropTarget>(null);
 
   const getShiftKey = (day: number, shiftType: ShiftType) => `${day}_${shiftType}`;
   const getWeekdayPy = (y: number, m: number, d: number) => (new Date(y, m - 1, d).getDay() + 6) % 7;
+  const getSelectedManualDoctorId = () =>
+    selectedListSelection?.mode === "doctor" ? selectedListSelection.doctorId : null;
+  const isEraseSelectionActive = selectedListSelection?.mode === "erase";
 
   const getScheduleDoctorId = (day: number, shiftType: ShiftType) => {
     const row = schedule.find((entry) => entry.day === day);
@@ -146,12 +180,12 @@ export function useScheduleDnd({
     }
 
     if (isDoctorManuallyUnavailableOnDay(doctorId, day)) {
-      return `${doctorName}先生は${month}月${day}日を個別不可申請しています`;
+      return `${doctorName}先生は${month}月${day}日の個別不可日です`;
     }
 
     if (isDoctorFixedUnavailableOnDay(doctorId, day)) {
       const weekdayPy = getWeekdayPy(year, month, day);
-      return `${doctorName}先生は${["月", "火", "水", "木", "金", "土", "日"][weekdayPy]}曜日を固定不可に設定しています`;
+      return `${doctorName}先生は${weekdayLabelsPy[weekdayPy]}曜日を固定不可に設定しています`;
     }
 
     const prevMonthWorkedDays = prevMonthWorkedDaysMap[doctorId] || [];
@@ -168,7 +202,7 @@ export function useScheduleDnd({
     const oppositeShiftKey = getShiftKey(day, oppositeShiftType);
     const oppositeDoctorId = row && !ignoreShiftKeys.has(oppositeShiftKey) ? getShiftDoctorIdFromRow(row, oppositeShiftType) : null;
     if (oppositeDoctorId && oppositeDoctorId === doctorId) {
-      return "同じ日に日直と当直へ同じ医師は配置できません";
+      return "同じ日の日直と当直に同じ医師は配置できません";
     }
 
     for (const rowEntry of scheduleRows) {
@@ -185,11 +219,11 @@ export function useScheduleDnd({
       }
     }
 
-    if (shiftType === "night" && getWeekday(year, month, day) === "土") {
+    if (shiftType === "night" && new Date(year, month - 1, day).getDay() === 6) {
       const alreadyHasSaturdayNight = scheduleRows.some((rowEntry) => {
         const shiftKey = getShiftKey(rowEntry.day, "night");
         if (ignoreShiftKeys.has(shiftKey)) return false;
-        return getWeekday(year, month, rowEntry.day) === "土" && (rowEntry.night_shift ?? null) === doctorId;
+        return new Date(year, month - 1, rowEntry.day).getDay() === 6 && (rowEntry.night_shift ?? null) === doctorId;
       });
 
       if (alreadyHasSaturdayNight) {
@@ -202,16 +236,7 @@ export function useScheduleDnd({
 
   const formatConstraintForToast = (doctorId: string, message: string) => {
     const doctorName = getDoctorName(doctorId);
-    const prefixWithHa = `${doctorName}先生は`;
-    const prefixWithNo = `${doctorName}先生の`;
-
-    if (message.startsWith(prefixWithHa)) {
-      return `【${doctorName}先生】${message.slice(prefixWithHa.length)}`;
-    }
-    if (message.startsWith(prefixWithNo)) {
-      return `【${doctorName}先生】${message.slice(prefixWithNo.length)}`;
-    }
-    return `【${doctorName}先生】${message}`;
+    return message.startsWith(`${doctorName}先生`) ? message : `${doctorName}先生: ${message}`;
   };
 
   const getSwapConstraintMessage = (
@@ -257,32 +282,11 @@ export function useScheduleDnd({
     return Array.from(new Set(messages)).join("\n");
   };
 
-  const clearDragState = () => {
-    setDragSourceKey(null);
-    setDragSourceType(null);
-    setDraggingDoctorId(null);
-    setInvalidHoverShiftKey(null);
-    setHoverErrorMessage(null);
-  };
-
-  const clearSwapState = () => {
-    setSwapSource(null);
-    setIsSwapMode(false);
-    setInvalidHoverShiftKey(null);
-    setHoverErrorMessage(null);
-  };
-
-  const toggleSwapMode = () => {
-    clearDragState();
-    setSwapSource(null);
-    setIsSwapMode((prev) => !prev);
-  };
-
   const buildAssignSchedule = (day: number, shiftType: ShiftType, doctorId: string): ScheduleMutationResult => {
     const next = cloneSchedule(schedule);
     const targetRow = next.find((row) => row.day === day);
     if (!targetRow) {
-      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
     const targetField = shiftType === "day" ? "day_shift" : "night_shift";
@@ -311,14 +315,14 @@ export function useScheduleDnd({
     }
 
     if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) {
-      return { nextSchedule: null, errorMessage: "ロック済みのため移動できません" };
+      return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
     }
 
     const next = cloneSchedule(schedule);
     const fromRow = next.find((row) => row.day === fromDay);
     const toRow = next.find((row) => row.day === toDay);
     if (!fromRow || !toRow) {
-      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
     const fromField = fromType === "day" ? "day_shift" : "night_shift";
@@ -326,7 +330,7 @@ export function useScheduleDnd({
     const fromDoctorId = fromRow[fromField] ?? null;
     const toDoctorId = toRow[toField] ?? null;
     if (!fromDoctorId) {
-      return { nextSchedule: null, errorMessage: "入れ替え元に担当医がいません" };
+      return { nextSchedule: null, errorMessage: "入れ替え元に医師が入っている枠を選択してください" };
     }
 
     const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
@@ -343,13 +347,18 @@ export function useScheduleDnd({
 
   const buildClearSchedule = (day: number, shiftType: ShiftType): ScheduleMutationResult => {
     if (isShiftLocked(day, shiftType)) {
-      return { nextSchedule: null, errorMessage: "ロック済みのため解除できません" };
+      return { nextSchedule: null, errorMessage: "ロック済みの枠は解除できません" };
     }
 
     const next = cloneSchedule(schedule);
     const row = next.find((entry) => entry.day === day);
     if (!row) {
-      return { nextSchedule: null, errorMessage: "対象のシフト枠が見つかりません" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+    }
+
+    const currentDoctorId = shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
+    if (!currentDoctorId) {
+      return { nextSchedule: null, errorMessage: null };
     }
 
     if (shiftType === "day") row.day_shift = null;
@@ -358,8 +367,197 @@ export function useScheduleDnd({
     return { nextSchedule: next, errorMessage: null };
   };
 
+  const clearHoverState = () => {
+    setInvalidHoverShiftKey(null);
+    setTouchHoverShiftKey(null);
+    setHoverErrorMessage(null);
+    touchDropTargetRef.current = null;
+  };
+
+  const clearDragState = () => {
+    setDragSourceKey(null);
+    setDragSourceType(null);
+    setDraggingDoctorId(null);
+    setDraggingListMode(null);
+    clearHoverState();
+    touchDragRef.current = null;
+  };
+
+  const applyActiveDragSource = (source: ActiveDragSource) => {
+    if (source.sourceType === "calendar") {
+      setDragSourceKey(JSON.stringify({ day: source.day, shiftType: source.shiftType }));
+      setDragSourceType("calendar");
+      setDraggingDoctorId(source.doctorId ?? null);
+      setDraggingListMode(null);
+      return;
+    }
+
+    setDragSourceKey(null);
+    setDragSourceType("list");
+    setDraggingDoctorId(source.mode === "doctor" ? source.doctorId : null);
+    setDraggingListMode(source.mode);
+  };
+
+  const getStateActiveDragSource = (): ActiveDragSource | null => {
+    if (dragSourceType === "calendar") {
+      const payload = parseDragPayload(dragSourceKey);
+      if (!payload) return null;
+      return {
+        sourceType: "calendar",
+        day: payload.day,
+        shiftType: payload.shiftType,
+        doctorId: draggingDoctorId,
+      };
+    }
+
+    if (dragSourceType === "list") {
+      if (draggingListMode === "erase") {
+        return { sourceType: "list", mode: "erase" };
+      }
+      if (draggingListMode === "doctor" && draggingDoctorId) {
+        return { sourceType: "list", mode: "doctor", doctorId: draggingDoctorId };
+      }
+    }
+
+    return null;
+  };
+
+  const getActiveDragSource = () => touchDragRef.current?.source ?? getStateActiveDragSource();
+
+  const getDropFeedback = (
+    source: ActiveDragSource,
+    day: number,
+    shiftType: ShiftType,
+    locked: boolean,
+    isHolidayLike: boolean
+  ): DropFeedback => {
+    if (locked) {
+      return { message: "ロック済みの枠には配置できません", dropEffect: "none" };
+    }
+
+    if (shiftType === "day" && !isHolidayLike) {
+      return { message: "平日の日直には配置できません", dropEffect: "none" };
+    }
+
+    if (source.sourceType === "list") {
+      if (source.mode === "erase") {
+        return { message: null, dropEffect: "move" };
+      }
+
+      const message = getPlacementConstraintMessage(source.doctorId, day, shiftType, {
+        ignoreShiftKeys: getPlacementIgnoreShiftKeys(source.doctorId, day, shiftType),
+      });
+      return { message, dropEffect: message ? "none" : "copy" };
+    }
+
+    const message = getSwapConstraintMessage(source.doctorId, source.day, source.shiftType, day, shiftType);
+    return { message, dropEffect: message ? "none" : "move" };
+  };
+
+  const beginTouchDrag = (source: ActiveDragSource, touch: TouchPoint) => {
+    touchDragRef.current = {
+      source,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      moved: false,
+    };
+    applyActiveDragSource(source);
+    clearHoverState();
+    setSwapSource(null);
+  };
+
+  const getHeaderOffset = () => {
+    if (typeof document === "undefined") return 0;
+    return document.querySelector("header")?.clientHeight ?? 0;
+  };
+
+  const getTouchDropTarget = (touch: TouchPoint): TouchDropTarget => {
+    if (typeof document === "undefined") return null;
+
+    const adjustedX = touch.clientX;
+    const adjustedY = Math.max(0, touch.clientY - getHeaderOffset());
+    const element = document.elementFromPoint(adjustedX, adjustedY);
+    const container = element?.closest<HTMLElement>("[data-touch-drop-target]");
+    if (!container) return null;
+
+    const targetKind = container.dataset.touchDropTarget;
+    if (targetKind === "trash") {
+      return { kind: "trash" };
+    }
+
+    if (targetKind !== "shift") return null;
+
+    const day = Number(container.dataset.day);
+    const shiftType = container.dataset.shiftType === "day" || container.dataset.shiftType === "night" ? container.dataset.shiftType : null;
+    if (!Number.isFinite(day) || !shiftType) return null;
+
+    return {
+      kind: "shift",
+      day,
+      shiftType,
+      locked: container.dataset.locked === "true",
+      isHolidayLike: container.dataset.holidayLike === "true",
+    };
+  };
+
+  const updateTouchTargetState = (target: TouchDropTarget, source: ActiveDragSource) => {
+    touchDropTargetRef.current = target;
+
+    if (!target) {
+      clearHoverState();
+      return;
+    }
+
+    if (target.kind === "trash") {
+      setTouchHoverShiftKey(null);
+      setInvalidHoverShiftKey(null);
+      setHoverErrorMessage(null);
+      return;
+    }
+
+    const shiftKey = getShiftKey(target.day, target.shiftType);
+    const feedback = getDropFeedback(source, target.day, target.shiftType, target.locked, target.isHolidayLike);
+
+    setTouchHoverShiftKey(shiftKey);
+    if (feedback.message) {
+      setInvalidHoverShiftKey(shiftKey);
+      setHoverErrorMessage(feedback.message);
+      return;
+    }
+
+    setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
+  };
+
+  const selectManualDoctor = (doctorId: string) => {
+    clearDragState();
+    setSwapSource(null);
+
+    const isSameSelection = selectedListSelection?.mode === "doctor" && selectedListSelection.doctorId === doctorId;
+    setSelectedListSelection(isSameSelection ? null : { mode: "doctor", doctorId });
+    if (!isSameSelection) {
+      setHighlightedDoctorId(doctorId);
+    }
+  };
+
+  const toggleEraseSelection = () => {
+    clearDragState();
+    setSwapSource(null);
+    setSelectedListSelection(isEraseSelectionActive ? null : { mode: "erase" });
+  };
+
+  const toggleSwapMode = () => {
+    clearDragState();
+    const nextMode = !isSwapMode;
+    setIsSwapMode(nextMode);
+    setSwapSource(null);
+    setSelectedListSelection(null);
+  };
+
   const handleDisabledDayDragOver = (event: DragEvent<HTMLDivElement>, day: number) => {
-    if (!draggingDoctorId) return;
+    const activeSource = getActiveDragSource();
+    if (!activeSource) return;
+
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
     setInvalidHoverShiftKey(getShiftKey(day, "day"));
@@ -381,51 +579,21 @@ export function useScheduleDnd({
     locked: boolean,
     isHolidayLike: boolean
   ) => {
-    if (!draggingDoctorId || !dragSourceType) return;
+    const activeSource = getActiveDragSource();
+    if (!activeSource) return;
 
     const shiftKey = getShiftKey(day, shiftType);
-    if (locked) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "none";
-      setInvalidHoverShiftKey(shiftKey);
-      setHoverErrorMessage("ロック済みのため移動できません");
-      return;
-    }
-
-    if (shiftType === "day" && !isHolidayLike) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = "none";
-      setInvalidHoverShiftKey(shiftKey);
-      setHoverErrorMessage("平日の日直には配置できません");
-      return;
-    }
-
-    let constraintMessage: string | null = null;
-
-    if (dragSourceType === "calendar") {
-      const sourcePayload = parseDragPayload(dragSourceKey);
-      constraintMessage = sourcePayload
-        ? getSwapConstraintMessage(draggingDoctorId, sourcePayload.day, sourcePayload.shiftType, day, shiftType)
-        : getPlacementConstraintMessage(draggingDoctorId, day, shiftType, {
-            ignoreShiftKeys: getPlacementIgnoreShiftKeys(draggingDoctorId, day, shiftType),
-          });
-    }
-
-    if (dragSourceType === "list") {
-      constraintMessage = getPlacementConstraintMessage(draggingDoctorId, day, shiftType, {
-        ignoreShiftKeys: getPlacementIgnoreShiftKeys(draggingDoctorId, day, shiftType),
-      });
-    }
+    const feedback = getDropFeedback(activeSource, day, shiftType, locked, isHolidayLike);
 
     event.preventDefault();
-    if (constraintMessage) {
-      event.dataTransfer.dropEffect = "none";
+    event.dataTransfer.dropEffect = feedback.dropEffect;
+
+    if (feedback.message) {
       setInvalidHoverShiftKey(shiftKey);
-      setHoverErrorMessage(constraintMessage);
+      setHoverErrorMessage(feedback.message);
       return;
     }
 
-    event.dataTransfer.dropEffect = dragSourceType === "list" ? "copy" : "move";
     setInvalidHoverShiftKey(null);
     setHoverErrorMessage(null);
   };
@@ -434,6 +602,7 @@ export function useScheduleDnd({
     const shiftKey = getShiftKey(day, shiftType);
     if (invalidHoverShiftKey === shiftKey) {
       setInvalidHoverShiftKey(null);
+      setHoverErrorMessage(null);
     }
   };
 
@@ -446,23 +615,26 @@ export function useScheduleDnd({
   ) => {
     event.preventDefault();
 
-    if (locked) {
-      showToast("ロック済みのため移動できません");
+    const activeSource = getActiveDragSource();
+    if (!activeSource) {
       clearDragState();
       return;
     }
 
-    if (toType === "day" && !isHolidayLike) {
-      showToast("平日の日直には配置できません");
+    const feedback = getDropFeedback(activeSource, toDay, toType, locked, isHolidayLike);
+    if (feedback.message) {
+      showToast(feedback.message);
       clearDragState();
       return;
     }
 
     try {
-      if (dragSourceType === "list") {
-        if (!draggingDoctorId) return;
+      if (activeSource.sourceType === "list") {
+        const result =
+          activeSource.mode === "erase"
+            ? buildClearSchedule(toDay, toType)
+            : buildAssignSchedule(toDay, toType, activeSource.doctorId);
 
-        const result = buildAssignSchedule(toDay, toType, draggingDoctorId);
         if (result.errorMessage) {
           showToast(result.errorMessage);
           return;
@@ -473,13 +645,7 @@ export function useScheduleDnd({
         return;
       }
 
-      const parsed = parseDragPayload(event.dataTransfer.getData("text/plain") || dragSourceKey);
-      if (!parsed) {
-        showToast("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
-        return;
-      }
-
-      const result = buildSwapSchedule(parsed.day, parsed.shiftType, toDay, toType);
+      const result = buildSwapSchedule(activeSource.day, activeSource.shiftType, toDay, toType);
       if (result.errorMessage) {
         showToast(result.errorMessage);
         return;
@@ -495,6 +661,34 @@ export function useScheduleDnd({
   const handleShiftTap = (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => {
     if (!isSwapMode) return;
 
+    if (selectedListSelection) {
+      const source: ActiveDragSource =
+        selectedListSelection.mode === "erase"
+          ? { sourceType: "list", mode: "erase" }
+          : { sourceType: "list", mode: "doctor", doctorId: selectedListSelection.doctorId };
+      const feedback = getDropFeedback(source, day, shiftType, locked, isHolidayLike);
+
+      if (feedback.message) {
+        showToast(feedback.message);
+        return;
+      }
+
+      const result =
+        selectedListSelection.mode === "erase"
+          ? buildClearSchedule(day, shiftType)
+          : buildAssignSchedule(day, shiftType, selectedListSelection.doctorId);
+
+      if (result.errorMessage) {
+        showToast(result.errorMessage);
+        return;
+      }
+
+      if (result.nextSchedule) {
+        commitSchedule(result.nextSchedule);
+      }
+      return;
+    }
+
     if (!swapSource) {
       if (locked) {
         showToast("ロック済みの枠は入れ替え元にできません");
@@ -503,7 +697,7 @@ export function useScheduleDnd({
 
       const doctorId = getScheduleDoctorId(day, shiftType);
       if (!doctorId) {
-        showToast("入れ替え元は担当医が入っている枠を選択してください");
+        showToast("入れ替え元に医師が入っている枠を選択してください");
         return;
       }
 
@@ -517,13 +711,20 @@ export function useScheduleDnd({
       return;
     }
 
-    if (locked) {
-      showToast("ロック済みの枠には移動できません");
-      return;
-    }
-
-    if (shiftType === "day" && !isHolidayLike) {
-      showToast("平日の日直には配置できません");
+    const feedback = getDropFeedback(
+      {
+        sourceType: "calendar",
+        day: swapSource.day,
+        shiftType: swapSource.shiftType,
+        doctorId: swapSource.doctorId,
+      },
+      day,
+      shiftType,
+      locked,
+      isHolidayLike
+    );
+    if (feedback.message) {
+      showToast(feedback.message);
       return;
     }
 
@@ -536,7 +737,9 @@ export function useScheduleDnd({
     if (result.nextSchedule) {
       commitSchedule(result.nextSchedule);
     }
-    clearSwapState();
+    setSwapSource(null);
+    setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
   };
 
   const handleShiftDragStart = (
@@ -545,50 +748,167 @@ export function useScheduleDnd({
     shiftType: ShiftType,
     doctorId: string | null | undefined
   ) => {
-    const payload = JSON.stringify({ day, shiftType });
-    event.dataTransfer.setData("text/plain", payload);
+    const source: ActiveDragSource = {
+      sourceType: "calendar",
+      day,
+      shiftType,
+      doctorId: doctorId ?? null,
+    };
+    event.dataTransfer.setData("text/plain", JSON.stringify({ day, shiftType }));
     event.dataTransfer.effectAllowed = "move";
-    setDragSourceKey(payload);
-    setDragSourceType("calendar");
-    setDraggingDoctorId(doctorId ?? null);
-    setInvalidHoverShiftKey(null);
-    setHoverErrorMessage(null);
-    setIsSwapMode(false);
+    applyActiveDragSource(source);
+    clearHoverState();
     setSwapSource(null);
   };
 
-  const handleDoctorListDragStart = (event: DragEvent<HTMLElement>, doctorId: string) => {
-    event.dataTransfer.setData("text/plain", `doctor:${doctorId}`);
-    event.dataTransfer.effectAllowed = "copy";
-    setDragSourceKey(null);
-    setDragSourceType("list");
-    setDraggingDoctorId(doctorId);
-    setInvalidHoverShiftKey(null);
-    setHoverErrorMessage(null);
-    setIsSwapMode(false);
+  const handleDoctorListDragStart = (event: DragEvent<HTMLElement>, doctorId: string | null) => {
+    const source: ActiveDragSource = doctorId
+      ? { sourceType: "list", mode: "doctor", doctorId }
+      : { sourceType: "list", mode: "erase" };
+
+    event.dataTransfer.setData("text/plain", doctorId ? `doctor:${doctorId}` : "doctor:erase");
+    event.dataTransfer.effectAllowed = doctorId ? "copy" : "move";
+    applyActiveDragSource(source);
+    clearHoverState();
     setSwapSource(null);
+  };
+
+  const handleShiftTouchStart = (
+    event: TouchEvent<HTMLElement>,
+    day: number,
+    shiftType: ShiftType,
+    doctorId: string | null | undefined
+  ) => {
+    const touch = event.touches[0];
+    if (!touch || !doctorId) return;
+
+    beginTouchDrag(
+      {
+        sourceType: "calendar",
+        day,
+        shiftType,
+        doctorId,
+      },
+      touch
+    );
+  };
+
+  const handleDoctorListTouchStart = (event: TouchEvent<HTMLElement>, doctorId: string | null) => {
+    const touch = event.touches[0];
+    if (!touch) return;
+
+    beginTouchDrag(
+      doctorId ? { sourceType: "list", mode: "doctor", doctorId } : { sourceType: "list", mode: "erase" },
+      touch
+    );
+  };
+
+  const handleTouchDragMove = (event: TouchEvent<HTMLElement>) => {
+    const activeTouch = touchDragRef.current;
+    const touch = event.touches[0];
+    if (!activeTouch || !touch) return;
+
+    if (!activeTouch.moved) {
+      const deltaX = touch.clientX - activeTouch.startX;
+      const deltaY = touch.clientY - activeTouch.startY;
+      if (Math.hypot(deltaX, deltaY) < 6) return;
+      activeTouch.moved = true;
+    }
+
+    event.preventDefault();
+    updateTouchTargetState(getTouchDropTarget(touch), activeTouch.source);
+  };
+
+  const handleTouchDragEnd = (event: TouchEvent<HTMLElement>) => {
+    const activeTouch = touchDragRef.current;
+    const changedTouch = event.changedTouches[0];
+    if (!activeTouch) return;
+
+    const fallbackTarget = changedTouch ? getTouchDropTarget(changedTouch) : null;
+    const target = touchDropTargetRef.current ?? fallbackTarget;
+    const wasMoved = activeTouch.moved;
+    const source = activeTouch.source;
+
+    touchDragRef.current = null;
+
+    if (!wasMoved) {
+      clearDragState();
+      return;
+    }
+
+    event.preventDefault();
+
+    try {
+      if (!target) return;
+
+      if (target.kind === "trash") {
+        if (source.sourceType !== "calendar") return;
+
+        const result = buildClearSchedule(source.day, source.shiftType);
+        if (result.errorMessage) {
+          showToast(result.errorMessage);
+          return;
+        }
+        if (result.nextSchedule) {
+          commitSchedule(result.nextSchedule);
+          setLockedShiftKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(getShiftKey(source.day, source.shiftType));
+            return next;
+          });
+        }
+        return;
+      }
+
+      const feedback = getDropFeedback(source, target.day, target.shiftType, target.locked, target.isHolidayLike);
+      if (feedback.message) {
+        showToast(feedback.message);
+        return;
+      }
+
+      const result =
+        source.sourceType === "list"
+          ? source.mode === "erase"
+            ? buildClearSchedule(target.day, target.shiftType)
+            : buildAssignSchedule(target.day, target.shiftType, source.doctorId)
+          : buildSwapSchedule(source.day, source.shiftType, target.day, target.shiftType);
+
+      if (result.errorMessage) {
+        showToast(result.errorMessage);
+        return;
+      }
+      if (result.nextSchedule) {
+        commitSchedule(result.nextSchedule);
+      }
+    } finally {
+      clearDragState();
+    }
+  };
+
+  const handleTouchDragCancel = () => {
+    clearDragState();
   };
 
   const handleTrashDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (dragSourceType !== "calendar") return;
+    const activeSource = getActiveDragSource();
+    if (activeSource?.sourceType !== "calendar") return;
+
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setInvalidHoverShiftKey(null);
+    clearHoverState();
   };
 
   const handleTrashDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
 
+    const activeSource = getActiveDragSource();
+    if (activeSource?.sourceType !== "calendar") {
+      clearDragState();
+      return;
+    }
+
     try {
-      if (dragSourceType !== "calendar") return;
-
-      const parsed = parseDragPayload(event.dataTransfer.getData("text/plain") || dragSourceKey);
-      if (!parsed) {
-        showToast("ドラッグ情報の読み取りに失敗しました。もう一度お試しください。");
-        return;
-      }
-
-      const result = buildClearSchedule(parsed.day, parsed.shiftType);
+      const result = buildClearSchedule(activeSource.day, activeSource.shiftType);
       if (result.errorMessage) {
         showToast(result.errorMessage);
         return;
@@ -598,7 +918,7 @@ export function useScheduleDnd({
         commitSchedule(result.nextSchedule);
         setLockedShiftKeys((prev) => {
           const next = new Set(prev);
-          next.delete(getShiftKey(parsed.day, parsed.shiftType));
+          next.delete(getShiftKey(activeSource.day, activeSource.shiftType));
           return next;
         });
       }
@@ -647,7 +967,7 @@ export function useScheduleDnd({
         if (!isActiveDoctorId(doctorId)) return null;
 
         return {
-          date: day,
+          date: `${year}-${pad2(month)}-${pad2(day)}`,
           shift_type: shiftType,
           doctor_id: doctorId,
         };
@@ -656,9 +976,19 @@ export function useScheduleDnd({
 
   useEffect(() => {
     setLockedShiftKeys(new Set());
-    clearDragState();
-    clearSwapState();
+    setDragSourceKey(null);
+    setDragSourceType(null);
+    setDraggingDoctorId(null);
+    setDraggingListMode(null);
+    setInvalidHoverShiftKey(null);
+    setTouchHoverShiftKey(null);
     setHoverErrorMessage(null);
+    touchDropTargetRef.current = null;
+    touchDragRef.current = null;
+    setSwapSource(null);
+    setSelectedListSelection(null);
+    setIsSwapMode(false);
+    setHighlightedDoctorId(null);
     setToastMessage(null);
   }, [year, month]);
 
@@ -679,7 +1009,9 @@ export function useScheduleDnd({
         if (doctorId) next.add(key);
       });
 
-      if (next.size === prev.size) return prev;
+      if (next.size === prev.size && Array.from(next).every((key) => prev.has(key))) {
+        return prev;
+      }
       return next;
     });
   }, [schedule]);
@@ -700,13 +1032,18 @@ export function useScheduleDnd({
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
+    touchHoverShiftKey,
     lockedShiftKeys,
     isShiftLocked,
     isSwapMode,
     swapSource,
+    selectedManualDoctorId: getSelectedManualDoctorId(),
+    isEraseSelectionActive,
     isSwapSourceSelected,
     isHighlightedDoctorBlockedDay,
     toggleHighlightedDoctor,
+    selectManualDoctor,
+    toggleEraseSelection,
     clearDragState,
     toggleSwapMode,
     handleShiftTap,
@@ -717,6 +1054,11 @@ export function useScheduleDnd({
     handleShiftDrop,
     handleShiftDragStart,
     handleDoctorListDragStart,
+    handleShiftTouchStart,
+    handleDoctorListTouchStart,
+    handleTouchDragMove,
+    handleTouchDragEnd,
+    handleTouchDragCancel,
     handleTrashDragOver,
     handleTrashDrop,
     toggleShiftLock,
@@ -725,5 +1067,9 @@ export function useScheduleDnd({
     buildLockedShiftsPayload,
   };
 }
+
+
+
+
 
 

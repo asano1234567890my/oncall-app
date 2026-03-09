@@ -1,4 +1,4 @@
-import { useCallback, useState, type SetStateAction } from "react";
+﻿import { useCallback, useState, type SetStateAction } from "react";
 import type { ScheduleRow } from "../types/dashboard";
 
 type UseScheduleHistoryParams = {
@@ -30,6 +30,24 @@ export function useScheduleHistory({ initialSchedule = [], limit = 15 }: UseSche
       setScheduleState(clonedNext);
     },
     [limit, schedule]
+  );
+
+  const commitScheduleFrom = useCallback(
+    (baseSchedule: ScheduleRow[], nextSchedule: ScheduleRow[]) => {
+      const clonedBase = cloneSchedule(baseSchedule);
+      const clonedNext = cloneSchedule(nextSchedule);
+
+      if (areSchedulesEqual(clonedBase, clonedNext)) {
+        setFutureSchedules([]);
+        setScheduleState(clonedNext);
+        return;
+      }
+
+      setPastSchedules((prev) => [...prev.slice(-(limit - 1)), clonedBase]);
+      setFutureSchedules([]);
+      setScheduleState(clonedNext);
+    },
+    [limit]
   );
 
   const resetSchedule = useCallback((nextSchedule: ScheduleRow[] = []) => {
@@ -65,6 +83,7 @@ export function useScheduleHistory({ initialSchedule = [], limit = 15 }: UseSche
     schedule,
     setSchedule,
     commitSchedule,
+    commitScheduleFrom,
     resetSchedule,
     clearHistory,
     undo,

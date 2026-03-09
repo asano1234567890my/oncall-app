@@ -1,4 +1,4 @@
-export type Doctor = {
+﻿export type Doctor = {
   id: string;
   name: string;
   is_active?: boolean;
@@ -28,7 +28,7 @@ export type DragPayload = {
 };
 
 export type LockedShiftPayload = {
-  date: number;
+  date: string;
   shift_type: ShiftType;
   doctor_id: string;
 };
@@ -82,3 +82,5 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   score_balance: 30,
   target: 10,
 };
+
+

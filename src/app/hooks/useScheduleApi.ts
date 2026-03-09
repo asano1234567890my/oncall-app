@@ -27,6 +27,8 @@ type UseScheduleApiParams = {
   satPrevMap: Record<string, boolean>;
   schedule: ScheduleRow[];
   setSchedule: (nextSchedule: ScheduleRow[]) => void;
+  commitSchedule: (nextSchedule: ScheduleRow[]) => void;
+  commitScheduleFrom: (baseSchedule: ScheduleRow[], nextSchedule: ScheduleRow[]) => void;
   setScores: Dispatch<SetStateAction<Record<string, number | string>>>;
   setDoctors: Dispatch<SetStateAction<Doctor[]>>;
   setSelectedDoctorId: Dispatch<SetStateAction<string>>;
@@ -40,8 +42,10 @@ type UseScheduleApiParams = {
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
   filterRecordByActiveDoctors: <T>(input: Record<string, T>) => Record<string, T>;
   buildLockedShiftsPayload: () => LockedShiftPayload[];
-  onResetLocks: () => void;
+  lockedShiftKeys: Set<string>;
 };
+
+const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 
 export function useScheduleApi({
   year,
@@ -63,6 +67,8 @@ export function useScheduleApi({
   satPrevMap,
   schedule,
   setSchedule,
+  commitSchedule,
+  commitScheduleFrom,
   setScores,
   setDoctors,
   setSelectedDoctorId,
@@ -76,14 +82,14 @@ export function useScheduleApi({
   isHolidayLikeDay,
   filterRecordByActiveDoctors,
   buildLockedShiftsPayload,
-  onResetLocks,
+  lockedShiftKeys,
 }: UseScheduleApiParams) {
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isSaving, setIsSaving] = useState<boolean>(false);
-  const [isDeletingMonthSchedule, setIsDeletingMonthSchedule] = useState<boolean>(false);
-  const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState<boolean>(false);
-  const [saveMessage, setSaveMessage] = useState<string>("");
-  const [error, setError] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingMonthSchedule, setIsDeletingMonthSchedule] = useState(false);
+  const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [error, setError] = useState("");
 
   const normalizeScheduleRows = (rows: ScheduleRow[]) =>
     rows.map((row) => ({
@@ -91,6 +97,13 @@ export function useScheduleApi({
       day_shift: row.day_shift ?? null,
       night_shift: row.night_shift ?? null,
       is_sunhol: Boolean(row.is_sunhol) || isHolidayLikeDay(row.day).isHolidayLike,
+    }));
+
+  const clearUnlockedSchedule = (rows: ScheduleRow[]) =>
+    rows.map((row) => ({
+      ...row,
+      day_shift: lockedShiftKeys.has(`${row.day}_day`) ? row.day_shift ?? null : null,
+      night_shift: lockedShiftKeys.has(`${row.day}_night`) ? row.night_shift ?? null : null,
     }));
 
   const applyUnavailableDaysFromDoctors = (docs: Doctor[]) => {
@@ -104,11 +117,13 @@ export function useScheduleApi({
 
       list.forEach((entry) => {
         if (entry.is_fixed === false) {
-          if (entry.date) {
-            const day = Number(entry.date.slice(-2));
-            if (Number.isFinite(day)) days.push(day);
-          }
-        } else if (entry.day_of_week !== null && entry.day_of_week !== undefined) {
+          if (!entry.date) return;
+          const day = Number(entry.date.slice(-2));
+          if (Number.isFinite(day)) days.push(day);
+          return;
+        }
+
+        if (entry.day_of_week !== null && entry.day_of_week !== undefined) {
           weekdays.push(entry.day_of_week);
         }
       });
@@ -142,18 +157,18 @@ export function useScheduleApi({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/doctors/`);
 
-      if (res.ok) {
-        const data: Doctor[] = await res.json();
-        setDoctors(data);
+      if (!res.ok) return;
 
-        const firstActiveDoctor = data.find((doc) => doc.is_active !== false);
-        setSelectedDoctorId((prev) => prev || firstActiveDoctor?.id || "");
+      const data: Doctor[] = await res.json();
+      setDoctors(data);
 
-        applyUnavailableDaysFromDoctors(data);
-        applyScoresFromDoctors(data);
-      }
+      const firstActiveDoctor = data.find((doc) => doc.is_active !== false);
+      setSelectedDoctorId((prev) => prev || firstActiveDoctor?.id || "");
+
+      applyUnavailableDaysFromDoctors(data);
+      applyScoresFromDoctors(data);
     } catch (err) {
-      console.error("医師リストの取得に失敗:", err);
+      console.error("医師リストの取得に失敗しました", err);
     }
   };
 
@@ -189,47 +204,49 @@ export function useScheduleApi({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }).then(async (res) => {
-          if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            const message = errData.detail || `医師設定の保存に失敗: ${doc.name}`;
-            throw new Error(message);
+          if (res.ok) {
+            return res.json().catch(() => doc);
           }
-          return res.json().catch(() => doc);
+
+          const errData = await res.json().catch(() => ({}));
+          const message = errData.detail || `医師設定の保存に失敗しました: ${doc.name}`;
+          throw new Error(message);
         });
       });
 
       await Promise.all(tasks);
-
-      alert("✅ 全員の休み希望（スコア含む）を保存しました。");
+      alert("全員の休み希望・スコア設定を保存しました");
       await fetchDoctors();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "全員の保存に失敗しました";
+      const message = err instanceof Error ? err.message : "全員の設定保存に失敗しました";
       setError(message);
-      alert(`❌ 保存に失敗しました：${message}`);
+      alert(`設定保存に失敗しました: ${message}`);
     } finally {
       setIsBulkSavingDoctors(false);
     }
   };
 
   const handleDeleteMonthSchedule = async () => {
-    if (!confirm(`${year}年${month}月のシフトを画面上で全クリアします。よろしいですか？`)) return;
+    if (!confirm(`${year}年${month}月のシフトを画面上でクリアします。よろしいですか？`)) return;
 
     setIsDeletingMonthSchedule(true);
     setError("");
 
     try {
-      setSchedule([]);
+      const clearedSchedule = clearUnlockedSchedule(schedule);
+      commitSchedule(clearedSchedule);
       setScores({});
-      onResetLocks();
-      setSaveMessage("画面上のシフトをクリアしました（※まだ保存されていません）");
+      setSaveMessage("固定されていないシフト枠をクリアしました（※まだ保存されていません）");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "画面上のシフトのクリアに失敗しました");
+      setError(err instanceof Error ? err.message : "画面上のシフトクリアに失敗しました");
     } finally {
       setIsDeletingMonthSchedule(false);
     }
   };
 
   const handleGenerate = async () => {
+    const scheduleBeforeGenerate = cloneSchedule(schedule);
+
     setIsLoading(true);
     setError("");
     setSaveMessage("");
@@ -239,8 +256,11 @@ export function useScheduleApi({
       const activeCount = activeDoctors.length;
 
       if (activeCount === 0) {
-        throw new Error("アクティブな医師がいないため最適化できません");
+        throw new Error("有効な医師がいないため、自動生成できません");
       }
+
+      const lockedShifts = buildLockedShiftsPayload();
+      setSchedule(clearUnlockedSchedule(scheduleBeforeGenerate));
 
       const manual = holidays.filter((day) => day >= 1 && day <= daysInMonth);
       const auto = autoHolidayDaysInMonth
@@ -258,7 +278,6 @@ export function useScheduleApi({
       const formattedSatPrev = filterRecordByActiveDoctors(satPrevMap);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const lockedShifts = buildLockedShiftsPayload();
       const res = await fetch(`${apiUrl}/api/optimize/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -286,15 +305,17 @@ export function useScheduleApi({
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.detail || "最適化に失敗しました");
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "自動生成に失敗しました");
       }
 
       const data = await res.json();
-      setSchedule(normalizeScheduleRows((data.schedule ?? []) as ScheduleRow[]));
-      setScores(data.scores);
+      const nextSchedule = normalizeScheduleRows((data.schedule ?? []) as ScheduleRow[]);
+      commitScheduleFrom(scheduleBeforeGenerate, nextSchedule);
+      setScores(data.scores ?? {});
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "最適化に失敗しました");
+      setSchedule(scheduleBeforeGenerate);
+      setError(err instanceof Error ? err.message : "自動生成に失敗しました");
     } finally {
       setIsLoading(false);
     }
@@ -307,7 +328,7 @@ export function useScheduleApi({
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/schedule/save/`, {
+      const res = await fetch(`${apiUrl}/api/schedule/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -322,7 +343,9 @@ export function useScheduleApi({
         }),
       });
 
-      if (!res.ok) throw new Error("保存に失敗しました");
+      if (!res.ok) {
+        throw new Error("保存に失敗しました");
+      }
 
       const data = await res.json();
       setSaveMessage(data.message);
@@ -346,3 +369,6 @@ export function useScheduleApi({
     handleSaveToDB,
   };
 }
+
+
+
