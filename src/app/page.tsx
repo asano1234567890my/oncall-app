@@ -9,12 +9,12 @@ import { useCustomHolidays } from "./hooks/useCustomHolidays";
 import { useHolidays } from "./hooks/useHolidays";
 import { useScheduleApi } from "./hooks/useScheduleApi";
 import { useScheduleDnd } from "./hooks/useScheduleDnd";
+import { useScheduleHistory } from "./hooks/useScheduleHistory";
 import { useRealtimeScores } from "./hooks/useRealtimeScores";
 import {
   DEFAULT_OBJECTIVE_WEIGHTS,
   type Doctor,
   type ObjectiveWeights,
-  type ScheduleRow,
 } from "./types/dashboard";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 
@@ -28,7 +28,7 @@ export default function DashboardPage() {
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
-  const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
+  const { schedule, resetSchedule, commitSchedule, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
@@ -224,6 +224,7 @@ export default function DashboardPage() {
 
   const {
     toastMessage,
+    hoverErrorMessage,
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
@@ -252,7 +253,7 @@ export default function DashboardPage() {
     buildLockedShiftsPayload,
   } = useScheduleDnd({
     schedule,
-    setSchedule,
+    commitSchedule,
     year,
     month,
     prevMonthLastDay,
@@ -295,7 +296,7 @@ export default function DashboardPage() {
     targetScoreMap,
     satPrevMap,
     schedule,
-    setSchedule,
+    setSchedule: resetSchedule,
     setScores,
     setDoctors,
     setSelectedDoctorId,
@@ -325,7 +326,8 @@ export default function DashboardPage() {
   useEffect(() => {
     setPrevMonthLastDay(calcPrevMonthLastDay(year, month));
     setPrevMonthWorkedDaysMap({});
-  }, [year, month]);
+    clearHistory();
+  }, [year, month, clearHistory]);
 
   const toggleHoliday = (day: number) => {
     const ymd = toYmd(year, month, day);
@@ -514,6 +516,7 @@ export default function DashboardPage() {
             <ScheduleBoard
               isLoading={isLoading}
               toastMessage={toastMessage}
+              hoverErrorMessage={hoverErrorMessage}
               dragSourceType={dragSourceType}
               error={error}
               schedule={schedule}
@@ -547,6 +550,11 @@ export default function DashboardPage() {
               onToggleSwapMode={toggleSwapMode}
               onLockAll={handleLockAll}
               onUnlockAll={handleUnlockAll}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onRegenerateUnlocked={handleGenerate}
               onTrashDragOver={handleTrashDragOver}
               onTrashDrop={handleTrashDrop}
               lockedShiftCount={lockedShiftKeys.size}
@@ -562,3 +570,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

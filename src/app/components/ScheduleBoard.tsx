@@ -7,6 +7,7 @@ import type { DoctorScoreEntry, ScheduleRow, ShiftType, SwapSource } from "../ty
 type ScheduleBoardProps = {
   isLoading: boolean;
   toastMessage: string | null;
+  hoverErrorMessage: string | null;
   dragSourceType: "calendar" | "list" | null;
   error: string;
   schedule: ScheduleRow[];
@@ -57,6 +58,11 @@ type ScheduleBoardProps = {
   onToggleSwapMode: () => void;
   onLockAll: () => void;
   onUnlockAll: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
+  onRegenerateUnlocked: () => void;
   onTrashDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onTrashDrop: (event: DragEvent<HTMLDivElement>) => void;
   lockedShiftCount: number;
@@ -70,6 +76,7 @@ type ScheduleBoardProps = {
 export default function ScheduleBoard({
   isLoading,
   toastMessage,
+  hoverErrorMessage,
   dragSourceType,
   error,
   schedule,
@@ -103,6 +110,11 @@ export default function ScheduleBoard({
   onToggleSwapMode,
   onLockAll,
   onUnlockAll,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
+  onRegenerateUnlocked,
   onTrashDragOver,
   onTrashDrop,
   lockedShiftCount,
@@ -146,6 +158,16 @@ export default function ScheduleBoard({
     `flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm active:cursor-grabbing ${
       isSelected ? "border-sky-300 bg-sky-50 ring-1 ring-sky-300" : "border-gray-200 bg-white text-gray-700"
     }`;
+
+  const renderHoverTooltip = (isVisible: boolean) => {
+    if (!isVisible || !hoverErrorMessage) return null;
+
+    return (
+      <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-1 hidden w-44 -translate-x-1/2 rounded-md border border-red-200 bg-white/95 px-2 py-1 text-left text-[10px] font-semibold leading-tight whitespace-pre-line text-red-700 shadow-lg backdrop-blur md:block">
+        {hoverErrorMessage}
+      </div>
+    );
+  };
 
   const renderScheduleTable = (rows: ScheduleRow[], columnKey: string) => (
     <div key={columnKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -268,6 +290,7 @@ export default function ScheduleBoard({
                       >
                         {dayLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                       </button>
+                      {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   ) : (
                     <div
@@ -278,6 +301,7 @@ export default function ScheduleBoard({
                       className={`relative flex min-h-6 w-full items-center justify-center rounded border px-0.5 py-0.5 text-[9px] font-semibold ${disabledDayCellClass}`}
                     >
                       -
+                      {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   )}
                 </td>
@@ -324,6 +348,7 @@ export default function ScheduleBoard({
                     >
                       {nightLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                     </button>
+                    {renderHoverTooltip(nightHoverInvalid)}
                   </div>
                 </td>
               </tr>
@@ -337,8 +362,8 @@ export default function ScheduleBoard({
   return (
     <>
       {toastMessage && (
-        <div className="pointer-events-none fixed inset-x-0 top-3 z-50 flex justify-center px-3">
-          <div className="max-w-[92vw] rounded-2xl border border-red-200 bg-white/95 px-3 py-2 text-[11px] font-bold leading-tight whitespace-pre-line text-red-700 shadow-2xl backdrop-blur">
+        <div className="pointer-events-none fixed left-1/2 top-1/2 z-[100] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 px-3">
+          <div className="rounded-2xl bg-gray-900/90 px-6 py-4 text-center text-sm font-bold leading-snug whitespace-pre-line text-white shadow-2xl backdrop-blur sm:text-lg">
             {toastMessage}
           </div>
         </div>
@@ -352,7 +377,8 @@ export default function ScheduleBoard({
 
       {schedule.length > 0 && (
         <div className="animate-fade-in">
-          <div className="mb-1.5 flex items-start justify-between gap-1">
+          <div className="sticky top-0 z-40 mb-2 space-y-2 bg-white/95 pb-2 backdrop-blur shadow-sm">
+            <div className="flex items-start justify-between gap-1">
             <div className="min-w-0 text-[9px] leading-tight text-gray-500">
               D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモードでタップ操作が使えます。
               {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
@@ -372,6 +398,22 @@ export default function ScheduleBoard({
               </button>
               <button
                 type="button"
+                onClick={onUndo}
+                disabled={!canUndo}
+                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                戻る
+              </button>
+              <button
+                type="button"
+                onClick={onRedo}
+                disabled={!canRedo}
+                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                進む
+              </button>
+              <button
+                type="button"
                 onClick={onLockAll}
                 disabled={!schedule.some((row) => row.day_shift || row.night_shift)}
                 className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] font-bold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
@@ -388,6 +430,14 @@ export default function ScheduleBoard({
               </button>
               <button
                 type="button"
+                onClick={onRegenerateUnlocked}
+                disabled={isLoading}
+                className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-1 text-[9px] font-bold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {lockedShiftCount > 0 ? "未固定枠を再生成" : "全体を自動生成"}
+              </button>
+              <button
+                type="button"
                 onClick={onDeleteMonthSchedule}
                 disabled={isDeletingMonthSchedule}
                 className="rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -395,10 +445,10 @@ export default function ScheduleBoard({
                 {isDeletingMonthSchedule ? "削除中" : "全削除"}
               </button>
             </div>
-          </div>
+            </div>
 
-          <div
-            onDragOver={onTrashDragOver}
+            <div
+              onDragOver={onTrashDragOver}
             onDrop={onTrashDrop}
             className={`mb-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-1 text-[9px] font-bold transition ${
               dragSourceType === "calendar"
@@ -411,7 +461,7 @@ export default function ScheduleBoard({
             <span className="text-[8px] font-medium text-red-400">カレンダー枠のみ有効</span>
           </div>
 
-          <div className="mb-2 rounded-lg border bg-gray-50 p-1.5">
+            <div className="rounded-lg border bg-gray-50 p-1.5">
             <div className="mb-1 text-[9px] font-bold text-gray-700">医師別スコア</div>
             <div className="mb-2 mt-1 flex flex-wrap items-center gap-3 px-1 text-[10px]">
               <span className="text-gray-500">スコアの目安:</span>
@@ -440,6 +490,7 @@ export default function ScheduleBoard({
                 );
               })}
             </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-1">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
@@ -460,3 +511,4 @@ export default function ScheduleBoard({
     </>
   );
 }
+

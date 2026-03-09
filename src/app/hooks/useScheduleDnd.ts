@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import type {
   DragPayload,
   HolidayLikeDayInfo,
@@ -12,7 +12,7 @@ type DragSourceType = "calendar" | "list" | null;
 
 type UseScheduleDndParams = {
   schedule: ScheduleRow[];
-  setSchedule: Dispatch<SetStateAction<ScheduleRow[]>>;
+  commitSchedule: (nextSchedule: ScheduleRow[]) => void;
   year: number;
   month: number;
   prevMonthLastDay: number;
@@ -34,7 +34,7 @@ const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 
 export function useScheduleDnd({
   schedule,
-  setSchedule,
+  commitSchedule,
   year,
   month,
   prevMonthLastDay,
@@ -52,6 +52,7 @@ export function useScheduleDnd({
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
   const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
+  const [hoverErrorMessage, setHoverErrorMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSwapMode, setIsSwapMode] = useState(false);
   const [swapSource, setSwapSource] = useState<SwapSource | null>(null);
@@ -261,12 +262,14 @@ export function useScheduleDnd({
     setDragSourceType(null);
     setDraggingDoctorId(null);
     setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
   };
 
   const clearSwapState = () => {
     setSwapSource(null);
     setIsSwapMode(false);
     setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
   };
 
   const toggleSwapMode = () => {
@@ -360,12 +363,14 @@ export function useScheduleDnd({
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
     setInvalidHoverShiftKey(getShiftKey(day, "day"));
+    setHoverErrorMessage("平日の日直には配置できません");
   };
 
   const handleDisabledDayDragLeave = (day: number) => {
     const shiftKey = getShiftKey(day, "day");
     if (invalidHoverShiftKey === shiftKey) {
       setInvalidHoverShiftKey(null);
+      setHoverErrorMessage(null);
     }
   };
 
@@ -383,6 +388,7 @@ export function useScheduleDnd({
       event.preventDefault();
       event.dataTransfer.dropEffect = "none";
       setInvalidHoverShiftKey(shiftKey);
+      setHoverErrorMessage("ロック済みのため移動できません");
       return;
     }
 
@@ -390,6 +396,7 @@ export function useScheduleDnd({
       event.preventDefault();
       event.dataTransfer.dropEffect = "none";
       setInvalidHoverShiftKey(shiftKey);
+      setHoverErrorMessage("平日の日直には配置できません");
       return;
     }
 
@@ -414,11 +421,13 @@ export function useScheduleDnd({
     if (constraintMessage) {
       event.dataTransfer.dropEffect = "none";
       setInvalidHoverShiftKey(shiftKey);
+      setHoverErrorMessage(constraintMessage);
       return;
     }
 
     event.dataTransfer.dropEffect = dragSourceType === "list" ? "copy" : "move";
     setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
   };
 
   const handleShiftDragLeave = (day: number, shiftType: ShiftType) => {
@@ -459,7 +468,7 @@ export function useScheduleDnd({
           return;
         }
         if (result.nextSchedule) {
-          setSchedule(result.nextSchedule);
+          commitSchedule(result.nextSchedule);
         }
         return;
       }
@@ -476,7 +485,7 @@ export function useScheduleDnd({
         return;
       }
       if (result.nextSchedule) {
-        setSchedule(result.nextSchedule);
+        commitSchedule(result.nextSchedule);
       }
     } finally {
       clearDragState();
@@ -525,7 +534,7 @@ export function useScheduleDnd({
     }
 
     if (result.nextSchedule) {
-      setSchedule(result.nextSchedule);
+      commitSchedule(result.nextSchedule);
     }
     clearSwapState();
   };
@@ -543,6 +552,7 @@ export function useScheduleDnd({
     setDragSourceType("calendar");
     setDraggingDoctorId(doctorId ?? null);
     setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
     setIsSwapMode(false);
     setSwapSource(null);
   };
@@ -554,6 +564,7 @@ export function useScheduleDnd({
     setDragSourceType("list");
     setDraggingDoctorId(doctorId);
     setInvalidHoverShiftKey(null);
+    setHoverErrorMessage(null);
     setIsSwapMode(false);
     setSwapSource(null);
   };
@@ -584,7 +595,7 @@ export function useScheduleDnd({
       }
 
       if (result.nextSchedule) {
-        setSchedule(result.nextSchedule);
+        commitSchedule(result.nextSchedule);
         setLockedShiftKeys((prev) => {
           const next = new Set(prev);
           next.delete(getShiftKey(parsed.day, parsed.shiftType));
@@ -647,6 +658,7 @@ export function useScheduleDnd({
     setLockedShiftKeys(new Set());
     clearDragState();
     clearSwapState();
+    setHoverErrorMessage(null);
     setToastMessage(null);
   }, [year, month]);
 
@@ -684,6 +696,7 @@ export function useScheduleDnd({
 
   return {
     toastMessage,
+    hoverErrorMessage,
     dragSourceType,
     highlightedDoctorId,
     invalidHoverShiftKey,
@@ -712,3 +725,5 @@ export function useScheduleDnd({
     buildLockedShiftsPayload,
   };
 }
+
+

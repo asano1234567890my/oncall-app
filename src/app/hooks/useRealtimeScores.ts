@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import type { Doctor, DoctorScoreEntry, ScheduleRow } from "../types/dashboard";
 
 type UseRealtimeScoresParams = {
@@ -16,13 +16,11 @@ type UseRealtimeScoresParams = {
   targetScoreMap: Record<string, number>;
 };
 
-const HISTORY_LIMIT = 8;
 const SCORE_DAY_WEIGHT = 0.5;
 const SCORE_SATURDAY_NIGHT = 1.5;
 const SCORE_SUNHOL_NIGHT = 1.0;
 const SCORE_WEEKDAY_NIGHT = 1.0;
 
-const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const formatDayKey = (year: number, month: number, day: number) =>
   `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 const isFiniteNumber = (value: number | undefined) => typeof value === "number" && Number.isFinite(value);
@@ -41,24 +39,6 @@ export function useRealtimeScores({
   maxScoreMap,
   targetScoreMap,
 }: UseRealtimeScoresParams) {
-  const previousScheduleRef = useRef<ScheduleRow[] | null>(null);
-  const historyRef = useRef<ScheduleRow[][]>([]);
-
-  useEffect(() => {
-    const nextSnapshot = cloneSchedule(schedule);
-    const prevSnapshot = previousScheduleRef.current;
-
-    if (prevSnapshot) {
-      const prevKey = JSON.stringify(prevSnapshot);
-      const nextKey = JSON.stringify(nextSnapshot);
-      if (prevKey !== nextKey) {
-        historyRef.current = [...historyRef.current, cloneSchedule(prevSnapshot)].slice(-HISTORY_LIMIT);
-      }
-    }
-
-    previousScheduleRef.current = nextSnapshot;
-  }, [schedule]);
-
   const liveScores = useMemo(() => {
     const totals: Record<string, number> = {};
 

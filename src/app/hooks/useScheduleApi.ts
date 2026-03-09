@@ -26,7 +26,7 @@ type UseScheduleApiParams = {
   targetScoreMap: Record<string, number>;
   satPrevMap: Record<string, boolean>;
   schedule: ScheduleRow[];
-  setSchedule: Dispatch<SetStateAction<ScheduleRow[]>>;
+  setSchedule: (nextSchedule: ScheduleRow[]) => void;
   setScores: Dispatch<SetStateAction<Record<string, number | string>>>;
   setDoctors: Dispatch<SetStateAction<Doctor[]>>;
   setSelectedDoctorId: Dispatch<SetStateAction<string>>;
