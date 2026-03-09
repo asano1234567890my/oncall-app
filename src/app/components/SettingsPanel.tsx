@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { Loader2 } from "lucide-react";
+import type { ObjectiveWeights } from "../types/dashboard";
 
 type DashboardDoctor = {
   id: string;
@@ -8,18 +9,6 @@ type DashboardDoctor = {
   is_active?: boolean;
 };
 
-type ObjectiveWeights = {
-  month_fairness: number;
-  past_sat_gap: number;
-  past_sunhol_gap: number;
-  gap5: number;
-  pre_clinic: number;
-  sat_consec: number;
-  sunhol_3rd: number;
-  gap6: number;
-  score_balance: number;
-  target: number;
-};
 
 type WeightChangeSummary = {
   isDefault: boolean;
@@ -97,7 +86,6 @@ type DoctorSettingsPanelProps = {
 
 const weightInputs = [
   { key: "gap5", label: "5日間隔回避", min: 0, max: 200, step: 5, hint: "最大級" },
-  { key: "pre_clinic", label: "外来前日回避", min: 0, max: 200, step: 5, hint: "最大級" },
   { key: "sunhol_3rd", label: "日祝3回目回避", min: 0, max: 200, step: 5, hint: "次点" },
   { key: "sat_consec", label: "連続土曜回避", min: 0, max: 200, step: 5, hint: "次点" },
   { key: "gap6", label: "6日間隔回避", min: 0, max: 200, step: 5, hint: "次点" },
@@ -302,8 +290,7 @@ export function GenerationSettingsPanel({
           <li className="flex gap-2">
             <span className="font-bold text-blue-700 shrink-0">目的</span>
             <span>
-              ５日間隔 ({objectiveWeights.gap5}) ✕外来前日({objectiveWeights.pre_clinic}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd})✕連続土曜(
-              {objectiveWeights.sat_consec}) ✕ ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
+              ５日間隔 ({objectiveWeights.gap5}) ✕日祝３回目回避({objectiveWeights.sunhol_3rd}) ✕連続土曜({objectiveWeights.sat_consec}) ✕ ６日間隔({objectiveWeights.gap6}) ✕ スコア公平({objectiveWeights.score_balance})
             </span>
           </li>
         </ul>

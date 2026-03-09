@@ -3,15 +3,16 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ObjectiveWeights(BaseModel):
     """目的関数の重み設定（ソフト制約の強さ）"""
+    model_config = ConfigDict(extra="ignore")
+
     # OR-Tools制約のため、floatではなくintで定義します
     gap5: int = Field(100, description="勤務後5日目の勤務回避")
     gap6: int = Field(50, description="勤務後6日目の勤務回避")
-    pre_clinic: int = Field(100, description="外来前日の当直回避")
     sat_consec: int = Field(80, description="2ヶ月連続の土曜当直回避")
     score_balance: int = Field(30, description="過去スコアを含めた公平性")
     target: int = Field(10, description="個別ターゲットスコアへの近似")

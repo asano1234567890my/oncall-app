@@ -117,6 +117,23 @@ def test_fixed_unavailable_weekday_dict_format_blocks_matching_night_shifts():
         if wd == 0:
             assert row["night_shift"] != 0
 
+
+def test_fixed_unavailable_weekday_no_longer_blocks_previous_day():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        fixed_unavailable_weekdays={0: [{"day_of_week": 0, "target_shift": "all", "is_soft_penalty": False}]},
+        locked_shifts=[{"date": 7, "shift_type": "night", "doctor_idx": 0}],
+    )
+    opt.build_model()
+    res = opt.solve()
+    assert res["success"] is True
+
+    row7 = next(r for r in res["schedule"] if r["day"] == 7)
+    assert row7["night_shift"] == 0
+
+
 def test_spacing_rule_min_4_days_apart():
     opt = OnCallOptimizer(num_doctors=12, year=2024, month=4, holidays=[29])
     opt.build_model()

@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+﻿import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   Doctor,
   HolidayLikeDayInfo,
@@ -212,25 +212,18 @@ export function useScheduleApi({
   };
 
   const handleDeleteMonthSchedule = async () => {
-    if (!confirm(`${year}年${month}月のシフトを全削除します。よろしいですか？`)) return;
+    if (!confirm(`${year}年${month}月のシフトを画面上で全クリアします。よろしいですか？`)) return;
 
     setIsDeletingMonthSchedule(true);
     setError("");
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { method: "DELETE" });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "月間シフトの削除に失敗しました");
-      }
-
       setSchedule([]);
       setScores({});
       onResetLocks();
-      setSaveMessage("");
+      setSaveMessage("画面上のシフトをクリアしました（※まだ保存されていません）");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "月間シフトの削除に失敗しました");
+      setError(err instanceof Error ? err.message : "画面上のシフトのクリアに失敗しました");
     } finally {
       setIsDeletingMonthSchedule(false);
     }

@@ -6,20 +6,21 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
 import { format, parseISO } from "date-fns";
+import { useCustomHolidays } from "../../hooks/useCustomHolidays";
+import { useHolidays } from "../../hooks/useHolidays";
 import "react-day-picker/dist/style.css";
 
 type UnavailableDay = {
-  date: string | null; // "YYYY-MM-DD"
-  day_of_week: number | null; // 0-6
+  date: string | null;
+  day_of_week: number | null;
   is_fixed: boolean;
 };
 
 type PublicDoctor = {
   name: string;
   is_locked?: boolean;
-  // 互換：どちらが来てもOKにする
-  unavailable_dates?: string[]; // ["YYYY-MM-DD", ...]
-  unavailable_days?: UnavailableDay[]; // DB互換
+  unavailable_dates?: string[];
+  unavailable_days?: UnavailableDay[];
   fixed_weekdays?: number[];
 };
 
@@ -32,11 +33,9 @@ function uniqSort(arr: string[]) {
 }
 
 function toSelectedFromDoctor(data: PublicDoctor): string[] {
-  // 優先：unavailable_dates
   if (Array.isArray(data.unavailable_dates) && data.unavailable_dates.length > 0) {
     return uniqSort(data.unavailable_dates);
   }
-  // 次：unavailable_days（is_fixed=false の date を拾う）
   if (Array.isArray(data.unavailable_days)) {
     const dates = data.unavailable_days
       .filter((u) => u && u.is_fixed === false && typeof u.date === "string" && u.date)
@@ -53,8 +52,6 @@ export default function EntryPage() {
 
   const [doctor, setDoctor] = useState<PublicDoctor | null>(null);
   const [invalid, setInvalid] = useState(false);
-
-  // カレンダー選択（YYYY-MM-DDの集合）
   const [selectedSet, setSelectedSet] = useState<Set<string>>(new Set());
   const selectedDates = useMemo(() => {
     const list = Array.from(selectedSet).map((s) => {
@@ -68,14 +65,43 @@ export default function EntryPage() {
   }, [selectedSet]);
 
   const [month, setMonth] = useState<Date>(new Date());
-
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
 
   const locked = Boolean(doctor?.is_locked);
+  const displayedYear = month.getFullYear();
+  const { holidaySet: standardHolidaySet } = useHolidays(displayedYear);
+  const { manualSet, disabledSet, customError } = useCustomHolidays(displayedYear);
+
+  const mergedHolidaySet = useMemo(() => {
+    const next = new Set<string>(standardHolidaySet);
+    const prefix = `${displayedYear}-`;
+
+    if (customError) {
+      return next;
+    }
+
+    for (const date of disabledSet) {
+      if (date.startsWith(prefix)) next.delete(date);
+    }
+
+    for (const date of manualSet) {
+      if (date.startsWith(prefix)) next.add(date);
+    }
+
+    return next;
+  }, [customError, disabledSet, displayedYear, manualSet, standardHolidaySet]);
+
+  const calendarModifiers = useMemo(
+    () => ({
+      saturday: (day: Date) => day.getDay() === 6,
+      sunday: (day: Date) => day.getDay() === 0,
+      holiday: (day: Date) => mergedHolidaySet.has(ymd(day)),
+    }),
+    [mergedHolidaySet]
+  );
 
   const title = useMemo(() => {
     if (!doctor) return "休み希望入力";
@@ -122,7 +148,7 @@ export default function EntryPage() {
   };
 
   useEffect(() => {
-    fetchDoctor();
+    void fetchDoctor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -170,7 +196,7 @@ export default function EntryPage() {
       if (!res.ok) throw new Error("保存に失敗しました");
 
       setMessage("保存しました");
-      await fetchDoctor(); // ✅ 再取得で同期
+      await fetchDoctor();
     } catch (e) {
       console.error(e);
       setError("保存に失敗しました。通信状況をご確認ください。");
@@ -181,14 +207,14 @@ export default function EntryPage() {
 
   if (invalid) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <div className="w-full max-w-md mx-auto bg-white rounded-xl shadow-sm border p-6 text-center">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="mx-auto w-full max-w-md rounded-xl border bg-white p-6 text-center shadow-sm">
           <div className="text-lg font-bold text-gray-800">無効なURLです</div>
-          <div className="text-sm text-gray-500 mt-2">URLをご確認ください。</div>
+          <div className="mt-2 text-sm text-gray-500">URLをご確認ください。</div>
           <button
             type="button"
             onClick={() => router.back()}
-            className="mt-4 w-full rounded-lg bg-gray-900 text-white font-bold py-3"
+            className="mt-4 w-full rounded-lg bg-gray-900 py-3 font-bold text-white"
           >
             ← 戻る
           </button>
@@ -199,20 +225,19 @@ export default function EntryPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="w-full max-w-md mx-auto p-4 pb-28">
-        <div className="bg-white rounded-xl shadow-sm border p-4">
+      <main className="mx-auto w-full max-w-md p-4 pb-28">
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-lg font-bold text-gray-800 truncate">{title}</div>
-              <div className="text-xs text-gray-500 mt-1">先生の休み希望のみ入力できます。</div>
+              <div className="truncate text-lg font-bold text-gray-800">{title}</div>
+              <div className="mt-1 text-xs text-gray-500">先生の休み希望のみ入力できます。</div>
             </div>
           </div>
 
-          {/* ✅ 当直表閲覧への導線（管理画面へのリンクは一切出さない） */}
           <div className="mt-4">
             <Link
               href="/view"
-              className="block w-full text-center rounded-lg border bg-white hover:bg-gray-50 px-4 py-3 text-sm font-bold text-gray-800"
+              className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
             >
               📅 確定した当直表を見る
             </Link>
@@ -230,51 +255,75 @@ export default function EntryPage() {
             <>
               <section className="mt-6">
                 <div className="text-sm font-bold text-gray-700">個別不可日（カレンダー）</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  日付をタップして選択/解除できます.
-                  ＊前提条件として研究日とその前日は当直は入りません。
-                  ＊外来日前日は当直に含まれるため、ご自身で不可日指定お願いします。
-                  {locked ? "（現在はロック中）" : ""}。
+                <div className="mt-1 text-xs text-gray-500">
+                  日付をタップして選択/解除できます。<br />
+                  前提条件として研究日とその前日は当直には入りません。<br />
+                  外来日前日は当直に含まれるため、ご自身で不可日指定をお願いします。
+                  {locked ? <><br />現在はロック中です。</> : null}
                 </div>
 
                 <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
-  {/* PCは中央寄せ：flexで確実にセンタリング */}
-  <div className="w-full flex justify-center">
-    <div className="w-full md:w-auto md:max-w-[520px] rounded-xl border p-2 max-w-full overflow-hidden">
-      <DayPicker
-        mode="multiple"
-        month={month}
-        onMonthChange={setMonth}
-        selected={selectedDates}
-        onDayClick={onDayClick}
-        className={[
-          "w-full",
-          // セルサイズ（スマホ小さめ / PC少し大きめ）
-          "[--rdp-cell-size:36px] md:[--rdp-cell-size:42px]",
-          // はみ出し防止：内部を必ずw-full
-          "[&_.rdp-months]:w-full",
-          "[&_.rdp-month]:w-full",
-          "[&_.rdp-table]:w-full",
-          // 余白を詰めて横幅節約
-          "[&_.rdp-cell]:p-0",
-          "[&_.rdp-button]:w-full",
-          // ✅ 見出し（March 2026）行を中央寄せっぽく整える
-          "[&_.rdp-caption]:justify-center",
-          "[&_.rdp-caption_label]:text-center",
-          // ナビ（← →）の見た目を左右均等に
-          "[&_.rdp-nav]:gap-2",
-        ].join(" ")}
-        modifiersClassNames={{
-          selected: "bg-indigo-600 text-white",
-          today: "text-indigo-700 font-bold",
-        }}
-      />
-    </div>
-  </div>
-</div>
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4">
+                    <DayPicker
+                      mode="multiple"
+                      month={month}
+                      onMonthChange={setMonth}
+                      selected={selectedDates}
+                      onDayClick={onDayClick}
+                      navLayout="after"
+                      modifiers={calendarModifiers}
+                      className={[
+                        "w-full",
+                        "[--rdp-day-width:2.5rem] [--rdp-day-height:2.5rem]",
+                        "[--rdp-day_button-width:2.5rem] [--rdp-day_button-height:2.5rem]",
+                        "[--rdp-nav_button-width:2.5rem] [--rdp-nav_button-height:2.5rem]",
+                        "[--rdp-months-gap:0px]",
+                        "sm:[--rdp-day-width:2.75rem] sm:[--rdp-day-height:2.75rem]",
+                        "sm:[--rdp-day_button-width:2.75rem] sm:[--rdp-day_button-height:2.75rem]",
+                        "sm:[--rdp-nav_button-width:2.75rem] sm:[--rdp-nav_button-height:2.75rem]",
+                      ].join(" ")}
+                      classNames={{
+                        root: "w-full",
+                        months: "block w-full max-w-none",
+                        month: "w-full space-y-3 sm:space-y-4",
+                        month_caption: "flex min-w-0 items-center justify-center text-center",
+                        caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900 sm:text-lg",
+                        nav: "flex items-center justify-end gap-2",
+                        button_previous:
+                          "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:pointer-events-none disabled:opacity-40 sm:h-11 sm:w-11",
+                        button_next:
+                          "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:pointer-events-none disabled:opacity-40 sm:h-11 sm:w-11",
+                        chevron: "h-4 w-4 fill-current",
+                        month_grid: "w-full table-fixed border-collapse",
+                        weekdays: "border-b border-slate-200/80",
+                        weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400 sm:pb-3 sm:text-xs",
+                        week: "border-b border-slate-100 last:border-b-0",
+                        day: "p-0 text-center align-middle",
+                        day_button:
+                          "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 sm:h-11 sm:w-11 sm:text-[15px]",
+                      }}
+                      modifiersClassNames={{
+                        saturday:
+                          "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
+                        sunday:
+                          "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+                        holiday:
+                          "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+                        selected:
+                          "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
+                        today:
+                          "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
+                        outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
+                        disabled:
+                          "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
+                      }}
+                    />
+                  </div>
+                </div>
 
-                <div className="mt-3 text-xs text-gray-500">
-                  選択中: <span className="font-bold text-gray-800">{selectedSet.size}</span> 日
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
+                  <span>選択中の日数</span>
+                  <span className="text-sm font-bold text-slate-900">{selectedSet.size}日</span>
                 </div>
               </section>
 
@@ -294,14 +343,13 @@ export default function EntryPage() {
         </div>
       </main>
 
-      {/* 下部固定：保存（ロック中はdisabled） */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur border-t">
-        <div className="w-full max-w-md mx-auto p-4">
+      <div className="fixed bottom-0 left-0 right-0 border-t bg-white/90 backdrop-blur">
+        <div className="mx-auto w-full max-w-md p-4">
           <button
             type="button"
             onClick={handleSave}
             disabled={isLoading || isSaving || locked}
-            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 disabled:opacity-50"
+            className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             {locked ? "ロック中（保存不可）" : isSaving ? "保存中..." : "保存する"}
           </button>

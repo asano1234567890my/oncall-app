@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from ortools.sat.python import cp_model
 import calendar
 import datetime
+import random
 
 
 @dataclass
@@ -17,7 +18,7 @@ class ObjectiveWeights:
     past_sunhol_gap: int = 5
     gap5: int = 100
     gap6: int = 50
-    pre_clinic: int = 100
+
     sat_consec: int = 80
     score_balance: int = 30
     target: int = 10
@@ -44,14 +45,12 @@ class OnCallOptimizer:
     - 土曜当直：月1回まで
     - 日直回数：上限2回
     - 日祝勤務（日直+当直）：上限3回
-    - 研究日前日の勤務禁止（固定不可曜日がハードの場合のみ適用）
     - locked_shifts（確定シフト）をハード固定
 
     ソフト制約（目的関数）:
     - 当月公平（max-min）
     - 過去土曜/日祝ギャップ補正
     - gap5, gap6 回避
-    - 外来前日の当直回避
     - 土曜2ヶ月連続回避
     - 個別ターゲットへの近似
     - 過去累積スコアを含む公平性（score_balance）
@@ -112,11 +111,7 @@ class OnCallOptimizer:
         self.sat_prev = sat_prev or {}
 
         # locked_shifts: router/service 側で UUID -> doctor_idx(int) に正規化された確定シフト
-        self.locked_shifts = locked_shifts or []
-
-        # 外来曜日のモック定義 (doctor_idx -> [0=Mon..6=Sun])
-        # TODO: 将来的にDB保持・UI連携。当面はコード上で定義。
-        self.clinic_weekdays = {0: [1], 1: [2]}
+        self.locked_shifts = locked_shifts or []
 
         ow = objective_weights or {}
         self.objective_weights = ObjectiveWeights(
@@ -125,7 +120,6 @@ class OnCallOptimizer:
             past_sunhol_gap=int(ow.get("past_sunhol_gap", 5)),
             gap5=int(ow.get("gap5", 100)),
             gap6=int(ow.get("gap6", 50)),
-            pre_clinic=int(ow.get("pre_clinic", 100)),
             sat_consec=int(ow.get("sat_consec", 80)),
             score_balance=int(ow.get("score_balance", 30)),
             target=int(ow.get("target", 10)),
@@ -339,7 +333,7 @@ class OnCallOptimizer:
                     else:
                         self.model.Add(var == 0)
 
-        # 5) 固定不可曜日（毎週） + 6) 研究日前日の勤務禁止（ハード/ソフト・シフト分離）
+        # 5) 固定不可曜日（毎週、ハード/ソフト・シフト分離）
         for d, items in self.fixed_unavailable_weekdays.items():
             for item in items:
                 normalized = self._normalize_fixed_weekday_entry(item)
@@ -365,12 +359,7 @@ class OnCallOptimizer:
                                 self.model.Add(p_var == var)
                                 soft_unavail_penalties.append(p_var)
                             else:
-                                self.model.Add(var == 0)
-
-                        # 研究日前日の勤務禁止（当月内のみ適用）
-                        # ハード制約（is_soft_penalty == False）の場合のみ前日勤務不可とする
-                        if not is_soft and day > 1:
-                            self.model.Add(self.work[(d, day - 1)] == 0)
+                                self.model.Add(var == 0)
 
         # 7) hard: 4日間隔
         for d in doctors:
@@ -449,21 +438,8 @@ class OnCallOptimizer:
         gap5_sum = self.model.NewIntVar(0, 1000, "gap5_sum")
         self.model.Add(gap5_sum == sum(gap5_vars))
         gap6_sum = self.model.NewIntVar(0, 1000, "gap6_sum")
-        self.model.Add(gap6_sum == sum(gap6_vars))
-
-        # B. 外来前日の当直回避ペナルティ
-        pre_clinic_vars = []
-        for d, clinic_wds in self.clinic_weekdays.items():
-            c_wds_set = set(clinic_wds)
-            for day in days:
-                wd = datetime.date(self.year, self.month, day).weekday()
-                if wd in c_wds_set and day > 1:
-                    pre_clinic_vars.append(self.night_shifts[(d, day - 1)])
-
-        pre_clinic_sum = self.model.NewIntVar(0, 1000, "pre_clinic_sum")
-        self.model.Add(pre_clinic_sum == sum(pre_clinic_vars))
-
-        # C. 土曜2ヶ月連続の回避
+        self.model.Add(gap6_sum == sum(gap6_vars))
+        # B. 土曜2ヶ月連続の回避
         sat_consec_vars = []
         for d in doctors:
             if self.sat_prev.get(d, False):
@@ -474,7 +450,7 @@ class OnCallOptimizer:
         sat_consec_sum = self.model.NewIntVar(0, 1000, "sat_consec_sum")
         self.model.Add(sat_consec_sum == sum(sat_consec_vars))
 
-        # D. 個別ターゲットへの近似ペナルティ
+        # C. 個別ターゲットへの近似ペナルティ
         target_penalties = []
         for d in doctors:
             if d in self.target_score_by_doctor:
@@ -488,7 +464,7 @@ class OnCallOptimizer:
         target_sum = self.model.NewIntVar(0, 10000, "target_sum")
         self.model.Add(target_sum == sum(target_penalties))
 
-        # E. 当月公平・過去補正
+        # D. 当月公平・過去補正
         max_score = self.model.NewIntVar(0, 2000, "max_score")
         min_score = self.model.NewIntVar(0, 2000, "min_score")
         self.model.AddMaxEquality(max_score, doctor_scores)
@@ -541,7 +517,7 @@ class OnCallOptimizer:
         sunhol_gap = self.model.NewIntVar(0, 999, "sunhol_gap")
         self.model.Add(sunhol_gap == sunhol_total_max - sunhol_total_min)
 
-        # E-2. 過去累積スコアを含めた公平性（score_balance）
+        # D-2. 過去累積スコアを含めた公平性（score_balance）
         total_score_with_past: List[cp_model.IntVar] = []
         for d in doctors:
             past_total = int(round(self.past_total_scores.get(d, 0.0) * 10))
@@ -556,7 +532,7 @@ class OnCallOptimizer:
         score_balance_gap = self.model.NewIntVar(0, 100000, "score_balance_gap")
         self.model.Add(score_balance_gap == score_balance_max - score_balance_min)
 
-        # F. 日祝3回目ペナルティ
+        # E. 日祝3回目ペナルティ
         sunhol_3rd_vars = []
         for d in doctors:
             sh_total = sum(self.day_shifts[(d, day)] + self.night_shifts[(d, day)] for day in sunhol_days)
@@ -567,7 +543,7 @@ class OnCallOptimizer:
         sunhol_3rd_sum = self.model.NewIntVar(0, 1000, "sunhol_3rd_sum")
         self.model.Add(sunhol_3rd_sum == sum(sunhol_3rd_vars))
 
-        # G. 忌避日のソフト制約ペナルティ合計
+        # F. 忌避日のソフト制約ペナルティ合計
         soft_unavail_sum = self.model.NewIntVar(0, 10000, "soft_unavail_sum")
         if soft_unavail_penalties:
             self.model.Add(soft_unavail_sum == sum(soft_unavail_penalties))
@@ -583,7 +559,6 @@ class OnCallOptimizer:
             + w.sunhol_fairness * sunhol_month_gap
             + w.gap5 * gap5_sum
             + w.gap6 * gap6_sum
-            + w.pre_clinic * pre_clinic_sum
             + w.sat_consec * sat_consec_sum
             + w.score_balance * score_balance_gap
             + w.target * target_sum
@@ -594,9 +569,13 @@ class OnCallOptimizer:
         self.max_score = max_score
         self.min_score = min_score
 
-    def solve(self, time_limit_seconds: float = 10.0) -> Dict:
+    def solve(self, time_limit_seconds: float = 10.0, random_seed: Optional[int] = None) -> Dict:
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(time_limit_seconds)
+        seed = int(random_seed) if random_seed is not None else random.SystemRandom().randint(1, 2**31 - 1)
+        solver.parameters.random_seed = seed
+        if hasattr(solver.parameters, "randomize_search"):
+            solver.parameters.randomize_search = True
         status = solver.Solve(self.model)
 
         if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):

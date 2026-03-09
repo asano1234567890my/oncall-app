@@ -4,19 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 
 export type Holiday = {
   id: number;
-  date: string; // "YYYY-MM-DD"
+  date: string;
   name: string;
 };
 
-export type HolidayMap = Record<string, Holiday>; // key: "YYYY-MM-DD"
+export type HolidayMap = Record<string, Holiday>;
 
-// =========================================================
-// ✅ 年単位キャッシュ（不要な再フェッチ防止）
-//  - module-scopeなので、同一タブ内で再利用される
-//  - 同年への複数呼び出しも in-flight 共有で二重fetchを防ぐ
-// =========================================================
 const holidayCacheByYear = new Map<number, HolidayMap>();
 const inflightByYear = new Map<number, Promise<HolidayMap>>();
+
+const getErrorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 async function fetchHolidayMapByYear(year: number): Promise<HolidayMap> {
   const cached = holidayCacheByYear.get(year);
@@ -33,15 +30,14 @@ async function fetchHolidayMapByYear(year: number): Promise<HolidayMap> {
     });
 
     if (!res.ok) {
-      throw new Error(`祝日取得に失敗しました（year=${year}）`);
+      throw new Error(`祝日取得に失敗しました (year=${year})`);
     }
 
     const list: Holiday[] = await res.json();
-
     const map: HolidayMap = {};
-    for (const h of list) {
-      // dateは "YYYY-MM-DD" で確定
-      map[h.date] = h;
+
+    for (const holiday of list) {
+      map[holiday.date] = holiday;
     }
 
     holidayCacheByYear.set(year, map);
@@ -68,7 +64,6 @@ export function useHolidays(year: number) {
     const run = async () => {
       if (!Number.isFinite(year) || year <= 0) return;
 
-      // ✅ キャッシュがあれば即反映（体感UX向上）
       const cached = holidayCacheByYear.get(year);
       if (cached) setHolidayMap(cached);
 
@@ -78,8 +73,8 @@ export function useHolidays(year: number) {
       try {
         const map = await fetchHolidayMapByYear(year);
         if (!cancelled) setHolidayMap(map);
-      } catch (e: any) {
-        if (!cancelled) setHolidayError(e?.message || "祝日取得に失敗しました");
+      } catch (error: unknown) {
+        if (!cancelled) setHolidayError(getErrorMessage(error, "祝日取得に失敗しました"));
       } finally {
         if (!cancelled) setIsLoadingHolidays(false);
       }

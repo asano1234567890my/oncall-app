@@ -64,7 +64,6 @@ export type ObjectiveWeights = {
   past_sat_gap: number;
   past_sunhol_gap: number;
   gap5: number;
-  pre_clinic: number;
   sat_consec: number;
   sunhol_3rd: number;
   gap6: number;
@@ -77,7 +76,6 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   past_sat_gap: 10,
   past_sunhol_gap: 5,
   gap5: 100,
-  pre_clinic: 100,
   sat_consec: 80,
   sunhol_3rd: 80,
   gap6: 50,

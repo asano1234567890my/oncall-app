@@ -13,7 +13,7 @@ def test_locked_night_shift_is_forced_with_iso_date():
         ],
     )
     opt.build_model()
-    res = opt.solve()
+    res = opt.solve(random_seed=123)
 
     assert res["success"] is True
     row = next(r for r in res["schedule"] if r["day"] == 5)
@@ -33,7 +33,7 @@ def test_locked_day_shift_is_forced_on_sunday():
         ],
     )
     opt.build_model()
-    res = opt.solve()
+    res = opt.solve(random_seed=123)
 
     assert res["success"] is True
     row = next(r for r in res["schedule"] if r["day"] == 7)
@@ -43,6 +43,6 @@ def test_locked_day_shift_is_forced_on_sunday():
 def test_empty_locked_shifts_keeps_existing_behavior():
     opt = OnCallOptimizer(num_doctors=8, year=2024, month=4, locked_shifts=[])
     opt.build_model()
-    res = opt.solve()
+    res = opt.solve(random_seed=123)
 
     assert res["success"] is True

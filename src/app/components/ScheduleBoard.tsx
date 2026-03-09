@@ -369,6 +369,11 @@ export default function ScheduleBoard({
         </div>
       )}
 
+      {!schedule.length && saveMessage && (
+        <div className="mb-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-[10px] font-bold text-green-800">
+          {saveMessage}
+        </div>
+      )}
       {!schedule.length && !isLoading && !error && (
         <div className="flex min-h-[160px] items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-center text-[10px] text-gray-400">
           左上の「自動生成」ボタンを押してください
@@ -511,4 +516,6 @@ export default function ScheduleBoard({
     </>
   );
 }
+
+
 
