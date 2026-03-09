@@ -31,7 +31,8 @@ async def api_get_custom_holidays(
 
 
 @router.post("/custom_holidays", response_model=CustomHolidaysResponse)
-async def api_post_custom_holidays(
+@router.put("/custom_holidays", response_model=CustomHolidaysResponse)
+async def api_upsert_custom_holidays(
     req: CustomHolidaysUpsertRequest,
     db: AsyncSession = Depends(get_db),
 ):
@@ -43,9 +44,11 @@ async def api_post_custom_holidays(
         "ignored_holidays": req.ignored_holidays,
     }
 
-    await upsert_custom_holidays(db, req.year, value)
+    try:
+        await upsert_custom_holidays(db, req.year, value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    # 返却は保存後の値（整形済み）
     saved = await get_custom_holidays(db, req.year)
     return {
         "year": req.year,

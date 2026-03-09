@@ -15,6 +15,7 @@ import {
   DEFAULT_OBJECTIVE_WEIGHTS,
   type Doctor,
   type ObjectiveWeights,
+  type UnavailableDateMap,
 } from "./types/dashboard";
 import { getDefaultTargetMonth } from "./utils/dateUtils";
 
@@ -32,7 +33,7 @@ export default function DashboardPage() {
   const [, setScores] = useState<Record<string, number | string>>({});
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
-  const [unavailableMap, setUnavailableMap] = useState<Record<string, number[]>>({});
+  const [unavailableMap, setUnavailableMap] = useState<UnavailableDateMap>({});
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<Record<string, number[]>>({});
   const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<string, number[]>>({});
   const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
@@ -121,7 +122,7 @@ export default function DashboardPage() {
 
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
-    return doctorNameById[doctorId] ?? "荳肴・";
+    return doctorNameById[doctorId] ?? "不明";
   };
 
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
@@ -143,14 +144,18 @@ export default function DashboardPage() {
     return activeDoctorIds.includes(doctorId);
   };
 
-  const { holidayMap, holidaySet } = useHolidays(year);
+  const { holidaySet } = useHolidays(year);
   const {
     manualSet: manualHolidaySetYear,
     setManualSet: setManualHolidaySetYear,
     disabledSet: disabledHolidaySetYear,
     setDisabledSet: setDisabledHolidaySetYear,
     isLoadingCustom,
+    isSavingCustom,
     customError,
+    customSaveMessage,
+    hasUnsavedCustomChanges,
+    saveCustomHolidays,
   } = useCustomHolidays(year);
 
   useEffect(() => {
@@ -200,7 +205,7 @@ export default function DashboardPage() {
   const isHolidayLikeDay = (day: number) => {
     const ymd = toYmd(year, month, day);
     const wd = getWeekday(year, month, day);
-    const isSun = wd === "譌･";
+    const isSun = wd === "日";
     const isAutoHoliday = holidaySet.has(ymd);
     const isManualHoliday = manualHolidaySetInMonth.has(ymd);
     return { ymd, wd, isSun, isAutoHoliday, isManualHoliday, isHolidayLike: isSun || isAutoHoliday || isManualHoliday };
@@ -342,7 +347,7 @@ export default function DashboardPage() {
 
   const toggleHoliday = (day: number) => {
     const ymd = toYmd(year, month, day);
-    if (getWeekday(year, month, day) === "譌･") return;
+    if (getWeekday(year, month, day) === "日") return;
 
     setManualHolidaySetYear((prev) => {
       const next = new Set(prev);
@@ -352,22 +357,32 @@ export default function DashboardPage() {
     });
   };
 
-  const toggleUnavailable = (doctorId: string, day: number) => {
+  const toggleUnavailable = (doctorId: string, ymd: string) => {
     if (!doctorId) return;
     setUnavailableMap((prev) => {
-      const currentDays = prev[doctorId] || [];
-      const nextDays = currentDays.includes(day) ? currentDays.filter((value) => value !== day) : [...currentDays, day].sort((a, b) => a - b);
-      return { ...prev, [doctorId]: nextDays };
+      const currentDates = prev[doctorId] || [];
+      const nextDates = currentDates.includes(ymd) ? currentDates.filter((value) => value !== ymd) : [...currentDates, ymd];
+      return { ...prev, [doctorId]: Array.from(new Set(nextDates)).sort() };
     });
   };
 
   const toggleAllUnavailable = () => {
     if (!selectedDoctorId) return;
 
+    const currentMonthPrefix = `${year}-${pad2(month)}-`;
     setUnavailableMap((prev) => {
-      const currentDays = prev[selectedDoctorId] || [];
-      const nextDays = currentDays.length > 0 ? [] : Array.from({ length: getDaysInMonth(year, month) }, (_, index) => index + 1);
-      return { ...prev, [selectedDoctorId]: nextDays };
+      const currentDates = prev[selectedDoctorId] || [];
+      const otherMonthDates = currentDates.filter((value) => !value.startsWith(currentMonthPrefix));
+      const currentMonthDates = currentDates.filter((value) => value.startsWith(currentMonthPrefix));
+      const nextCurrentMonthDates =
+        currentMonthDates.length > 0
+          ? []
+          : Array.from({ length: getDaysInMonth(year, month) }, (_, index) => toYmd(year, month, index + 1));
+
+      return {
+        ...prev,
+        [selectedDoctorId]: Array.from(new Set([...otherMonthDates, ...nextCurrentMonthDates])).sort(),
+      };
     });
   };
 
@@ -452,6 +467,9 @@ export default function DashboardPage() {
             isLoading={isLoading}
             isLoadingCustom={isLoadingCustom}
             customError={customError}
+            isSavingCustom={isSavingCustom}
+            customSaveMessage={customSaveMessage}
+            hasUnsavedCustomChanges={hasUnsavedCustomChanges}
             scoreMin={scoreMin}
             scoreMax={scoreMax}
             objectiveWeights={objectiveWeights}
@@ -461,7 +479,6 @@ export default function DashboardPage() {
             month={month}
             numDoctors={numDoctors}
             activeDoctors={activeDoctors}
-            holidayMap={holidayMap}
             holidayWorkdayOverrides={holidayWorkdayOverrides}
             daysInMonth={daysInMonth}
             selectedDoctorId={selectedDoctorId}
@@ -483,6 +500,9 @@ export default function DashboardPage() {
             isHolidayLikeDay={isHolidayLikeDay}
             onToggleHoliday={toggleHoliday}
             onToggleHolidayOverride={handleHolidayOverrideToggle}
+            onSaveCustomHolidays={() => {
+              void saveCustomHolidays();
+            }}
             onSelectedDoctorChange={setSelectedDoctorId}
             onToggleAllUnavailable={toggleAllUnavailable}
             onToggleUnavailable={toggleUnavailable}

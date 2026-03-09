@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export type CustomHolidaysResponse = {
   year: number;
@@ -13,10 +13,8 @@ export type CustomHolidaysResponse = {
 
 export type CustomHolidaysPostBody = {
   year: number;
-  value: {
-    manual_holidays: string[];
-    ignored_holidays: string[];
-  };
+  manual_holidays: string[];
+  ignored_holidays: string[];
 };
 
 type LoadState = {
@@ -41,6 +39,19 @@ const toSet = (arr: unknown, year: number) => {
   return set;
 };
 
+const buildSignature = (year: number, manualSet: Set<string>, disabledSet: Set<string>) =>
+  JSON.stringify({
+    year,
+    manual: Array.from(manualSet).sort(),
+    disabled: Array.from(disabledSet).sort(),
+  });
+
+const buildRequestBody = (year: number, manualSet: Set<string>, disabledSet: Set<string>): CustomHolidaysPostBody => ({
+  year,
+  manual_holidays: Array.from(manualSet).sort(),
+  ignored_holidays: Array.from(disabledSet).sort(),
+});
+
 async function fetchCustomHolidays(year: number): Promise<LoadState> {
   const cached = cacheByYear.get(year);
   if (cached) return cached;
@@ -61,7 +72,7 @@ async function fetchCustomHolidays(year: number): Promise<LoadState> {
         cacheByYear.set(year, empty);
         return empty;
       }
-      throw new Error(`custom_holidays取得に失敗しました (year=${year})`);
+      throw new Error(`祝日設定の取得に失敗しました (year=${year})`);
     }
 
     const data = (await res.json()) as Partial<CustomHolidaysResponse>;
@@ -82,7 +93,7 @@ async function fetchCustomHolidays(year: number): Promise<LoadState> {
   }
 }
 
-async function saveCustomHolidays(body: CustomHolidaysPostBody): Promise<void> {
+async function persistCustomHolidays(body: CustomHolidaysPostBody): Promise<CustomHolidaysResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const res = await fetch(`${apiUrl}/api/settings/custom_holidays`, {
     method: "POST",
@@ -92,16 +103,28 @@ async function saveCustomHolidays(body: CustomHolidaysPostBody): Promise<void> {
 
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { detail?: string };
-    throw new Error(err.detail || "custom_holidays保存に失敗しました");
+    throw new Error(err.detail || "祝日設定の保存に失敗しました");
   }
+
+  return (await res.json()) as CustomHolidaysResponse;
 }
 
 export function useCustomHolidays(year: number) {
   const [manualSet, setManualSet] = useState<Set<string>>(() => new Set());
   const [disabledSet, setDisabledSet] = useState<Set<string>>(() => new Set());
   const [isLoadingCustom, setIsLoadingCustom] = useState(false);
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
   const [customError, setCustomError] = useState<string>("");
+  const [customSaveMessage, setCustomSaveMessage] = useState<string>("");
   const lastSavedRef = useRef<string>("");
+
+  const currentSignature = useMemo(() => buildSignature(year, manualSet, disabledSet), [year, manualSet, disabledSet]);
+  const hasUnsavedCustomChanges = currentSignature !== lastSavedRef.current;
+
+  useEffect(() => {
+    if (!hasUnsavedCustomChanges) return;
+    setCustomSaveMessage("");
+  }, [hasUnsavedCustomChanges]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,22 +133,24 @@ export function useCustomHolidays(year: number) {
       if (!Number.isFinite(year) || year <= 0) return;
       setIsLoadingCustom(true);
       setCustomError("");
+      setCustomSaveMessage("");
 
       try {
         const loaded = await fetchCustomHolidays(year);
         if (cancelled) return;
 
-        setManualSet(new Set(loaded.manualSet));
-        setDisabledSet(new Set(loaded.disabledSet));
+        const nextManualSet = new Set(loaded.manualSet);
+        const nextDisabledSet = new Set(loaded.disabledSet);
 
-        const signature = JSON.stringify({
-          year,
-          manual: Array.from(loaded.manualSet).sort(),
-          disabled: Array.from(loaded.disabledSet).sort(),
-        });
-        lastSavedRef.current = signature;
+        setManualSet(nextManualSet);
+        setDisabledSet(nextDisabledSet);
+        lastSavedRef.current = buildSignature(year, nextManualSet, nextDisabledSet);
       } catch (error: unknown) {
-        if (!cancelled) setCustomError(getErrorMessage(error, "custom_holidays取得に失敗しました"));
+        if (cancelled) return;
+        setManualSet(new Set());
+        setDisabledSet(new Set());
+        lastSavedRef.current = buildSignature(year, new Set<string>(), new Set<string>());
+        setCustomError(getErrorMessage(error, "祝日設定の取得に失敗しました"));
       } finally {
         if (!cancelled) setIsLoadingCustom(false);
       }
@@ -137,38 +162,33 @@ export function useCustomHolidays(year: number) {
     };
   }, [year]);
 
-  useEffect(() => {
+  const saveCustomHolidays = async () => {
     if (!Number.isFinite(year) || year <= 0) return;
+    if (!hasUnsavedCustomChanges) return;
 
-    const signature = JSON.stringify({
-      year,
-      manual: Array.from(manualSet).sort(),
-      disabled: Array.from(disabledSet).sort(),
-    });
+    setIsSavingCustom(true);
+    setCustomError("");
+    setCustomSaveMessage("");
 
-    if (signature === lastSavedRef.current) return;
+    try {
+      const saved = await persistCustomHolidays(buildRequestBody(year, manualSet, disabledSet));
+      const nextManualSet = toSet(saved.value?.manual_holidays, year);
+      const nextDisabledSet = toSet(saved.value?.ignored_holidays, year);
 
-    const timerId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          await saveCustomHolidays({
-            year,
-            value: {
-              manual_holidays: Array.from(manualSet).sort(),
-              ignored_holidays: Array.from(disabledSet).sort(),
-            },
-          });
-
-          lastSavedRef.current = signature;
-          cacheByYear.set(year, { manualSet: new Set(manualSet), disabledSet: new Set(disabledSet) });
-        } catch (error: unknown) {
-          setCustomError(getErrorMessage(error, "custom_holidays保存に失敗しました"));
-        }
-      })();
-    }, 500);
-
-    return () => window.clearTimeout(timerId);
-  }, [year, manualSet, disabledSet]);
+      setManualSet(new Set(nextManualSet));
+      setDisabledSet(new Set(nextDisabledSet));
+      cacheByYear.set(year, {
+        manualSet: new Set(nextManualSet),
+        disabledSet: new Set(nextDisabledSet),
+      });
+      lastSavedRef.current = buildSignature(year, nextManualSet, nextDisabledSet);
+      setCustomSaveMessage("祝日設定を保存しました");
+    } catch (error: unknown) {
+      setCustomError(getErrorMessage(error, "祝日設定の保存に失敗しました"));
+    } finally {
+      setIsSavingCustom(false);
+    }
+  };
 
   return {
     manualSet,
@@ -176,6 +196,10 @@ export function useCustomHolidays(year: number) {
     disabledSet,
     setDisabledSet,
     isLoadingCustom,
+    isSavingCustom,
     customError,
+    customSaveMessage,
+    hasUnsavedCustomChanges,
+    saveCustomHolidays,
   };
 }

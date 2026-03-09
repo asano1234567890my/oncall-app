@@ -5,12 +5,15 @@
   min_score?: number | null;
   max_score?: number | null;
   target_score?: number | null;
+  unavailable_dates?: string[];
   unavailable_days?: {
     date: string | null;
     day_of_week: number | null;
     is_fixed: boolean;
   }[];
 };
+
+export type UnavailableDateMap = Record<string, string[]>;
 
 export type ShiftType = "day" | "night";
 
@@ -82,5 +85,3 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   score_balance: 30,
   target: 10,
 };
-
-

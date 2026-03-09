@@ -1,7 +1,11 @@
-﻿"use client";
+"use client";
 
+import { useMemo } from "react";
+import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
-import type { ObjectiveWeights } from "../types/dashboard";
+import { DayPicker } from "react-day-picker";
+import "react-day-picker/dist/style.css";
+import type { ObjectiveWeights, UnavailableDateMap } from "../types/dashboard";
 
 type DashboardDoctor = {
   id: string;
@@ -28,6 +32,9 @@ type GenerationSettingsPanelProps = {
   isLoading: boolean;
   isLoadingCustom: boolean;
   customError: string;
+  isSavingCustom: boolean;
+  customSaveMessage: string;
+  hasUnsavedCustomChanges: boolean;
   scoreMin: number;
   scoreMax: number;
   objectiveWeights: ObjectiveWeights;
@@ -37,11 +44,10 @@ type GenerationSettingsPanelProps = {
   month: number;
   numDoctors: number;
   activeDoctors: DashboardDoctor[];
-  holidayMap: Record<string, { name?: string } | undefined>;
   holidayWorkdayOverrides: Set<string>;
   daysInMonth: number;
   selectedDoctorId: string;
-  unavailableMap: Record<string, number[]>;
+  unavailableMap: UnavailableDateMap;
   fixedUnavailableWeekdaysMap: Record<string, number[]>;
   pyWeekdays: number[];
   pyWeekdaysJp: string[];
@@ -59,9 +65,10 @@ type GenerationSettingsPanelProps = {
   isHolidayLikeDay: (day: number) => HolidayMeta;
   onToggleHoliday: (day: number) => void;
   onToggleHolidayOverride: (ymd: string) => void;
+  onSaveCustomHolidays: () => void;
   onSelectedDoctorChange: (doctorId: string) => void;
   onToggleAllUnavailable: () => void;
-  onToggleUnavailable: (doctorId: string, day: number) => void;
+  onToggleUnavailable: (doctorId: string, ymd: string) => void;
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number) => void;
   onPrevMonthLastDayChange: (value: number) => void;
   onTogglePrevMonthWorkedDay: (doctorId: string, prevDay: number) => void;
@@ -100,10 +107,20 @@ const weightInputs = [
   hint: string;
 }>;
 
+const pad2 = (value: number) => String(value).padStart(2, "0");
+const toDateKey = (date: Date) => format(date, "yyyy-MM-dd");
+const parseDateKey = (value: string) => {
+  const parsed = parseISO(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 export function GenerationSettingsPanel({
   isLoading,
   isLoadingCustom,
   customError,
+  isSavingCustom,
+  customSaveMessage,
+  hasUnsavedCustomChanges,
   scoreMin,
   scoreMax,
   objectiveWeights,
@@ -113,7 +130,6 @@ export function GenerationSettingsPanel({
   month,
   numDoctors,
   activeDoctors,
-  holidayMap,
   holidayWorkdayOverrides,
   daysInMonth,
   selectedDoctorId,
@@ -135,6 +151,7 @@ export function GenerationSettingsPanel({
   isHolidayLikeDay,
   onToggleHoliday,
   onToggleHolidayOverride,
+  onSaveCustomHolidays,
   onSelectedDoctorChange,
   onToggleAllUnavailable,
   onToggleUnavailable,
@@ -143,6 +160,79 @@ export function GenerationSettingsPanel({
   onTogglePrevMonthWorkedDay,
   onGenerate,
 }: GenerationSettingsPanelProps) {
+  const displayMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
+  const currentMonthPrefix = `${year}-${pad2(month)}-`;
+  const selectedUnavailableInMonth = useMemo(() => {
+    const selectedDoctorUnavailable = unavailableMap[selectedDoctorId] ?? [];
+    return selectedDoctorUnavailable.filter((value) => value.startsWith(currentMonthPrefix)).sort();
+  }, [currentMonthPrefix, selectedDoctorId, unavailableMap]);
+  const selectedUnavailableDates = useMemo(
+    () => selectedUnavailableInMonth.map(parseDateKey).filter((value): value is Date => value !== null),
+    [selectedUnavailableInMonth]
+  );
+  const calendarModifiers = useMemo(
+    () => ({
+      saturday: (date: Date) => date.getDay() === 6,
+      sunday: (date: Date) => date.getDay() === 0,
+      holiday: (date: Date) => {
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
+        const info = isHolidayLikeDay(date.getDate());
+        return info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd));
+      },
+    }),
+    [holidayWorkdayOverrides, isHolidayLikeDay, month, year]
+  );
+  const holidayCalendarModifiers = useMemo(
+    () => ({
+      saturday: (date: Date) => date.getDay() === 6,
+      sunday: (date: Date) => date.getDay() === 0,
+      autoHoliday: (date: Date) => {
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
+        const info = isHolidayLikeDay(date.getDate());
+        return info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd);
+      },
+      manualHoliday: (date: Date) => {
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
+        return isHolidayLikeDay(date.getDate()).isManualHoliday;
+      },
+      overrideHoliday: (date: Date) => {
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
+        const info = isHolidayLikeDay(date.getDate());
+        return info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd);
+      },
+    }),
+    [holidayWorkdayOverrides, isHolidayLikeDay, month, year]
+  );
+  const holidayCounts = useMemo(() => {
+    let autoCount = 0;
+    let manualCount = 0;
+    let overrideCount = 0;
+
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const info = isHolidayLikeDay(day);
+      if (info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd)) overrideCount += 1;
+      else if (info.isAutoHoliday) autoCount += 1;
+      if (info.isManualHoliday) manualCount += 1;
+    }
+
+    return { autoCount, manualCount, overrideCount };
+  }, [daysInMonth, holidayWorkdayOverrides, isHolidayLikeDay]);
+
+  const handleHolidayDateClick = (date: Date) => {
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
+
+    const day = date.getDate();
+    const info = isHolidayLikeDay(day);
+    if (info.isSun) return;
+
+    if (info.isAutoHoliday) {
+      onToggleHolidayOverride(info.ymd);
+      return;
+    }
+
+    onToggleHoliday(day);
+  };
+
   return (
     <div
       className={`bg-blue-50 p-4 md:p-5 rounded-xl border border-blue-100 col-span-1 h-fit min-w-0 relative transition lg:sticky lg:top-24 ${
@@ -334,76 +424,129 @@ export function GenerationSettingsPanel({
         </div>
       </div>
 
-      <div className="mb-4 md:mb-6">
-        <label className="block text-sm font-bold text-gray-700 mb-2">共通の祝日設定</label>
-        <div className="flex flex-wrap gap-2">
-          {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
-            const { ymd, isSun, isAutoHoliday, isManualHoliday } = isHolidayLikeDay(day);
-            const isSelectedManual = isManualHoliday;
-            const isAutoHolidayOverridden = isAutoHoliday && holidayWorkdayOverrides.has(ymd);
-            const isAutoHolidayEffective = isAutoHoliday && !isAutoHolidayOverridden;
-            const disabled = isSun;
+        <div className="mb-4 md:mb-6 rounded-lg border border-blue-100 bg-white p-3 shadow-sm md:p-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <label className="block text-sm font-bold text-gray-700">病院共通の祝日・休日設定</label>
+            <div className="mt-1 text-[11px] text-gray-500">通常日を押すと追加休日、祝日を押すと平日扱いへ切り替えます。日曜は固定休日です。</div>
+          </div>
 
-            const title = isAutoHoliday
-              ? `祝日：${holidayMap[ymd]?.name || ""}${isAutoHolidayOverridden ? "（平日扱い）" : ""}`
-              : isSun
-              ? "日曜"
-              : isSelectedManual
-              ? "臨時休（手動）"
-              : "";
-
-            const handleClick = () => {
-              if (isSun) return;
-              if (isAutoHoliday) {
-                onToggleHolidayOverride(ymd);
-                return;
-              }
-              onToggleHoliday(day);
-            };
-
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={handleClick}
-                disabled={disabled}
-                title={title}
-                className={`w-8 h-8 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
-                  isAutoHolidayEffective
-                    ? "bg-red-100 text-red-700 border border-red-200"
-                    : isAutoHolidayOverridden
-                    ? "bg-white text-gray-700 border border-red-200"
-                    : isSelectedManual
-                    ? "bg-red-500 text-white"
-                    : isSun
-                    ? "bg-red-50 text-red-300"
-                    : "bg-white border text-gray-600"
-                }`}
-              >
-                {day}
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            onClick={onSaveCustomHolidays}
+            disabled={isLoadingCustom || isSavingCustom || !hasUnsavedCustomChanges}
+            className={`rounded-xl px-4 py-2 text-[12px] font-bold text-white shadow-sm transition ${
+              isLoadingCustom || isSavingCustom || !hasUnsavedCustomChanges
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-rose-600 hover:bg-rose-700"
+            }`}
+          >
+            {isSavingCustom ? "保存中..." : "祝日設定を保存"}
+          </button>
         </div>
+
+        <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
+          <span className="rounded-full border border-red-200 bg-white px-2 py-1 text-red-700">標準祝日</span>
+          <span className="rounded-full border border-red-600 bg-red-500 px-2 py-1 text-white">追加休日</span>
+          <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-amber-800">祝日だが通常出勤</span>
+          <span
+            className={`rounded-full border px-2 py-1 ${
+              hasUnsavedCustomChanges
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {hasUnsavedCustomChanges ? "未保存の変更あり" : "保存済み"}
+          </span>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-rose-100 bg-rose-50/30 p-3 shadow-sm">
+          <DayPicker
+            month={displayMonth}
+            disableNavigation
+            onDayClick={handleHolidayDateClick}
+            modifiers={holidayCalendarModifiers}
+            className={[
+              "w-full",
+              "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
+              "[--rdp-day_button-width:2.35rem] [--rdp-day_button-height:2.35rem]",
+              "[--rdp-months-gap:0px]",
+              "sm:[--rdp-day-width:2.65rem] sm:[--rdp-day-height:2.65rem]",
+              "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
+            ].join(" ")}
+            classNames={{
+              root: "w-full",
+              months: "block w-full max-w-none",
+              month: "w-full space-y-3",
+              month_caption: "flex min-w-0 items-center justify-center text-center",
+              caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
+              nav: "hidden",
+              month_grid: "w-full table-fixed border-collapse",
+              weekdays: "border-b border-slate-200/80",
+              weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
+              week: "border-b border-slate-100 last:border-b-0",
+              day: "p-0 text-center align-middle",
+              day_button:
+                "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+            }}
+            modifiersClassNames={{
+              saturday:
+                "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
+              sunday:
+                "[&>button]:!bg-red-100 [&>button]:!text-red-600 [&>button]:!border-red-200",
+              autoHoliday:
+                "[&>button]:border [&>button]:border-red-300 [&>button]:bg-white [&>button]:text-red-700 hover:[&>button]:bg-red-50",
+              manualHoliday:
+                "[&>button]:!border-red-600 [&>button]:!bg-red-500 [&>button]:!text-white hover:[&>button]:!bg-red-600",
+              overrideHoliday:
+                "[&>button]:!border-amber-300 [&>button]:!bg-amber-100 [&>button]:!text-amber-800 hover:[&>button]:!bg-amber-200",
+              today:
+                "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
+              outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
+            }}
+          />
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
+          <div className="rounded-xl border border-red-100 bg-red-50 px-2 py-2 text-red-700">
+            <div className="font-bold">標準祝日</div>
+            <div className="mt-1 text-sm font-bold">{holidayCounts.autoCount}日</div>
+          </div>
+          <div className="rounded-xl border border-rose-100 bg-rose-50 px-2 py-2 text-rose-700">
+            <div className="font-bold">追加休日</div>
+            <div className="mt-1 text-sm font-bold">{holidayCounts.manualCount}日</div>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50 px-2 py-2 text-amber-700">
+            <div className="font-bold">平日扱い</div>
+            <div className="mt-1 text-sm font-bold">{holidayCounts.overrideCount}日</div>
+          </div>
+        </div>
+
+        {customSaveMessage && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-[11px] font-bold text-emerald-700">
+            {customSaveMessage}
+          </div>
+        )}
       </div>
 
-      <div className="mb-4 md:mb-6 p-3 md:p-4 bg-white rounded-lg border border-blue-100 shadow-sm relative">
-        <div className="flex justify-between items-center mb-3">
-          <label className="text-sm font-bold text-gray-700 text-center flex-grow pl-10">👨‍⚕️ 個別休み希望</label>
+
+      <div className="mb-4 md:mb-6 rounded-lg border border-blue-100 bg-white p-3 shadow-sm relative md:p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <label className="text-sm font-bold text-gray-700">個別休み希望</label>
           <button
             type="button"
             onClick={onToggleAllUnavailable}
-            className="text-[10px] text-gray-400 hover:text-red-600 border border-transparent hover:border-red-200 rounded px-1.5 py-1 transition-all"
-            title="1日でも不可日があればクリア、なければ月間すべて不可日にします"
+            className="rounded border border-transparent px-2 py-1 text-[10px] text-gray-400 transition-all hover:border-red-200 hover:text-red-600"
+            title="対象月だけを一括クリアまたは一括選択します"
           >
-            ↺ 一括クリア/一括選択
+            ↺ 対象月を一括クリア/一括選択
           </button>
         </div>
 
         <select
           value={selectedDoctorId}
           onChange={(e) => onSelectedDoctorChange(String(e.target.value))}
-          className="w-full p-2 mb-4 border rounded font-bold text-blue-700 bg-blue-50 outline-none"
+          className="mb-3 w-full rounded border bg-blue-50 p-2 font-bold text-blue-700 outline-none"
         >
           {activeDoctors.map((doc) => (
             <option key={doc.id} value={doc.id}>
@@ -412,28 +555,63 @@ export function GenerationSettingsPanel({
           ))}
         </select>
 
-        <div className="flex flex-wrap gap-1 justify-center">
-          {Array.from({ length: daysInMonth }, (_, index) => index + 1).map((day) => {
-            const isSelected = (unavailableMap[selectedDoctorId] || []).includes(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                onClick={() => onToggleUnavailable(selectedDoctorId, day)}
-                className={`w-7 h-7 rounded text-[10px] font-bold transition-all ${
-                  isSelected ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                }`}
-              >
-                {day}
-              </button>
-            );
-          })}
+        <div className="mb-3 text-[11px] text-gray-500">対象年月と連動します。</div>
+
+        <div className="overflow-hidden rounded-2xl border border-indigo-100 bg-indigo-50/40 p-3 shadow-sm">
+          <DayPicker
+            mode="multiple"
+            month={displayMonth}
+            disableNavigation
+            selected={selectedUnavailableDates}
+            onDayClick={(date) => {
+              if (!selectedDoctorId) return;
+              onToggleUnavailable(selectedDoctorId, toDateKey(date));
+            }}
+            modifiers={calendarModifiers}
+            className={[
+              "w-full",
+              "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
+              "[--rdp-day_button-width:2.35rem] [--rdp-day_button-height:2.35rem]",
+              "[--rdp-months-gap:0px]",
+              "sm:[--rdp-day-width:2.65rem] sm:[--rdp-day-height:2.65rem]",
+              "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
+            ].join(" ")}
+            classNames={{
+              root: "w-full",
+              months: "block w-full max-w-none",
+              month: "w-full space-y-3",
+              month_caption: "flex min-w-0 items-center justify-center text-center",
+              caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
+              nav: "hidden",
+              month_grid: "w-full table-fixed border-collapse",
+              weekdays: "border-b border-slate-200/80",
+              weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
+              week: "border-b border-slate-100 last:border-b-0",
+              day: "p-0 text-center align-middle",
+              day_button:
+                "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+            }}
+            modifiersClassNames={{
+              saturday:
+                "[&>button]:bg-blue-50/70 [&>button]:text-blue-600 hover:[&>button]:bg-blue-100/80",
+              sunday:
+                "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+              holiday:
+                "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+              selected:
+                "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
+              today:
+                "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
+              outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
+              disabled:
+                "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
+            }}
+          />
         </div>
 
-        <div className="mt-2 flex justify-between items-center text-[9px]">
-          <span className="text-transparent">ダミー</span>
-          <span className="text-indigo-500 font-bold">選択中: {unavailableMap[selectedDoctorId]?.length || 0} 日</span>
-          <span className="text-transparent">ダミー</span>
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-gray-600">
+          <span className="font-bold">{year}年{month}月</span>
+          <span className="font-bold text-indigo-600">選択中: {selectedUnavailableInMonth.length} 日</span>
         </div>
       </div>
 

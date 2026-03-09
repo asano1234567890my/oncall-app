@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from datetime import date
+from typing import Any, Dict, Iterable, Optional
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.system_setting import SystemSetting
 
@@ -17,6 +18,17 @@ def _default_value() -> Dict[str, Any]:
     return {"manual_holidays": [], "ignored_holidays": []}
 
 
+def _normalize_holiday_values(values: Iterable[Any]) -> list[str]:
+    normalized: set[str] = set()
+    for raw in values:
+        try:
+            parsed = date.fromisoformat(str(raw))
+        except ValueError as exc:
+            raise ValueError(f"Invalid holiday date: {raw}") from exc
+        normalized.add(parsed.isoformat())
+    return sorted(normalized)
+
+
 async def get_custom_holidays(db: AsyncSession, year: int) -> Dict[str, Any]:
     key = _key_for_year(year)
     stmt = select(SystemSetting).where(SystemSetting.key == key)
@@ -26,7 +38,6 @@ async def get_custom_holidays(db: AsyncSession, year: int) -> Dict[str, Any]:
     if row is None or row.value is None:
         return _default_value()
 
-    # JSONBなのでdict想定。欠けていても初期値で補完
     value = dict(row.value)
     value.setdefault("manual_holidays", [])
     value.setdefault("ignored_holidays", [])
@@ -37,8 +48,12 @@ async def upsert_custom_holidays(db: AsyncSession, year: int, value: Dict[str, A
     key = _key_for_year(year)
 
     payload = {
-        "manual_holidays": value.get("manual_holidays", []),
-        "ignored_holidays": value.get("ignored_holidays", []),
+        "manual_holidays": _normalize_holiday_values(
+            value.get("manual_holidays", [])
+        ),
+        "ignored_holidays": _normalize_holiday_values(
+            value.get("ignored_holidays", [])
+        ),
     }
 
     stmt = insert(SystemSetting).values(

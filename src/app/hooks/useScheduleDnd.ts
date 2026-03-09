@@ -1,8 +1,9 @@
-﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   HolidayLikeDayInfo,
   LockedShiftPayload,
+  UnavailableDateMap,
   ScheduleRow,
   ShiftType,
   SwapSource,
@@ -36,7 +37,7 @@ type UseScheduleDndParams = {
   year: number;
   month: number;
   prevMonthLastDay: number;
-  unavailableMap: Record<string, number[]>;
+  unavailableMap: UnavailableDateMap;
   fixedUnavailableWeekdaysMap: Record<string, number[]>;
   prevMonthWorkedDaysMap: Record<string, number[]>;
   getDoctorName: (doctorId: string | null | undefined) => string;
@@ -133,7 +134,8 @@ export function useScheduleDnd({
 
   const isDoctorManuallyUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
     if (!doctorId) return false;
-    return (unavailableMap[doctorId] || []).includes(day);
+    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
+    return (unavailableMap[doctorId] || []).includes(ymd);
   };
 
   const isDoctorFixedUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
