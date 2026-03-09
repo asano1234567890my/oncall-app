@@ -42,6 +42,17 @@ export type HolidayLikeDayInfo = {
   isHolidayLike: boolean;
 };
 
+export type ScoreTone = "default" | "good" | "warn" | "danger";
+
+export type DoctorScoreEntry = {
+  doctorId: string;
+  score: number;
+  min: number;
+  max: number;
+  target: number | null;
+  tone: ScoreTone;
+};
+
 export type ObjectiveWeights = {
   month_fairness: number;
   past_sat_gap: number;

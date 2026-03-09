@@ -645,6 +645,14 @@ export function DoctorSettingsPanel({
           <span className="text-xs font-normal text-gray-500 bg-white px-2 py-1 rounded border border-orange-200">※保存は上の「一括保存」ボタン</span>
         </h3>
 
+        <div className="text-[10px] flex flex-wrap items-center gap-3 mt-1 mb-2 px-1">
+  <span className="text-gray-500">【スコアの目安】</span>
+  <span className="text-green-600 font-bold">目標±0.5以内</span>
+  <span className="text-gray-700 font-bold">目標±1.5未満</span>
+  <span className="text-orange-500 font-bold">目標±1.5以上</span>
+  <span className="text-red-600 font-bold">上限/下限エラー</span>
+</div>
+
         <div className="overflow-x-auto bg-white border rounded-lg">
           <table className="min-w-full text-center text-[12px]">
             <thead className="bg-gray-100 text-gray-600">

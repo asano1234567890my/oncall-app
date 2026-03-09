@@ -2,7 +2,7 @@
 
 import { Lock, Trash2, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
-import type { ScheduleRow, ShiftType } from "../types/dashboard";
+import type { DoctorScoreEntry, ScheduleRow, ShiftType } from "../types/dashboard";
 
 type ScheduleBoardProps = {
   isLoading: boolean;
@@ -11,7 +11,7 @@ type ScheduleBoardProps = {
   error: string;
   schedule: ScheduleRow[];
   scheduleColumns: ScheduleRow[][];
-  scores: Record<string, number | string>;
+  scoreEntries: DoctorScoreEntry[];
   getDoctorName: (doctorId: string | null | undefined) => string;
   highlightedDoctorId: string | null;
   year: number;
@@ -70,7 +70,7 @@ export default function ScheduleBoard({
   error,
   schedule,
   scheduleColumns,
-  scores,
+  scoreEntries,
   getDoctorName,
   highlightedDoctorId,
   year,
@@ -131,6 +131,20 @@ export default function ScheduleBoard({
       locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
     } ${isHighlighted ? "ring-1 ring-sky-500 ring-offset-1" : ""}`;
   };
+
+  const formatScore = (score: number | null) => (score === null ? "-" : score.toFixed(1));
+
+  const getScoreTextClass = (tone: DoctorScoreEntry["tone"]) => {
+    if (tone === "danger") return "text-red-600";
+    if (tone === "warn") return "text-orange-500";
+    if (tone === "good") return "text-green-600";
+    return "text-gray-700";
+  };
+
+  const getScoreChipClass = (isSelected: boolean) =>
+    `flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm active:cursor-grabbing ${
+      isSelected ? "border-sky-300 bg-sky-50 ring-1 ring-sky-300" : "border-gray-200 bg-white text-gray-700"
+    }`;
 
   const renderScheduleTable = (rows: ScheduleRow[], columnKey: string) => (
     <div key={columnKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -355,24 +369,29 @@ export default function ScheduleBoard({
 
           <div className="mb-2 rounded-lg border bg-gray-50 p-1.5">
             <div className="mb-1 text-[9px] font-bold text-gray-700">医師別スコア</div>
+            <div className="text-[10px] flex flex-wrap items-center gap-3 mt-1 mb-2 px-1">
+  <span className="text-gray-500">【スコアの目安】</span>
+  <span className="text-green-600 font-bold">目標±0.5以内</span>
+  <span className="text-gray-700 font-bold">目標±1.5未満</span>
+  <span className="text-orange-500 font-bold">目標±1.5以上</span>
+  <span className="text-red-600 font-bold">上限/下限エラー</span>
+</div>
             <div className="flex flex-wrap gap-1">
-              {Object.entries(scores).map(([doctorId, score]) => {
-                const isSelected = doctorId === highlightedDoctorId;
+              {scoreEntries.map((entry) => {
+                const isSelected = entry.doctorId === highlightedDoctorId;
                 return (
                   <button
-                    key={doctorId}
+                    key={entry.doctorId}
                     type="button"
                     draggable
-                    onDragStart={(event) => onDoctorListDragStart(event, doctorId)}
+                    onDragStart={(event) => onDoctorListDragStart(event, entry.doctorId)}
                     onDragEnd={onClearDragState}
-                    onClick={() => onToggleHighlightedDoctor(doctorId)}
-                    className={`flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm active:cursor-grabbing ${
-                      isSelected ? "border-sky-300 bg-sky-100 text-sky-900" : "border-gray-200 bg-white text-gray-700"
-                    }`}
-                    title="クリックでハイライト / ドラッグで割り当て"
+                    onClick={() => onToggleHighlightedDoctor(entry.doctorId)}
+                    className={getScoreChipClass(isSelected)}
+                    title={`クリックでハイライト / ドラッグで割り当て / Min ${formatScore(entry.min)} / Target ${formatScore(entry.target)} / Max ${formatScore(entry.max)}`}
                   >
-                    <span className="max-w-[4.5rem] truncate font-semibold">{getDoctorName(doctorId)}</span>
-                    <span className="font-bold">{String(score)}</span>
+                    <span className="max-w-[4.5rem] truncate font-semibold text-gray-700">{getDoctorName(entry.doctorId)}</span>
+                    <span className={`font-bold ${getScoreTextClass(entry.tone)}`}>{formatScore(entry.score)}</span>
                   </button>
                 );
               })}

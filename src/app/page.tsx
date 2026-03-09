@@ -9,6 +9,7 @@ import { useCustomHolidays } from "./hooks/useCustomHolidays";
 import { useHolidays } from "./hooks/useHolidays";
 import { useScheduleApi } from "./hooks/useScheduleApi";
 import { useScheduleDnd } from "./hooks/useScheduleDnd";
+import { useRealtimeScores } from "./hooks/useRealtimeScores";
 import {
   DEFAULT_OBJECTIVE_WEIGHTS,
   type Doctor,
@@ -28,7 +29,7 @@ export default function DashboardPage() {
   const [scoreMax, setScoreMax] = useState<number>(4.5);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
-  const [scores, setScores] = useState<Record<string, number | string>>({});
+  const [, setScores] = useState<Record<string, number | string>>({});
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [unavailableMap, setUnavailableMap] = useState<Record<string, number[]>>({});
@@ -204,6 +205,22 @@ export default function DashboardPage() {
     const isManualHoliday = manualHolidaySetInMonth.has(ymd);
     return { ymd, wd, isSun, isAutoHoliday, isManualHoliday, isHolidayLike: isSun || isAutoHoliday || isManualHoliday };
   };
+
+  const { scoreEntries } = useRealtimeScores({
+    activeDoctors,
+    schedule,
+    year,
+    month,
+    holidaySet,
+    manualHolidaySetInMonth,
+    holidayWorkdayOverrides,
+    scoreMin,
+    scoreMax,
+    minScoreMap,
+    maxScoreMap,
+    targetScoreMap,
+  });
+
 
   const {
     dragNotice,
@@ -497,7 +514,7 @@ export default function DashboardPage() {
               error={error}
               schedule={schedule}
               scheduleColumns={scheduleColumns}
-              scores={scores}
+              scoreEntries={scoreEntries}
               getDoctorName={getDoctorName}
               highlightedDoctorId={highlightedDoctorId}
               year={year}
