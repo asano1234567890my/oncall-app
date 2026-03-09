@@ -1,21 +1,13 @@
 "use client";
 
-import { Lock, Unlock } from "lucide-react";
+import { Lock, Trash2, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
-
-type ShiftType = "day" | "night";
-
-type ScheduleRow = {
-  day: number;
-  day_shift?: string | null;
-  night_shift?: string | null;
-  is_holiday?: boolean;
-  is_sunhol?: boolean;
-};
+import type { ScheduleRow, ShiftType } from "../types/dashboard";
 
 type ScheduleBoardProps = {
   isLoading: boolean;
   dragNotice: string;
+  dragSourceType: "calendar" | "list" | null;
   error: string;
   schedule: ScheduleRow[];
   scheduleColumns: ScheduleRow[][];
@@ -55,9 +47,15 @@ type ScheduleBoardProps = {
     shiftType: ShiftType,
     doctorId: string | null | undefined
   ) => void;
+  onDoctorListDragStart: (event: DragEvent<HTMLElement>, doctorId: string) => void;
   onToggleHighlightedDoctor: (doctorId: string | null | undefined) => void;
   onClearDragState: () => void;
   onToggleShiftLock: (day: number, shiftType: ShiftType) => void;
+  onLockAll: () => void;
+  onUnlockAll: () => void;
+  onTrashDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onTrashDrop: (event: DragEvent<HTMLDivElement>) => void;
+  lockedShiftCount: number;
   onDeleteMonthSchedule: () => void;
   isDeletingMonthSchedule: boolean;
   onSaveToDB: () => void;
@@ -68,6 +66,7 @@ type ScheduleBoardProps = {
 export default function ScheduleBoard({
   isLoading,
   dragNotice,
+  dragSourceType,
   error,
   schedule,
   scheduleColumns,
@@ -90,9 +89,15 @@ export default function ScheduleBoard({
   onHandleDisabledDayDragOver,
   onHandleDisabledDayDragLeave,
   onShiftDragStart,
+  onDoctorListDragStart,
   onToggleHighlightedDoctor,
   onClearDragState,
   onToggleShiftLock,
+  onLockAll,
+  onUnlockAll,
+  onTrashDragOver,
+  onTrashDrop,
+  lockedShiftCount,
   onDeleteMonthSchedule,
   isDeletingMonthSchedule,
   onSaveToDB,
@@ -132,10 +137,10 @@ export default function ScheduleBoard({
       <table className="w-full table-fixed bg-white text-center text-[9px] leading-tight md:text-[10px]">
         <thead className="bg-gray-100 text-[8px] text-gray-600">
           <tr>
-            <th className="border-b py-0.5 px-0.5">日付</th>
-            <th className="border-b py-0.5 px-0.5">曜</th>
-            <th className="border-b bg-orange-50 py-0.5 px-0.5">日直</th>
-            <th className="border-b bg-indigo-50 py-0.5 px-0.5">当直</th>
+            <th className="border-b px-0.5 py-0.5">日付</th>
+            <th className="border-b px-0.5 py-0.5">曜日</th>
+            <th className="border-b bg-orange-50 px-0.5 py-0.5">日直</th>
+            <th className="border-b bg-indigo-50 px-0.5 py-0.5">当直</th>
           </tr>
         </thead>
         <tbody>
@@ -191,9 +196,9 @@ export default function ScheduleBoard({
 
             return (
               <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50/30" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
-                <td className={`w-9 py-0.5 px-0.5 align-middle text-[9px] font-semibold ${dateCellClass}`}>{row.day}日</td>
-                <td className={`w-6 py-0.5 px-0.5 align-middle text-[9px] font-bold ${weekdayCellClass}`}>{wd}</td>
-                <td className="w-[42%] py-0.5 px-0.5 align-middle">
+                <td className={`w-9 px-0.5 py-0.5 align-middle text-[9px] font-semibold ${dateCellClass}`}>{row.day}日</td>
+                <td className={`w-6 px-0.5 py-0.5 align-middle text-[9px] font-bold ${weekdayCellClass}`}>{wd}</td>
+                <td className="w-[42%] px-0.5 py-0.5 align-middle">
                   {isDayShiftEnabled ? (
                     <div
                       onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
@@ -213,7 +218,7 @@ export default function ScheduleBoard({
                             onToggleHighlightedDoctor(row.day_shift);
                           }}
                           className={getDoctorBadgeClass(row.day_shift, "day", dayLocked)}
-                          title="クリックで不可日ハイライト"
+                          title="クリックでハイライト / ドラッグで移動"
                         >
                           {getDoctorName(row.day_shift)}
                         </button>
@@ -243,7 +248,7 @@ export default function ScheduleBoard({
                     </div>
                   )}
                 </td>
-                <td className="w-[42%] py-0.5 px-0.5 align-middle">
+                <td className="w-[42%] px-0.5 py-0.5 align-middle">
                   <div
                     onDragEnter={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
                     onDragOver={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
@@ -262,7 +267,7 @@ export default function ScheduleBoard({
                           onToggleHighlightedDoctor(row.night_shift);
                         }}
                         className={getDoctorBadgeClass(row.night_shift, "night", nightLocked)}
-                        title="クリックで不可日ハイライト"
+                        title="クリックでハイライト / ドラッグで移動"
                       >
                         {getDoctorName(row.night_shift)}
                       </button>
@@ -291,11 +296,11 @@ export default function ScheduleBoard({
 
   return (
     <>
-      {dragNotice && <div className="mb-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800 whitespace-pre-line">{dragNotice}</div>}
+      {dragNotice && <div className="mb-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] whitespace-pre-line text-amber-800">{dragNotice}</div>}
 
       {!schedule.length && !isLoading && !error && (
         <div className="flex min-h-[160px] items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-center text-[10px] text-gray-400">
-          左上の「生成」ボタンを押してください
+          左上の「自動生成」ボタンを押してください
         </div>
       )}
 
@@ -303,17 +308,49 @@ export default function ScheduleBoard({
         <div className="animate-fade-in">
           <div className="mb-1.5 flex items-start justify-between gap-1">
             <div className="min-w-0 text-[9px] leading-tight text-gray-500">
-              D&amp;D で移動・入れ替え。医師名クリックで不可日を赤表示。
+              D&amp;D で移動・入替・上書きできます。スコア表から直接割当、ゴミ箱へドロップで解除できます。
               {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
             </div>
-            <button
-              type="button"
-              onClick={onDeleteMonthSchedule}
-              disabled={isDeletingMonthSchedule}
-              className="shrink-0 rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isDeletingMonthSchedule ? "削除中" : "全削除"}
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={onLockAll}
+                disabled={!schedule.some((row) => row.day_shift || row.night_shift)}
+                className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-1 text-[9px] font-bold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                全ロック
+              </button>
+              <button
+                type="button"
+                onClick={onUnlockAll}
+                disabled={lockedShiftCount === 0}
+                className="rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[9px] font-bold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                全解除
+              </button>
+              <button
+                type="button"
+                onClick={onDeleteMonthSchedule}
+                disabled={isDeletingMonthSchedule}
+                className="rounded-md border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDeletingMonthSchedule ? "削除中" : "全削除"}
+              </button>
+            </div>
+          </div>
+
+          <div
+            onDragOver={onTrashDragOver}
+            onDrop={onTrashDrop}
+            className={`mb-2 flex min-h-9 items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-1 text-[9px] font-bold transition ${
+              dragSourceType === "calendar"
+                ? "border-red-400 bg-red-50 text-red-700"
+                : "border-red-200 bg-red-50/70 text-red-500"
+            }`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>{dragSourceType === "calendar" ? "ここにドロップでシフト解除" : "ゴミ箱へドロップでシフト解除"}</span>
+            <span className="text-[8px] font-medium text-red-400">カレンダー枠のみ有効</span>
           </div>
 
           <div className="mb-2 rounded-lg border bg-gray-50 p-1.5">
@@ -325,11 +362,14 @@ export default function ScheduleBoard({
                   <button
                     key={doctorId}
                     type="button"
+                    draggable
+                    onDragStart={(event) => onDoctorListDragStart(event, doctorId)}
+                    onDragEnd={onClearDragState}
                     onClick={() => onToggleHighlightedDoctor(doctorId)}
-                    className={`flex items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm ${
+                    className={`flex cursor-grab items-center gap-1 rounded border px-1 py-0.5 text-[9px] shadow-sm active:cursor-grabbing ${
                       isSelected ? "border-sky-300 bg-sky-100 text-sky-900" : "border-gray-200 bg-white text-gray-700"
                     }`}
-                    title="クリックで不可日ハイライト"
+                    title="クリックでハイライト / ドラッグで割り当て"
                   >
                     <span className="max-w-[4.5rem] truncate font-semibold">{getDoctorName(doctorId)}</span>
                     <span className="font-bold">{String(score)}</span>
@@ -350,7 +390,7 @@ export default function ScheduleBoard({
             >
               {isSaving ? "保存中..." : "このシフトを保存"}
             </button>
-            {saveMessage && <div className="text-[10px] font-bold text-green-800">保存完了: {saveMessage}</div>}
+            {saveMessage && <div className="text-[10px] font-bold text-green-800">保存結果: {saveMessage}</div>}
           </div>
         </div>
       )}
