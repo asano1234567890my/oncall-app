@@ -15,6 +15,7 @@ class ObjectiveWeights(BaseModel):
     target: int = Field(10)
     sunhol_fairness: int = Field(200)
     sunhol_3rd: int = Field(80)
+    weekend_hol_3rd: int = Field(0)
     soft_unavailable: int = Field(100)
 
     month_fairness: int = Field(100)
@@ -53,6 +54,7 @@ class OptimizeRequest(BaseModel):
 
     sat_prev: Dict[str, bool] = Field(default_factory=dict)
     objective_weights: ObjectiveWeights = Field(default_factory=ObjectiveWeights)
+    hard_constraints: Dict[str, Any] = Field(default_factory=dict)
     locked_shifts: List[LockedShift] = Field(default_factory=list)
 
 

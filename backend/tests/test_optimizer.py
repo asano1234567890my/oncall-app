@@ -18,6 +18,20 @@ def _collect_assignments(schedule):
     return out
 
 
+def _count_weekend_holiday_works(schedule, year, month, num_doctors):
+    counts = {d: 0 for d in range(num_doctors)}
+    for row in schedule:
+        day = row["day"]
+        weekday = datetime.date(year, month, day).weekday()
+        if row["is_sunhol"]:
+            counts[row["night_shift"]] += 1
+            if row["day_shift"] is not None:
+                counts[row["day_shift"]] += 1
+        elif weekday == 5 and row["night_shift"] is not None:
+            counts[row["night_shift"]] += 1
+    return counts
+
+
 def test_fill_all_slots_weekday_only():
     opt = OnCallOptimizer(num_doctors=6, year=2024, month=4, holidays=[], score_max=100.0)
     opt.build_model()
@@ -205,3 +219,71 @@ def test_sunhol_fairness_keeps_monthly_gap_within_one_when_evenly_feasible():
 
     spread = max(counts.values()) - min(counts.values())
     assert spread <= 1
+
+
+def test_hard_constraints_can_disable_spacing_rule():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        hard_constraints={"interval_days": 0},
+        locked_shifts=[
+            {"date": 1, "shift_type": "night", "doctor_idx": 0},
+            {"date": 5, "shift_type": "night", "doctor_idx": 0},
+        ],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is True
+    row1 = next(r for r in res["schedule"] if r["day"] == 1)
+    row5 = next(r for r in res["schedule"] if r["day"] == 5)
+    assert row1["night_shift"] == 0
+    assert row5["night_shift"] == 0
+
+
+def test_hard_constraints_can_cap_combined_weekend_holiday_works():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        hard_constraints={"max_weekend_holiday_works": 2},
+        locked_shifts=[
+            {"date": 6, "shift_type": "night", "doctor_idx": 0},
+            {"date": 7, "shift_type": "day", "doctor_idx": 0},
+            {"date": 14, "shift_type": "night", "doctor_idx": 0},
+        ],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is False
+
+
+def test_weekend_hol_3rd_penalty_avoids_three_or_more_when_evenly_feasible():
+    opt = OnCallOptimizer(
+        num_doctors=7,
+        year=2024,
+        month=4,
+        holidays=[29],
+        objective_weights={
+            "month_fairness": 0,
+            "past_sat_gap": 0,
+            "past_sunhol_gap": 0,
+            "gap5": 0,
+            "gap6": 0,
+            "sat_consec": 0,
+            "score_balance": 0,
+            "target": 0,
+            "sunhol_fairness": 0,
+            "sunhol_3rd": 0,
+            "weekend_hol_3rd": 200,
+            "soft_unavailable": 0,
+        },
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is True
+    counts = _count_weekend_holiday_works(res["schedule"], 2024, 4, 7)
+    assert max(counts.values()) <= 2

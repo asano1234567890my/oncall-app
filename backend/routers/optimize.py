@@ -127,6 +127,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
             past_total_scores=formatted_past_total_scores,
             sat_prev=formatted_sat_prev,
             objective_weights=weights_dict,
+            hard_constraints=req.hard_constraints,
             locked_shifts=locked_shifts_idx,
         )
 
@@ -136,7 +137,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
         if not solve_result.get("success"):
             raise HTTPException(
                 status_code=400,
-                detail=solve_result.get("message", "最適化に失敗しました"),
+                detail=solve_result.get("message", "譛驕ｩ蛹悶↓螟ｱ謨励＠縺ｾ縺励◆"),
             )
 
         if isinstance(solve_result.get("schedule"), list):
