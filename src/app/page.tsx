@@ -111,6 +111,7 @@ export default function DashboardPage() {
   const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
   const [dragNotice, setDragNotice] = useState<string>("");
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
+  const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
   const [hoverErrorMessage, setHoverErrorMessage] = useState<string>("");
   // ✅ 要件①：全員一括保存用 state
@@ -267,6 +268,27 @@ export default function DashboardPage() {
 
   const getShiftDoctorIdFromRow = (row: ScheduleRow, shiftType: ShiftType) => (shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null);
 
+  const toggleHighlightedDoctor = (doctorId: string | null | undefined) => {
+    if (!doctorId) return;
+    setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
+  };
+
+  const isDoctorManuallyUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
+    if (!doctorId) return false;
+    return (unavailableMap[doctorId] || []).includes(day);
+  };
+
+  const isDoctorFixedUnavailableOnDay = (doctorId: string | null | undefined, day: number) => {
+    if (!doctorId) return false;
+    const weekdayPy = getWeekdayPy(year, month, day);
+    return (fixedUnavailableWeekdaysMap[doctorId] || []).includes(weekdayPy);
+  };
+
+  const isDoctorBlockedByManualConstraints = (doctorId: string | null | undefined, day: number) =>
+    isDoctorManuallyUnavailableOnDay(doctorId, day) || isDoctorFixedUnavailableOnDay(doctorId, day);
+
+  const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
+
   const setHoverErrorState = (shiftKey: string | null, message = "") => {
     setInvalidHoverShiftKey(shiftKey);
     setHoverErrorMessage(message);
@@ -304,12 +326,12 @@ export default function DashboardPage() {
       return "平日の日直には配置できません";
     }
 
-    if ((unavailableMap[doctorId] || []).includes(day)) {
+    if (isDoctorManuallyUnavailableOnDay(doctorId, day)) {
       return `${doctorName}先生は${month}月${day}日を個別不可申請しています`;
     }
 
-    const weekdayPy = getWeekdayPy(year, month, day);
-    if ((fixedUnavailableWeekdaysMap[doctorId] || []).includes(weekdayPy)) {
+    if (isDoctorFixedUnavailableOnDay(doctorId, day)) {
+      const weekdayPy = getWeekdayPy(year, month, day);
       return `${doctorName}先生は${pyWeekdaysJp[weekdayPy]}曜日を固定不可に設定しています`;
     }
 
@@ -359,6 +381,63 @@ export default function DashboardPage() {
     return null;
   };
 
+  const formatConstraintForTooltip = (doctorId: string, message: string) => {
+    const doctorName = getDoctorName(doctorId);
+    const prefixWithHa = `${doctorName}先生は`;
+    const prefixWithNo = `${doctorName}先生の`;
+
+    if (message.startsWith(prefixWithHa)) {
+      return `【${doctorName}先生】${message.slice(prefixWithHa.length)}`;
+    }
+    if (message.startsWith(prefixWithNo)) {
+      return `【${doctorName}先生】${message.slice(prefixWithNo.length)}`;
+    }
+    return `【${doctorName}先生】${message}`;
+  };
+
+  const getSwapConstraintMessage = (
+    sourceDoctorId: string | null | undefined,
+    fromDay: number,
+    fromType: ShiftType,
+    toDay: number,
+    toType: ShiftType,
+    options?: {
+      scheduleRows?: ScheduleRow[];
+    }
+  ) => {
+    if (!sourceDoctorId) return null;
+
+    const scheduleRows = options?.scheduleRows ?? schedule;
+    const messages: string[] = [];
+    const sourceIgnoreShiftKeys = new Set<string>([getShiftKey(fromDay, fromType)]);
+    const sourceMessage = getPlacementConstraintMessage(sourceDoctorId, toDay, toType, {
+      scheduleRows,
+      ignoreShiftKeys: sourceIgnoreShiftKeys,
+    });
+
+    if (sourceMessage) {
+      messages.push(formatConstraintForTooltip(sourceDoctorId, sourceMessage));
+    }
+
+    const targetRow = scheduleRows.find((row) => row.day === toDay);
+    const targetDoctorId = targetRow ? getShiftDoctorIdFromRow(targetRow, toType) : null;
+
+    if (targetDoctorId && targetDoctorId !== sourceDoctorId) {
+      const targetIgnoreShiftKeys = new Set<string>([getShiftKey(toDay, toType)]);
+      const targetMessage = getPlacementConstraintMessage(targetDoctorId, fromDay, fromType, {
+        scheduleRows,
+        ignoreShiftKeys: targetIgnoreShiftKeys,
+      });
+
+      if (targetMessage) {
+        messages.push(formatConstraintForTooltip(targetDoctorId, targetMessage));
+      }
+    }
+
+    if (messages.length === 0) return null;
+    return Array.from(new Set(messages)).join("\n");
+  };
+
   const clearDragState = () => {
     setDragSourceKey(null);
     setDraggingDoctorId(null);
@@ -404,12 +483,9 @@ export default function DashboardPage() {
     }
 
     const sourcePayload = parseDragPayload(dragSourceKey);
-    const ignoreShiftKeys = new Set<string>();
-    if (sourcePayload) {
-      ignoreShiftKeys.add(getShiftKey(sourcePayload.day, sourcePayload.shiftType));
-    }
-
-    const constraintMessage = getPlacementConstraintMessage(draggingDoctorId, day, shiftType, { ignoreShiftKeys });
+    const constraintMessage = sourcePayload
+      ? getSwapConstraintMessage(draggingDoctorId, sourcePayload.day, sourcePayload.shiftType, day, shiftType)
+      : getPlacementConstraintMessage(draggingDoctorId, day, shiftType);
 
     event.preventDefault();
     if (constraintMessage) {
@@ -459,8 +535,7 @@ export default function DashboardPage() {
 
     try {
       const doctorId = draggingDoctorId ?? getScheduleDoctorId(parsed.day, parsed.shiftType);
-      const ignoreShiftKeys = new Set<string>([getShiftKey(parsed.day, parsed.shiftType)]);
-      const constraintMessage = getPlacementConstraintMessage(doctorId, toDay, toType, { ignoreShiftKeys });
+      const constraintMessage = getSwapConstraintMessage(doctorId, parsed.day, parsed.shiftType, toDay, toType);
       if (constraintMessage) {
         setDragNotice(constraintMessage);
         return;
@@ -884,26 +959,12 @@ export default function DashboardPage() {
       const toDoctorId = toRow[toField] ?? null;
       if (!fromDoctorId) return prev;
 
-      const sourceIgnoreShiftKeys = new Set<string>([getShiftKey(fromDay, fromType)]);
-      const moveTargetConflict = getPlacementConstraintMessage(fromDoctorId, toDay, toType, {
+      const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
         scheduleRows: next,
-        ignoreShiftKeys: sourceIgnoreShiftKeys,
       });
       if (moveTargetConflict) {
         setDragNotice(moveTargetConflict);
         return prev;
-      }
-
-      if (toDoctorId) {
-        const targetIgnoreShiftKeys = new Set<string>([getShiftKey(toDay, toType)]);
-        const swapTargetConflict = getPlacementConstraintMessage(toDoctorId, fromDay, fromType, {
-          scheduleRows: next,
-          ignoreShiftKeys: targetIgnoreShiftKeys,
-        });
-        if (swapTargetConflict) {
-          setDragNotice(swapTargetConflict);
-          return prev;
-        }
       }
 
       fromRow[fromField] = toDoctorId;
@@ -1169,7 +1230,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
   };
 
   const handleShiftDragStart = (
-    event: DragEvent<HTMLSpanElement>,
+    event: DragEvent<HTMLElement>,
     day: number,
     shiftType: "day" | "night",
     doctorId: string | null | undefined
@@ -1278,12 +1339,14 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
               scheduleColumns={scheduleColumns}
               scores={scores}
               getDoctorName={getDoctorName}
+              highlightedDoctorId={highlightedDoctorId}
               year={year}
               month={month}
               holidaySet={holidaySet}
               manualHolidaySetInMonth={manualHolidaySetInMonth}
               toYmd={toYmd}
               getWeekday={getWeekday}
+              isHighlightedDoctorBlockedDay={isHighlightedDoctorBlockedDay}
               isShiftLocked={isShiftLocked}
               invalidHoverShiftKey={invalidHoverShiftKey}
               hoverErrorMessage={hoverErrorMessage}
@@ -1293,6 +1356,7 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
               onHandleDisabledDayDragOver={handleDisabledDayDragOver}
               onHandleDisabledDayDragLeave={handleDisabledDayDragLeave}
               onShiftDragStart={handleShiftDragStart}
+              onToggleHighlightedDoctor={toggleHighlightedDoctor}
               onClearDragState={clearDragState}
               onToggleShiftLock={toggleShiftLock}
               onDeleteMonthSchedule={handleDeleteMonthSchedule}
@@ -1307,4 +1371,3 @@ const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))
     </div>
   );
 }
-
