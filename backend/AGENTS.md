@@ -45,6 +45,13 @@
 
 - DB 主キーとフロントとの通信は UUID を維持する。
 - 外部I/O を配列インデックス前提に戻さない。
+- 外部I/O と DB は UUID ベース
+
+/api/optimize の router / service 境界で UUID ↔ int 変換を行う
+
+optimizer 内部は連続整数インデックスのみを扱う
+
+optimize の response は UUID に復元して返す
 
 ### 4-2. system_settings の JSONB 構造
 
