@@ -114,7 +114,7 @@ export function useScheduleDnd({
     shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
 
   const getPositiveConstraintValue = (value: number | null | undefined) => {
-    if (!Number.isFinite(value)) return null;
+    if (typeof value !== "number" || !Number.isFinite(value)) return null;
     const rounded = Math.max(0, Math.round(value));
     return rounded > 0 ? rounded : null;
   };
