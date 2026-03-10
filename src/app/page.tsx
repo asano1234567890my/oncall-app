@@ -362,8 +362,10 @@ export default function DashboardPage() {
     selectManualDoctor,
     toggleEraseSelection,
     clearDragState,
+    cancelSwapSelection,
     toggleSwapMode,
     handleShiftTap,
+    handleSwapButtonPress,
     handleDisabledDayDragOver,
     handleDisabledDayDragLeave,
     handleShiftDragOver,
@@ -865,6 +867,8 @@ export default function DashboardPage() {
               onTouchDragEnd={handleTouchDragEnd}
               onTouchDragCancel={handleTouchDragCancel}
               onShiftTap={handleShiftTap}
+              onSwapButtonPress={handleSwapButtonPress}
+              onCancelSwapSelection={cancelSwapSelection}
               onToggleHighlightedDoctor={toggleHighlightedDoctor}
               onSelectManualDoctor={selectManualDoctor}
               onToggleEraseSelection={toggleEraseSelection}

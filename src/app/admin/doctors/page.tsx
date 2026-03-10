@@ -1,7 +1,6 @@
-// src/app/admin/doctors/page.tsx
-"use client";
+﻿"use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Doctor = {
   id: string;
@@ -18,94 +17,165 @@ export default function DoctorManagerPage() {
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [showInactive, setShowInactive] = useState(false);
-
+  const [showArchived, setShowArchived] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lockingId, setLockingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [hardDeletingId, setHardDeletingId] = useState<string | null>(null);
 
-  const visibleDoctors = useMemo(() => (showInactive ? doctors : doctors.filter((doc) => doc.is_active !== false)), [doctors, showInactive]);
+  const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
+  const archivedDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active === false), [doctors]);
 
   const fetchDoctors = async () => {
     const apiUrl = getApiBase();
-    const res = await fetch(`${apiUrl}/api/doctors`);
-    if (res.ok) setDoctors(await res.json());
+    const response = await fetch(`${apiUrl}/api/doctors`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch doctors");
+    }
+    setDoctors(await response.json());
   };
 
   useEffect(() => {
-    fetchDoctors();
+    fetchDoctors().catch((error) => {
+      console.error(error);
+      alert("\u533b\u5e2b\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+    });
   }, []);
 
   const handleAdd = async () => {
-    if (!newName) return;
+    const trimmedName = newName.trim();
+    if (!trimmedName) return;
+
     const apiUrl = getApiBase();
     await fetch(`${apiUrl}/api/doctors`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newName }),
+      body: JSON.stringify({ name: trimmedName }),
     });
+
     setNewName("");
-    fetchDoctors();
+    await fetchDoctors();
   };
 
-  const handleUpdate = async (id: string) => {
+  const handleUpdate = async (doctorId: string) => {
+    const trimmedName = editName.trim();
+    if (!trimmedName) return;
+
     const apiUrl = getApiBase();
-    await fetch(`${apiUrl}/api/doctors/${id}`, {
+    await fetch(`${apiUrl}/api/doctors/${doctorId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName }),
+      body: JSON.stringify({ name: trimmedName }),
     });
+
     setEditingId(null);
-    fetchDoctors();
+    setEditName("");
+    await fetchDoctors();
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("この医師を退職扱い（非アクティブ化）にしますか？")) return;
+  const handleArchive = async (doctorId: string) => {
+    if (!window.confirm("\u3053\u306e\u533b\u5e2b\u3092\u30a2\u30fc\u30ab\u30a4\u30d6\u3057\u3066\u4e00\u89a7\u304b\u3089\u975e\u8868\u793a\u306b\u3057\u307e\u3059\u304b\uff1f")) return;
+
     const apiUrl = getApiBase();
-    await fetch(`${apiUrl}/api/doctors/${id}`, { method: "DELETE" });
-    fetchDoctors();
+    await fetch(`${apiUrl}/api/doctors/${doctorId}`, { method: "DELETE" });
+    await fetchDoctors();
   };
 
-  const copyEntryUrl = async (doc: Doctor) => {
-    if (!doc.access_token) return;
-
-    const url = `${window.location.origin}/entry/${doc.access_token}`;
+  const handleRestore = async (doctor: Doctor) => {
+    const apiUrl = getApiBase();
+    setRestoringId(doctor.id);
 
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = url;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
+      const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: true }),
+      });
+
+      if (!response.ok) {
+        throw new Error("restore failed");
       }
 
-      setCopiedId(doc.id);
-      window.setTimeout(() => setCopiedId((prev) => (prev === doc.id ? null : prev)), 1500);
-    } catch (e) {
-      console.error(e);
-      alert("コピーに失敗しました（ブラウザ権限をご確認ください）");
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      alert("\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+    } finally {
+      setRestoringId(null);
     }
   };
 
-  const toggleLock = async (doc: Doctor) => {
+  const handleHardDelete = async (doctor: Doctor) => {
+    const confirmed = window.confirm(
+      "\u3053\u306e\u64cd\u4f5c\u306f\u53d6\u308a\u6d88\u305b\u307e\u305b\u3093\u3002\u904e\u53bb\u306e\u5168\u5f53\u76f4\u30c7\u30fc\u30bf\u304b\u3089\u524a\u9664\u3055\u308c\u307e\u3059\u3002\u672c\u5f53\u306b\u3088\u308d\u3057\u3044\u3067\u3059\u304b\uff1f"
+    );
+    if (!confirmed) return;
+
     const apiUrl = getApiBase();
-    setLockingId(doc.id);
+    setHardDeletingId(doctor.id);
+
     try {
-      const res = await fetch(`${apiUrl}/api/doctors/${doc.id}`, {
+      const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}/hard`, { method: "DELETE" });
+      if (!response.ok) {
+        throw new Error("hard delete failed");
+      }
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      alert("\u5b8c\u5168\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+    } finally {
+      setHardDeletingId(null);
+    }
+  };
+
+  const copyEntryUrl = async (doctor: Doctor) => {
+    if (!doctor.access_token) return;
+
+    const entryUrl = `${window.location.origin}/entry/${doctor.access_token}`;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(entryUrl);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = entryUrl;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
+      setCopiedId(doctor.id);
+      window.setTimeout(() => {
+        setCopiedId((previous) => (previous === doctor.id ? null : previous));
+      }, 1500);
+    } catch (error) {
+      console.error(error);
+      alert("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u30d6\u30e9\u30a6\u30b6\u8a2d\u5b9a\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+    }
+  };
+
+  const toggleLock = async (doctor: Doctor) => {
+    const apiUrl = getApiBase();
+    setLockingId(doctor.id);
+
+    try {
+      const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_locked: !Boolean(doc.is_locked) }),
+        body: JSON.stringify({ is_locked: !Boolean(doctor.is_locked) }),
       });
-      if (!res.ok) throw new Error("ロック更新に失敗しました");
+
+      if (!response.ok) {
+        throw new Error("lock update failed");
+      }
+
       await fetchDoctors();
-    } catch (e) {
-      console.error(e);
-      alert("ロック更新に失敗しました");
+    } catch (error) {
+      console.error(error);
+      alert("\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
     } finally {
       setLockingId(null);
     }
@@ -113,151 +183,220 @@ export default function DoctorManagerPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-2xl mx-auto bg-white p-4 sm:p-6 w-full overflow-hidden rounded-xl shadow-md border border-gray-200">
-        <h1 className="text-xl md:text-2xl font-bold mb-6 border-b pb-2 text-gray-800">👨‍⚕️ 医師マスタ管理</h1>
+      <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-md sm:p-6">
+        <h1 className="mb-6 border-b pb-2 text-xl font-bold text-gray-800 md:text-2xl">{"\u533b\u5e2b\u30de\u30b9\u30bf\u7ba1\u7406"}</h1>
 
-        {/* 新規追加（スマホ縦 / PC横） */}
-        <div className="mb-8 bg-blue-50 p-4 rounded-lg border border-blue-100">
-          <div className="flex flex-col sm:flex-row gap-3 w-full max-w-md mx-auto">
+        <div className="mb-8 rounded-lg border border-blue-100 bg-blue-50 p-4">
+          <div className="mx-auto flex w-full max-w-md flex-col gap-3 sm:flex-row">
             <input
               type="text"
-              placeholder="新しい医師の氏名"
+              placeholder={"\u65b0\u3057\u3044\u533b\u5e2b\u540d\u3092\u5165\u529b"}
               value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              className="w-full p-3 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={(event) => setNewName(event.target.value)}
+              className="w-full rounded border border-gray-300 bg-white p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               type="button"
               onClick={handleAdd}
-              className="w-full sm:w-auto whitespace-nowrap bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 rounded font-bold transition-colors shadow-sm"
+              className="w-full whitespace-nowrap rounded bg-blue-600 px-4 py-3 font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:w-auto"
             >
-              追加
+              {"\u8ffd\u52a0"}
             </button>
           </div>
         </div>
 
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-          <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-bold text-gray-700">
-            <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="h-4 w-4 accent-blue-600" />
-            退職者を表示する
-          </label>
-          <span className="text-xs text-gray-500">表示中: {visibleDoctors.length}名 / 全体: {doctors.length}名</span>
+          <div className="text-sm font-bold text-gray-700">{"\u73fe\u5728\u306e\u72b6\u614b"}</div>
+          <span className="text-xs text-gray-500">
+            {"\u8868\u793a\u4e2d: "}{activeDoctors.length}{"\u540d / \u30a2\u30fc\u30ab\u30a4\u30d6: "}{archivedDoctors.length}{"\u540d / \u5168\u4f53: "}{doctors.length}{"\u540d"}
+          </span>
         </div>
 
-        {/* 一覧 */}
         <div className="space-y-3">
-          {visibleDoctors.map((doc) => {
-            const locked = Boolean(doc.is_locked);
-            const isLocking = lockingId === doc.id;
-            const inactive = doc.is_active === false;
+          {activeDoctors.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+              {"\u8868\u793a\u4e2d\u306e\u533b\u5e2b\u306f\u307e\u3060\u3044\u307e\u305b\u3093"}
+            </div>
+          ) : null}
+
+          {activeDoctors.map((doctor) => {
+            const locked = Boolean(doctor.is_locked);
+            const isLocking = lockingId === doctor.id;
 
             return (
               <div
-                key={doc.id}
-                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 border rounded ${
-                  inactive ? "bg-gray-100 border-gray-300 opacity-80" : "hover:bg-gray-50"
-                }`}
+                key={doctor.id}
+                className="flex flex-col gap-3 rounded-lg border p-3 transition-colors hover:bg-gray-50 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0 w-full">
-                  {editingId === doc.id ? (
+                  {editingId === doctor.id ? (
                     <input
                       type="text"
                       value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      onChange={(event) => setEditName(event.target.value)}
+                      className="w-full rounded border p-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   ) : (
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="font-medium text-gray-700 truncate">{doc.name}</div>
-                      {inactive && <span className="shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border bg-gray-200 text-gray-700 border-gray-300">退職</span>}
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className="truncate font-medium text-gray-700">{doctor.name}</div>
                       <span
-                        className={`shrink-0 text-[11px] font-bold px-2 py-0.5 rounded border ${
-                          locked ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        }`}
+                        className={[
+                          "shrink-0 rounded border px-2 py-0.5 text-[11px] font-bold",
+                          locked
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-800",
+                        ].join(" ")}
                       >
-                        {locked ? "ロック中" : "入力可"}
+                        {locked ? "\u30ed\u30c3\u30af\u4e2d" : "\u5165\u529b\u53ef"}
                       </span>
                     </div>
                   )}
 
-                  {doc.access_token ? (
-                    <div className="text-[11px] text-gray-400 mt-1 truncate">/entry/{doc.access_token}</div>
+                  {doctor.access_token ? (
+                    <div className="mt-1 truncate text-[11px] text-gray-400">/entry/{doctor.access_token}</div>
                   ) : (
-                    <div className="text-[11px] text-amber-600 mt-1">※ access_token が未設定です（バックエンド返却を確認）</div>
+                    <div className="mt-1 text-[11px] text-amber-600">
+                      {"access_token \u304c\u672a\u751f\u6210\u3067\u3059\u3002backend \u518d\u751f\u6210\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+                    </div>
                   )}
                 </div>
 
-                {/* ボタン群：モバイル縦積み */}
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto shrink-0">
-                  {/* 🔒 ロック切替 */}
+                <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => toggleLock(doc)}
+                    onClick={() => toggleLock(doctor)}
                     disabled={isLocking}
-                    className={`w-full sm:w-auto whitespace-nowrap px-4 py-2 rounded font-bold border transition-colors disabled:opacity-50
-                      ${
-                        locked
-                          ? "bg-amber-100 text-amber-900 border-amber-200 hover:bg-amber-200"
-                          : "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-200"
-                      }`}
+                    className={[
+                      "w-full whitespace-nowrap rounded border px-4 py-2 font-bold transition-colors disabled:opacity-50 sm:w-auto",
+                      locked
+                        ? "border-amber-200 bg-amber-100 text-amber-900 hover:bg-amber-200"
+                        : "border-gray-200 bg-gray-100 text-gray-800 hover:bg-gray-200",
+                    ].join(" ")}
                   >
-                    {isLocking ? "更新中..." : locked ? "🔓 ロック解除" : "🔒 ロックする"}
+                    {isLocking
+                      ? "\u66f4\u65b0\u4e2d..."
+                      : locked
+                        ? "\u30ed\u30c3\u30af\u89e3\u9664"
+                        : "\u30ed\u30c3\u30af\u3059\u308b"}
                   </button>
 
-                  {/* URLコピー */}
                   <button
                     type="button"
-                    onClick={() => copyEntryUrl(doc)}
-                    disabled={!doc.access_token}
-                    className={`w-full sm:w-auto whitespace-nowrap px-4 py-2 rounded font-bold border transition-colors
-                      ${
-                        copiedId === doc.id
-                          ? "bg-emerald-600 text-white border-emerald-700"
-                          : !doc.access_token
-                          ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed"
-                          : "bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-200"
-                      }`}
+                    onClick={() => copyEntryUrl(doctor)}
+                    disabled={!doctor.access_token}
+                    className={[
+                      "w-full whitespace-nowrap rounded border px-4 py-2 font-bold transition-colors sm:w-auto",
+                      copiedId === doctor.id
+                        ? "border-emerald-700 bg-emerald-600 text-white"
+                        : !doctor.access_token
+                          ? "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400"
+                          : "border-emerald-200 bg-emerald-100 text-emerald-800 hover:bg-emerald-200",
+                    ].join(" ")}
                   >
-                    {copiedId === doc.id ? "コピーしました" : "入力用URLをコピー"}
+                    {copiedId === doctor.id ? "\u30b3\u30d4\u30fc\u6e08\u307f" : "\u5165\u529b\u7528URL\u3092\u30b3\u30d4\u30fc"}
                   </button>
 
-                  {/* 編集/保存 */}
-                  {editingId === doc.id ? (
+                  {editingId === doctor.id ? (
                     <button
                       type="button"
-                      onClick={() => handleUpdate(doc.id)}
-                      className="w-full sm:w-auto whitespace-nowrap text-green-700 font-bold bg-green-100 hover:bg-green-200 px-4 py-2 rounded transition-colors"
+                      onClick={() => handleUpdate(doctor.id)}
+                      className="w-full whitespace-nowrap rounded bg-green-100 px-4 py-2 font-bold text-green-700 transition-colors hover:bg-green-200 sm:w-auto"
                     >
-                      保存
+                      {"\u4fdd\u5b58"}
                     </button>
                   ) : (
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingId(doc.id);
-                        setEditName(doc.name);
+                        setEditingId(doctor.id);
+                        setEditName(doctor.name);
                       }}
-                      className="w-full sm:w-auto whitespace-nowrap text-blue-700 font-bold bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded transition-colors"
+                      className="w-full whitespace-nowrap rounded bg-blue-100 px-4 py-2 font-bold text-blue-700 transition-colors hover:bg-blue-200 sm:w-auto"
                     >
-                      編集
+                      {"\u540d\u524d\u3092\u7de8\u96c6"}
                     </button>
                   )}
 
-                  {/* 削除 */}
                   <button
                     type="button"
-                    onClick={() => handleDelete(doc.id)}
-                    disabled={inactive}
-                    className="w-full sm:w-auto whitespace-nowrap text-red-700 font-bold bg-red-100 hover:bg-red-200 px-4 py-2 rounded transition-colors disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+                    onClick={() => handleArchive(doctor.id)}
+                    title={"\u30a2\u30fc\u30ab\u30a4\u30d6\uff08\u975e\u8868\u793a\uff09"}
+                    className="w-full whitespace-nowrap rounded bg-red-100 px-4 py-2 font-bold text-red-700 transition-colors hover:bg-red-200 sm:w-auto"
                   >
-                    {inactive ? "退職済み" : "削除"}
+                    {"\u30a2\u30fc\u30ab\u30a4\u30d6"}
                   </button>
                 </div>
               </div>
             );
           })}
         </div>
+
+        <div className="mt-8 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <button
+            type="button"
+            onClick={() => setShowArchived((previous) => !previous)}
+            className="flex w-full items-center justify-between gap-3 text-left text-sm font-bold text-gray-700"
+          >
+            <span>
+              {showArchived ? "\u25bc" : "\u25b6"}
+              {" \u30a2\u30fc\u30ab\u30a4\u30d6\u6e08\u307f\u306e\u533b\u5e2b\u3092\u8868\u793a\uff08\u9000\u8077\u8005\u306a\u3069\uff09"}
+            </span>
+            <span className="shrink-0 text-xs text-gray-500">{archivedDoctors.length}{"\u540d"}</span>
+          </button>
+
+          {showArchived ? (
+            <div className="mt-3 space-y-3">
+              {archivedDoctors.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-gray-300 bg-white px-4 py-5 text-center text-sm text-gray-500">
+                  {"\u30a2\u30fc\u30ab\u30a4\u30d6\u6e08\u307f\u306e\u533b\u5e2b\u306f\u3044\u307e\u305b\u3093"}
+                </div>
+              ) : (
+                archivedDoctors.map((doctor) => (
+                  <div
+                    key={doctor.id}
+                    className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="truncate font-medium text-gray-700">{doctor.name}</div>
+                        <span className="shrink-0 rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] font-bold text-gray-700">
+                          {"\u30a2\u30fc\u30ab\u30a4\u30d6\u6e08\u307f"}
+                        </span>
+                      </div>
+                      {doctor.access_token ? (
+                        <div className="mt-1 truncate text-[11px] text-gray-400">/entry/{doctor.access_token}</div>
+                      ) : null}
+                    </div>
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => handleRestore(doctor)}
+                        disabled={restoringId === doctor.id}
+                        className="w-full rounded bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-800 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                      >
+                        {restoringId === doctor.id ? "\u5fa9\u5143\u4e2d..." : "\u5fa9\u5143"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleHardDelete(doctor)}
+                        disabled={hardDeletingId === doctor.id}
+                        className="w-full rounded border border-red-300 bg-red-100 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                      >
+                        {hardDeletingId === doctor.id ? "\u524a\u9664\u4e2d..." : "\u5b8c\u5168\u306b\u524a\u9664"}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div className="text-xs text-red-600">
+                {"\u5b8c\u5168\u524a\u9664\u306f\u5fa9\u5143\u3067\u304d\u307e\u305b\u3093\u3002\u6700\u7d42\u624b\u6bb5\u3068\u3057\u3066\u4f7f\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
+
+

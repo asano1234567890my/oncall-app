@@ -66,6 +66,8 @@ type ScheduleBoardProps = {
   onTouchDragEnd: (event: TouchEvent<HTMLElement>) => void;
   onTouchDragCancel: () => void;
   onShiftTap: (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => void;
+  onSwapButtonPress: (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => void;
+  onCancelSwapSelection: () => void;
   onToggleHighlightedDoctor: (doctorId: string | null | undefined) => void;
   onSelectManualDoctor: (doctorId: string) => void;
   onToggleEraseSelection: () => void;
@@ -133,6 +135,8 @@ export default function ScheduleBoard({
   onTouchDragEnd,
   onTouchDragCancel,
   onShiftTap,
+  onSwapButtonPress,
+  onCancelSwapSelection,
   onToggleHighlightedDoctor,
   onSelectManualDoctor,
   onToggleEraseSelection,
@@ -212,7 +216,7 @@ export default function ScheduleBoard({
 
   const renderScheduleTable = (rows: ScheduleRow[], columnKey: string) => (
     <div key={columnKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="w-full table-fixed bg-white text-center text-[8px] leading-tight sm:text-[10px]">
+      <table className="w-full table-fixed select-none bg-white text-center text-[8px] leading-tight sm:text-[10px]">
         <thead className="bg-gray-100 text-[8px] text-gray-600">
           <tr>
             <th className="w-6 border-b px-0.5 py-0.5 sm:w-8">日付</th>
@@ -253,7 +257,7 @@ export default function ScheduleBoard({
                 ? "border-blue-100 bg-blue-50 text-blue-600"
                 : "text-gray-500";
             const dayCellClass = daySwapSelected
-              ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
+              ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
               : dayHoverInvalid
                 ? "cursor-not-allowed border-red-300 bg-red-200"
                 : dayTouchHovered
@@ -266,7 +270,7 @@ export default function ScheduleBoard({
                       ? "border-red-200 bg-red-100"
                       : "border-transparent bg-white hover:border-gray-200";
             const nightCellClass = nightSwapSelected
-              ? "border-sky-400 bg-sky-50 ring-1 ring-sky-300"
+              ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
               : nightHoverInvalid
                 ? "cursor-not-allowed border-red-300 bg-red-200"
                 : nightTouchHovered
@@ -336,18 +340,36 @@ export default function ScheduleBoard({
                       ) : (
                         <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
                       )}
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onToggleShiftLock(row.day, "day");
-                        }}
-                        disabled={!row.day_shift}
-                        className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        title={dayLocked ? "ロック解除" : "ロック"}
-                      >
-                        {dayLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSwapButtonPress(row.day, "day", dayLocked, isHolidayLike);
+                          }}
+                          className={[
+                            "rounded border px-1 py-0.5 text-[8px] font-bold transition",
+                            daySwapSelected
+                              ? "border-yellow-300 bg-yellow-100 text-yellow-900"
+                              : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-sky-700",
+                          ].join(" ")}
+                          title={daySwapSelected ? "入れ替え元を解除" : "この枠を入れ替え元/先として選ぶ"}
+                        >
+                          {"⇄"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleShiftLock(row.day, "day");
+                          }}
+                          disabled={!row.day_shift}
+                          className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={dayLocked ? "ロック解除" : "ロック"}
+                        >
+                          {dayLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                        </button>
+                      </div>
                       {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   ) : (
@@ -408,18 +430,36 @@ export default function ScheduleBoard({
                     ) : (
                       <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
                     )}
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onToggleShiftLock(row.day, "night");
-                      }}
-                      disabled={!row.night_shift}
-                      className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      title={nightLocked ? "ロック解除" : "ロック"}
-                    >
-                      {nightLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
-                    </button>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onSwapButtonPress(row.day, "night", nightLocked, isHolidayLike);
+                          }}
+                          className={[
+                            "rounded border px-1 py-0.5 text-[8px] font-bold transition",
+                            nightSwapSelected
+                              ? "border-yellow-300 bg-yellow-100 text-yellow-900"
+                              : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-sky-700",
+                          ].join(" ")}
+                          title={nightSwapSelected ? "入れ替え元を解除" : "この枠を入れ替え元/先として選ぶ"}
+                        >
+                          {"⇄"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onToggleShiftLock(row.day, "night");
+                          }}
+                          disabled={!row.night_shift}
+                          className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          title={nightLocked ? "ロック解除" : "ロック"}
+                        >
+                          {nightLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                        </button>
+                      </div>
                     {renderHoverTooltip(nightHoverInvalid)}
                   </div>
                 </td>
@@ -462,7 +502,7 @@ export default function ScheduleBoard({
           <div className="sticky top-0 z-40 mb-2 space-y-2 bg-white/95 pb-2 shadow-sm backdrop-blur">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div className="w-full min-w-0 text-[9px] leading-tight text-gray-500">
-                D&amp;D で移動・入替・上書きできます。スマホでは入れ替えモード中に医師や削除を選んでタップ配置できます。
+                {"D&D で移動・入替・上書きできます。スマホでは [⇄] ボタンで入れ替え元/先を選び、医師や削除をタップ配置できます。"}
                 {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
                 {manualSelectionLabel ? <div className="mt-0.5 font-semibold text-emerald-700">タップ配置: {manualSelectionLabel}</div> : null}
                 {isEraseSelectionActive ? <div className="mt-0.5 font-semibold text-red-600">タップ削除: 削除アイテム選択中</div> : null}
@@ -547,6 +587,22 @@ export default function ScheduleBoard({
                 強制配置モード中は制約違反を許可するため、自動生成を無効化しています。
               </div>
             ) : null}
+            {swapSourceLabel ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-2 py-1 text-[9px] font-semibold text-yellow-900">
+                <div>{"入れ替え先を選択してください"}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-yellow-800">{"元"}: {swapSourceLabel}</span>
+                  <button
+                    type="button"
+                    onClick={onCancelSwapSelection}
+                    className="rounded border border-yellow-300 bg-white px-2 py-0.5 text-[9px] font-bold text-yellow-900 transition hover:bg-yellow-100"
+                  >
+                    {"キャンセル"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
 
             <div
               data-touch-drop-target="trash"
@@ -673,6 +729,7 @@ export default function ScheduleBoard({
     </>
   );
 }
+
 
 
 

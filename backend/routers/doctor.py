@@ -108,7 +108,7 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
         await db.refresh(new_doc)
 
         return {
-            "message": "医師を登録しました",
+            "message": "\u533b\u5e2b\u3092\u767b\u9332\u3057\u307e\u3057\u305f",
             "id": str(new_doc.id),
             "access_token": new_doc.access_token,
             "is_locked": new_doc.is_locked,
@@ -215,7 +215,7 @@ async def update_doctor(
             raise HTTPException(status_code=404, detail="Doctor not found")
 
         return {
-            "message": "医師情報を更新しました",
+            "message": "\u533b\u5e2b\u60c5\u5831\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f",
             "doctor": {
                 "id": str(doctor.id),
                 "name": doctor.name,
@@ -249,4 +249,16 @@ async def delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     if doctor is not None:
         doctor.is_active = False
     await db.commit()
-    return {"message": "削除しました"}
+    return {"message": "\u524a\u9664\u3057\u307e\u3057\u305f"}
+
+@router.delete("/{doctor_id}/hard")
+async def hard_delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
+    doctor_uuid = uuid.UUID(doctor_id)
+    result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+
+    await db.delete(doctor)
+    await db.commit()
+    return {"message": "\u7269\u7406\u524a\u9664\u3057\u307e\u3057\u305f"}

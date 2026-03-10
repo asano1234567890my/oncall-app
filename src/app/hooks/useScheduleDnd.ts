@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayEntry,
@@ -64,7 +64,7 @@ type DropFeedback = {
 
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const pad2 = (value: number) => String(value).padStart(2, "0");
-const weekdayLabelsPy = ["月", "火", "水", "木", "金", "土", "日"];
+const weekdayLabelsPy = ["\u6708", "\u706b", "\u6c34", "\u6728", "\u91d1", "\u571f", "\u65e5"];
 
 export function useScheduleDnd({
   schedule,
@@ -221,14 +221,14 @@ export function useScheduleDnd({
   };
 
   const getConstraintScopeLabel = (targetShift: "all" | "day" | "night") => {
-    if (targetShift === "day") return "日直のみ不可";
-    if (targetShift === "night") return "当直のみ不可";
-    return "終日不可";
+    if (targetShift === "day") return "\u65e5\u76f4\u306e\u307f";
+    if (targetShift === "night") return "\u5f53\u76f4\u306e\u307f";
+    return "\u7d42\u65e5";
   };
 
   const getFixedWeekdayLabel = (dayOfWeek: number) => {
-    if (dayOfWeek === 7) return "祝日";
-    return `${weekdayLabelsPy[dayOfWeek] ?? "?"}曜日`;
+    if (dayOfWeek === 7) return "\u795d\u65e5";
+    return `${weekdayLabelsPy[dayOfWeek] ?? "?"}\u66dc\u65e5`;
   };
 
   const isDoctorBlockedByManualConstraints = (doctorId: string | null | undefined, day: number) =>
@@ -275,7 +275,7 @@ export function useScheduleDnd({
     const respectUnavailableDays = Boolean(hardConstraints.respect_unavailable_days);
 
     if (shiftType === "day" && !holidayInfo.isHolidayLike) {
-      return "平日の日直には配置できません";
+      return "\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093";
     }
 
     if (respectOverrideMode && isOverrideMode) {
@@ -285,12 +285,12 @@ export function useScheduleDnd({
     if (respectUnavailableDays) {
       const manualUnavailableEntry = getManualUnavailableEntry(doctorId, day, shiftType);
       if (manualUnavailableEntry) {
-        return `${doctorName}先生は${month}月${day}日に${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}が設定されています`;
+        return `${doctorName}\u5148\u751f\u306f${month}\u6708${day}\u65e5\u306b${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}\u306e\u4f11\u307f\u5e0c\u671b\u3067\u3059`;
       }
 
       const fixedUnavailableEntry = getFixedUnavailableEntry(doctorId, day, shiftType);
       if (fixedUnavailableEntry) {
-        return `${doctorName}先生は${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}に${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}が設定されています`;
+        return `${doctorName}\u5148\u751f\u306f${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}\u306b${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}\u306e\u56fa\u5b9a\u4e0d\u53ef\u3067\u3059`;
       }
     }
 
@@ -301,7 +301,7 @@ export function useScheduleDnd({
         return gapFromPrevMonth <= spacingDays;
       });
       if (hasBlockedPrevMonthGap) {
-        return `${doctorName}先生は勤務間隔エラー（設定: ${spacingDays}日）`;
+        return `${doctorName}\u5148\u751f\u306f\u52e4\u52d9\u9593\u9694\u30a8\u30e9\u30fc\uff08\u8a2d\u5b9a: ${spacingDays}\u65e5\uff09\u3067\u3059`;
       }
     }
 
@@ -310,7 +310,7 @@ export function useScheduleDnd({
     const oppositeShiftKey = getShiftKey(day, oppositeShiftType);
     const oppositeDoctorId = row && !ignoreShiftKeys.has(oppositeShiftKey) ? getShiftDoctorIdFromRow(row, oppositeShiftType) : null;
     if (preventSunholConsecutive && oppositeDoctorId && oppositeDoctorId === doctorId) {
-      return "同日の日直・当直に同じ医師は配置できません";
+      return "\u540c\u4e00\u65e5\u306e\u65e5\u76f4\u3068\u5f53\u76f4\u306b\u540c\u3058\u533b\u5e2b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093";
     }
 
     if (spacingDays !== null) {
@@ -325,7 +325,7 @@ export function useScheduleDnd({
           if (assignedDoctorId !== doctorId) continue;
 
           if (Math.abs(rowEntry.day - day) <= spacingDays) {
-            return `${doctorName}先生は勤務間隔エラー（設定: ${spacingDays}日）`;
+            return `${doctorName}\u5148\u751f\u306f\u52e4\u52d9\u9593\u9694\u30a8\u30e9\u30fc\uff08\u8a2d\u5b9a: ${spacingDays}\u65e5\uff09\u3067\u3059`;
           }
         }
       }
@@ -334,7 +334,7 @@ export function useScheduleDnd({
     if (maxSaturdayNights !== null && shiftType === "night" && isSaturday(day)) {
       const saturdayNightCount = countDoctorAssignments(doctorId, scheduleRows, (rowEntry) => isSaturday(rowEntry.day), ["night"], ignoreShiftKeys) + 1;
       if (saturdayNightCount > maxSaturdayNights) {
-        return `${doctorName}先生は土曜当直上限（${maxSaturdayNights}回）を超えます`;
+        return `${doctorName}\u5148\u751f\u306f\u571f\u66dc\u5f53\u76f4\u306e\u4e0a\u9650\uff08${maxSaturdayNights}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
       }
     }
 
@@ -348,7 +348,7 @@ export function useScheduleDnd({
           ignoreShiftKeys
         ) + 1;
       if (sunholDayCount > maxSunholDays) {
-        return `${doctorName}先生は日祝日直上限（${maxSunholDays}回）を超えます`;
+        return `${doctorName}\u5148\u751f\u306f\u65e5\u795d\u65e5\u76f4\u306e\u4e0a\u9650\uff08${maxSunholDays}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
       }
     }
 
@@ -362,7 +362,7 @@ export function useScheduleDnd({
           ignoreShiftKeys
         ) + 1;
       if (sunholWorkCount > maxSunholWorks) {
-        return `${doctorName}先生は日祝勤務上限（${maxSunholWorks}回）を超えます`;
+        return `${doctorName}\u5148\u751f\u306f\u65e5\u795d\u52e4\u52d9\u306e\u4e0a\u9650\uff08${maxSunholWorks}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
       }
     }
 
@@ -391,7 +391,7 @@ export function useScheduleDnd({
         }, 0) + 1;
 
       if (weekendHolidayWorkCount > maxWeekendHolidayWorks) {
-        return `${doctorName}先生は土日祝勤務上限（${maxWeekendHolidayWorks}回）を超えます`;
+        return `${doctorName}\u5148\u751f\u306f\u571f\u65e5\u795d\u52e4\u52d9\u306e\u4e0a\u9650\uff08${maxWeekendHolidayWorks}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
       }
     }
 
@@ -400,7 +400,7 @@ export function useScheduleDnd({
 
   const formatConstraintForToast = (doctorId: string, message: string) => {
     const doctorName = getDoctorName(doctorId);
-    return message.startsWith(`${doctorName}先生`) ? message : `${doctorName}先生: ${message}`;
+    return message.startsWith(`${doctorName}\u5148\u751f`) ? message : `${doctorName}\u5148\u751f: ${message}`;
   };
 
   const getSwapConstraintMessage = (
@@ -472,7 +472,7 @@ export function useScheduleDnd({
     const next = cloneSchedule(schedule);
     const targetRow = next.find((row) => row.day === day);
     if (!targetRow) {
-      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
     }
 
     const targetField = shiftType === "day" ? "day_shift" : "night_shift";
@@ -501,14 +501,14 @@ export function useScheduleDnd({
     }
 
     if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) {
-      return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
+      return { nextSchedule: null, errorMessage: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u79fb\u52d5\u3067\u304d\u307e\u305b\u3093" };
     }
 
     const next = cloneSchedule(schedule);
     const fromRow = next.find((row) => row.day === fromDay);
     const toRow = next.find((row) => row.day === toDay);
     if (!fromRow || !toRow) {
-      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
     }
 
     const fromField = fromType === "day" ? "day_shift" : "night_shift";
@@ -516,7 +516,7 @@ export function useScheduleDnd({
     const fromDoctorId = fromRow[fromField] ?? null;
     const toDoctorId = toRow[toField] ?? null;
     if (!fromDoctorId) {
-      return { nextSchedule: null, errorMessage: "元の枠に医師が入っていないため操作できません" };
+      return { nextSchedule: null, errorMessage: "\u5165\u308c\u66ff\u3048\u5143\u306b\u533b\u5e2b\u304c\u5165\u3063\u3066\u3044\u307e\u305b\u3093" };
     }
 
     const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
@@ -533,13 +533,13 @@ export function useScheduleDnd({
 
   const buildClearSchedule = (day: number, shiftType: ShiftType): ScheduleMutationResult => {
     if (isShiftLocked(day, shiftType)) {
-      return { nextSchedule: null, errorMessage: "ロック済みの枠は解除できません" };
+      return { nextSchedule: null, errorMessage: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u89e3\u9664\u3067\u304d\u307e\u305b\u3093" };
     }
 
     const next = cloneSchedule(schedule);
     const row = next.find((entry) => entry.day === day);
     if (!row) {
-      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
     }
 
     const currentDoctorId = shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
@@ -618,11 +618,11 @@ export function useScheduleDnd({
     isHolidayLike: boolean
   ): DropFeedback => {
     if (locked) {
-      return { message: "ロック済みの枠には配置できません", dropEffect: "none" };
+      return { message: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093", dropEffect: "none" };
     }
 
     if (shiftType === "day" && !isHolidayLike) {
-      return { message: "平日の日直には配置できません", dropEffect: "none" };
+      return { message: "\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093", dropEffect: "none" };
     }
 
     if (source.sourceType === "list") {
@@ -732,11 +732,18 @@ export function useScheduleDnd({
     setSelectedListSelection(isEraseSelectionActive ? null : { mode: "erase" });
   };
 
+  const cancelSwapSelection = () => {
+    setSwapSource(null);
+    setInvalidHoverShiftKey(null);
+    setTouchHoverShiftKey(null);
+    setHoverErrorMessage(null);
+  };
+
   const toggleSwapMode = () => {
     clearDragState();
     const nextMode = !isSwapMode;
     setIsSwapMode(nextMode);
-    setSwapSource(null);
+    cancelSwapSelection();
     setSelectedListSelection(null);
   };
 
@@ -747,7 +754,7 @@ export function useScheduleDnd({
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
     setInvalidHoverShiftKey(getShiftKey(day, "day"));
-    setHoverErrorMessage("平日の日直には配置できません");
+    setHoverErrorMessage("\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093");
   };
 
   const handleDisabledDayDragLeave = (day: number) => {
@@ -888,7 +895,6 @@ export function useScheduleDnd({
       }
 
       setSwapSource({ day, shiftType, doctorId });
-      setHighlightedDoctorId(doctorId);
       return;
     }
 
@@ -923,9 +929,61 @@ export function useScheduleDnd({
     if (result.nextSchedule) {
       commitSchedule(result.nextSchedule);
     }
-    setSwapSource(null);
-    setInvalidHoverShiftKey(null);
-    setHoverErrorMessage(null);
+    cancelSwapSelection();
+  };
+
+  const handleSwapButtonPress = (day: number, shiftType: ShiftType, locked: boolean, isHolidayLike: boolean) => {
+    clearDragState();
+    setSelectedListSelection(null);
+
+    if (!swapSource) {
+      if (locked) {
+        showToast("\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u307e\u305b\u3093");
+        return;
+      }
+
+      const doctorId = getScheduleDoctorId(day, shiftType);
+      if (!doctorId) {
+        showToast("\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u308b\u533b\u5e2b\u5165\u308a\u67a0\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044");
+        return;
+      }
+
+      setSwapSource({ day, shiftType, doctorId });
+      return;
+    }
+
+    if (swapSource.day === day && swapSource.shiftType === shiftType) {
+      cancelSwapSelection();
+      return;
+    }
+
+    const feedback = getDropFeedback(
+      {
+        sourceType: "calendar",
+        day: swapSource.day,
+        shiftType: swapSource.shiftType,
+        doctorId: swapSource.doctorId,
+      },
+      day,
+      shiftType,
+      locked,
+      isHolidayLike
+    );
+    if (feedback.message) {
+      showToast(feedback.message);
+      return;
+    }
+
+    const result = buildSwapSchedule(swapSource.day, swapSource.shiftType, day, shiftType);
+    if (result.errorMessage) {
+      showToast(result.errorMessage);
+      return;
+    }
+
+    if (result.nextSchedule) {
+      commitSchedule(result.nextSchedule);
+    }
+    cancelSwapSelection();
   };
 
   const handleShiftDragStart = (
@@ -1231,8 +1289,10 @@ export function useScheduleDnd({
     selectManualDoctor,
     toggleEraseSelection,
     clearDragState,
+    cancelSwapSelection,
     toggleSwapMode,
     handleShiftTap,
+    handleSwapButtonPress,
     handleDisabledDayDragOver,
     handleDisabledDayDragLeave,
     handleShiftDragOver,
@@ -1254,6 +1314,10 @@ export function useScheduleDnd({
     validateScheduleViolations,
   };
 }
+
+
+
+
 
 
 
