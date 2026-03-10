@@ -1,8 +1,9 @@
-﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayEntry,
   FixedUnavailableWeekdayMap,
+  HardConstraints,
   HolidayLikeDayInfo,
   LockedShiftPayload,
   ScheduleRow,
@@ -41,6 +42,8 @@ type UseScheduleDndParams = {
   year: number;
   month: number;
   prevMonthLastDay: number;
+  hardConstraints: HardConstraints;
+  isOverrideMode: boolean;
   unavailableMap: UnavailableDateMap;
   fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
   prevMonthWorkedDaysMap: Record<string, number[]>;
@@ -69,6 +72,8 @@ export function useScheduleDnd({
   year,
   month,
   prevMonthLastDay,
+  hardConstraints,
+  isOverrideMode,
   unavailableMap,
   fixedUnavailableWeekdaysMap,
   prevMonthWorkedDaysMap,
@@ -107,6 +112,38 @@ export function useScheduleDnd({
 
   const getShiftDoctorIdFromRow = (row: ScheduleRow, shiftType: ShiftType) =>
     shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
+
+  const getPositiveConstraintValue = (value: number | null | undefined) => {
+    if (!Number.isFinite(value)) return null;
+    const rounded = Math.max(0, Math.round(value));
+    return rounded > 0 ? rounded : null;
+  };
+
+  const countDoctorAssignments = (
+    doctorId: string,
+    scheduleRows: ScheduleRow[],
+    predicate: (row: ScheduleRow) => boolean,
+    shiftTypes: ShiftType[],
+    ignoreShiftKeys: Set<string>
+  ) =>
+    scheduleRows.reduce((count, row) => {
+      if (!predicate(row)) return count;
+
+      let nextCount = count;
+      shiftTypes.forEach((candidateShiftType) => {
+        const shiftKey = getShiftKey(row.day, candidateShiftType);
+        if (ignoreShiftKeys.has(shiftKey)) return;
+        if (getShiftDoctorIdFromRow(row, candidateShiftType) === doctorId) nextCount += 1;
+      });
+      return nextCount;
+    }, 0);
+
+  const getSpacingConstraintDays = () => getPositiveConstraintValue(hardConstraints.interval_days);
+  const getMaxSaturdayNights = () => getPositiveConstraintValue(hardConstraints.max_saturday_nights);
+  const getMaxSunholDays = () => getPositiveConstraintValue(hardConstraints.max_sunhol_days);
+  const getMaxSunholWorks = () => getPositiveConstraintValue(hardConstraints.max_sunhol_works);
+  const getMaxWeekendHolidayWorks = () => getPositiveConstraintValue(hardConstraints.max_weekend_holiday_works);
+  const isSaturday = (day: number) => new Date(year, month - 1, day).getDay() === 6;
 
   const getPlacementIgnoreShiftKeys = (
     doctorId: string | null | undefined,
@@ -219,67 +256,142 @@ export function useScheduleDnd({
     options?: {
       scheduleRows?: ScheduleRow[];
       ignoreShiftKeys?: Set<string>;
+      respectOverrideMode?: boolean;
     }
   ) => {
     if (!doctorId) return null;
 
     const scheduleRows = options?.scheduleRows ?? schedule;
     const ignoreShiftKeys = options?.ignoreShiftKeys ?? new Set<string>();
+    const respectOverrideMode = options?.respectOverrideMode !== false;
+    const holidayInfo = isHolidayLikeDay(day);
     const doctorName = getDoctorName(doctorId);
-    if (shiftType === "day" && !isHolidayLikeDay(day).isHolidayLike) {
+    const spacingDays = getSpacingConstraintDays();
+    const maxSaturdayNights = getMaxSaturdayNights();
+    const maxSunholDays = getMaxSunholDays();
+    const maxSunholWorks = getMaxSunholWorks();
+    const maxWeekendHolidayWorks = getMaxWeekendHolidayWorks();
+    const preventSunholConsecutive = Boolean(hardConstraints.prevent_sunhol_consecutive);
+    const respectUnavailableDays = Boolean(hardConstraints.respect_unavailable_days);
+
+    if (shiftType === "day" && !holidayInfo.isHolidayLike) {
       return "平日の日直には配置できません";
     }
 
-    const manualUnavailableEntry = getManualUnavailableEntry(doctorId, day, shiftType);
-    if (manualUnavailableEntry) {
-      return `${doctorName}先生は${month}月${day}日に${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}を設定しています`;
+    if (respectOverrideMode && isOverrideMode) {
+      return null;
     }
 
-    const fixedUnavailableEntry = getFixedUnavailableEntry(doctorId, day, shiftType);
-    if (fixedUnavailableEntry) {
-      return `${doctorName}先生は${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}を${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}に設定しています`;
+    if (respectUnavailableDays) {
+      const manualUnavailableEntry = getManualUnavailableEntry(doctorId, day, shiftType);
+      if (manualUnavailableEntry) {
+        return `${doctorName}先生は${month}月${day}日に${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}が設定されています`;
+      }
+
+      const fixedUnavailableEntry = getFixedUnavailableEntry(doctorId, day, shiftType);
+      if (fixedUnavailableEntry) {
+        return `${doctorName}先生は${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}に${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}が設定されています`;
+      }
     }
 
-    const prevMonthWorkedDays = prevMonthWorkedDaysMap[doctorId] || [];
-    const hasBlockedPrevMonthGap = prevMonthWorkedDays.some((workedDay) => {
-      const gapFromPrevMonth = day + (prevMonthLastDay - workedDay);
-      return gapFromPrevMonth <= 3;
-    });
-    if (hasBlockedPrevMonthGap) {
-      return `${doctorName}先生は4日間隔が空いていません`;
+    if (spacingDays !== null) {
+      const prevMonthWorkedDays = prevMonthWorkedDaysMap[doctorId] || [];
+      const hasBlockedPrevMonthGap = prevMonthWorkedDays.some((workedDay) => {
+        const gapFromPrevMonth = day + (prevMonthLastDay - workedDay);
+        return gapFromPrevMonth <= spacingDays;
+      });
+      if (hasBlockedPrevMonthGap) {
+        return `${doctorName}先生は勤務間隔エラー（設定: ${spacingDays}日）`;
+      }
     }
 
     const row = scheduleRows.find((entry) => entry.day === day);
     const oppositeShiftType: ShiftType = shiftType === "day" ? "night" : "day";
     const oppositeShiftKey = getShiftKey(day, oppositeShiftType);
     const oppositeDoctorId = row && !ignoreShiftKeys.has(oppositeShiftKey) ? getShiftDoctorIdFromRow(row, oppositeShiftType) : null;
-    if (oppositeDoctorId && oppositeDoctorId === doctorId) {
-      return "同じ日の日直と当直に同じ医師は配置できません";
+    if (preventSunholConsecutive && oppositeDoctorId && oppositeDoctorId === doctorId) {
+      return "同日の日直・当直に同じ医師は配置できません";
     }
 
-    for (const rowEntry of scheduleRows) {
-      for (const candidateShiftType of ["day", "night"] as const) {
-        const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
-        if (ignoreShiftKeys.has(shiftKey)) continue;
+    if (spacingDays !== null) {
+      for (const rowEntry of scheduleRows) {
+        if (rowEntry.day === day) continue;
 
-        const assignedDoctorId = getShiftDoctorIdFromRow(rowEntry, candidateShiftType);
-        if (assignedDoctorId !== doctorId) continue;
+        for (const candidateShiftType of ["day", "night"] as const) {
+          const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
+          if (ignoreShiftKeys.has(shiftKey)) continue;
 
-        if (Math.abs(rowEntry.day - day) <= 3) {
-          return `${doctorName}先生は4日間隔が空いていません`;
+          const assignedDoctorId = getShiftDoctorIdFromRow(rowEntry, candidateShiftType);
+          if (assignedDoctorId !== doctorId) continue;
+
+          if (Math.abs(rowEntry.day - day) <= spacingDays) {
+            return `${doctorName}先生は勤務間隔エラー（設定: ${spacingDays}日）`;
+          }
         }
       }
     }
 
-    if (shiftType === "night" && new Date(year, month - 1, day).getDay() === 6) {
-      const alreadyHasSaturdayNight = scheduleRows.some((rowEntry) => {
-        const shiftKey = getShiftKey(rowEntry.day, "night");
-        if (ignoreShiftKeys.has(shiftKey)) return false;
-        return new Date(year, month - 1, rowEntry.day).getDay() === 6 && (rowEntry.night_shift ?? null) === doctorId;
-      });
+    if (maxSaturdayNights !== null && shiftType === "night" && isSaturday(day)) {
+      const saturdayNightCount = countDoctorAssignments(doctorId, scheduleRows, (rowEntry) => isSaturday(rowEntry.day), ["night"], ignoreShiftKeys) + 1;
+      if (saturdayNightCount > maxSaturdayNights) {
+        return `${doctorName}先生は土曜当直上限（${maxSaturdayNights}回）を超えます`;
+      }
+    }
 
-      if (alreadyHasSaturdayNight) {
-        return `${doctorName}先生の土曜当直は月1回までです`;
+    if (maxSunholDays !== null && shiftType === "day" && holidayInfo.isHolidayLike) {
+      const sunholDayCount =
+        countDoctorAssignments(
+          doctorId,
+          scheduleRows,
+          (rowEntry) => isHolidayLikeDay(rowEntry.day).isHolidayLike,
+          ["day"],
+          ignoreShiftKeys
+        ) + 1;
+      if (sunholDayCount > maxSunholDays) {
+        return `${doctorName}先生は日祝日直上限（${maxSunholDays}回）を超えます`;
+      }
+    }
+
+    if (maxSunholWorks !== null && holidayInfo.isHolidayLike) {
+      const sunholWorkCount =
+        countDoctorAssignments(
+          doctorId,
+          scheduleRows,
+          (rowEntry) => isHolidayLikeDay(rowEntry.day).isHolidayLike,
+          ["day", "night"],
+          ignoreShiftKeys
+        ) + 1;
+      if (sunholWorkCount > maxSunholWorks) {
+        return `${doctorName}先生は日祝勤務上限（${maxSunholWorks}回）を超えます`;
+      }
+    }
+
+    if (maxWeekendHolidayWorks !== null && ((shiftType === "night" && isSaturday(day)) || holidayInfo.isHolidayLike)) {
+      const weekendHolidayWorkCount =
+        scheduleRows.reduce((count, rowEntry) => {
+          const rowHolidayLike = isHolidayLikeDay(rowEntry.day).isHolidayLike;
+          if (rowHolidayLike) {
+            let nextCount = count;
+            (["day", "night"] as const).forEach((candidateShiftType) => {
+              const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
+              if (ignoreShiftKeys.has(shiftKey)) return;
+              if (getShiftDoctorIdFromRow(rowEntry, candidateShiftType) === doctorId) nextCount += 1;
+            });
+            return nextCount;
+          }
+
+          if (isSaturday(rowEntry.day)) {
+            const shiftKey = getShiftKey(rowEntry.day, "night");
+            if (!ignoreShiftKeys.has(shiftKey) && getShiftDoctorIdFromRow(rowEntry, "night") === doctorId) {
+              return count + 1;
+            }
+          }
+
+          return count;
+        }, 0) + 1;
+
+      if (weekendHolidayWorkCount > maxWeekendHolidayWorks) {
+        return `${doctorName}先生は土日祝勤務上限（${maxWeekendHolidayWorks}回）を超えます`;
       }
     }
 
@@ -332,6 +444,28 @@ export function useScheduleDnd({
 
     if (messages.length === 0) return null;
     return Array.from(new Set(messages)).join("\n");
+  };
+
+  const validateScheduleViolations = (scheduleRows: ScheduleRow[] = schedule) => {
+    const messages = new Set<string>();
+
+    scheduleRows.forEach((row) => {
+      (["day", "night"] as const).forEach((shiftType) => {
+        const doctorId = getShiftDoctorIdFromRow(row, shiftType);
+        if (!doctorId) return;
+
+        const constraintMessage = getPlacementConstraintMessage(doctorId, row.day, shiftType, {
+          scheduleRows,
+          ignoreShiftKeys: new Set<string>([getShiftKey(row.day, shiftType)]),
+          respectOverrideMode: false,
+        });
+
+        if (!constraintMessage) return;
+        messages.add(formatConstraintForToast(doctorId, constraintMessage));
+      });
+    });
+
+    return Array.from(messages);
   };
 
   const buildAssignSchedule = (day: number, shiftType: ShiftType, doctorId: string): ScheduleMutationResult => {
@@ -743,13 +877,13 @@ export function useScheduleDnd({
 
     if (!swapSource) {
       if (locked) {
-        showToast("繝ｭ繝・け貂医∩縺ｮ譫縺ｯ蜈･繧梧崛縺亥・縺ｫ縺ｧ縺阪∪縺帙ｓ");
+        showToast("\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u307e\u305b\u3093");
         return;
       }
 
       const doctorId = getScheduleDoctorId(day, shiftType);
       if (!doctorId) {
-        showToast("蜈･繧梧崛縺亥・縺ｫ蛹ｻ蟶ｫ縺悟・縺｣縺ｦ縺・ｋ譫繧帝∈謚槭＠縺ｦ縺上□縺輔＞");
+        showToast("\u5165\u308c\u66ff\u3048\u5143\u306b\u3059\u308b\u67a0\u3092\u5148\u306b\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044");
         return;
       }
 
@@ -1117,6 +1251,7 @@ export function useScheduleDnd({
     handleLockAll,
     handleUnlockAll,
     buildLockedShiftsPayload,
+    validateScheduleViolations,
   };
 }
 

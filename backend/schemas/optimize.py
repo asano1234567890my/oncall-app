@@ -40,7 +40,7 @@ class HardConstraints(BaseModel):
 
     interval_days: Optional[int] = None
     max_shifts: Optional[int] = None
-    max_saturday_nights: int = Field(default=2)
+    max_saturday_nights: int = Field(default=1)
     max_sunhol_days: int = Field(default=2)
     max_sunhol_works: int = Field(default=3)
     prevent_sunhol_consecutive: bool = Field(default=True)
@@ -50,6 +50,8 @@ class HardConstraints(BaseModel):
 
 
 class OptimizeRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     year: int
     month: int
     num_doctors: int
@@ -77,6 +79,20 @@ class OptimizeRequest(BaseModel):
     objective_weights: ObjectiveWeights = Field(default_factory=ObjectiveWeights)
     hard_constraints: Dict[str, Any] = Field(default_factory=dict)
     locked_shifts: List[LockedShift] = Field(default_factory=list)
+
+    @field_validator("past_sat_counts", "past_sunhol_counts", mode="before")
+    @classmethod
+    def normalize_optional_count_lists(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return value
+
+    @field_validator("sat_prev", "prev_month_worked_days", mode="before")
+    @classmethod
+    def normalize_optional_dict_fields(cls, value: Any) -> Any:
+        if value is None:
+            return {}
+        return value
 
     @field_validator("hard_constraints", mode="before")
     @classmethod

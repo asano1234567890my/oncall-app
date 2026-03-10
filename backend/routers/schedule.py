@@ -16,6 +16,9 @@ from models.shift import ShiftAssignment
 
 router = APIRouter(prefix="/api/schedule", tags=["Schedule"])
 
+DAY_SHIFT_LABEL = chr(0x65E5) + chr(0x76F4)
+NIGHT_SHIFT_LABEL = chr(0x5F53) + chr(0x76F4)
+
 
 class ShiftData(BaseModel):
     day: int
@@ -28,6 +31,29 @@ class SaveScheduleRequest(BaseModel):
     month: int
     num_doctors: int
     schedule: List[ShiftData]
+
+
+class RangeShiftItem(BaseModel):
+    date: str
+    shift_type: str
+    doctor_id: str
+
+
+def _month_bounds(year: int, month: int) -> tuple[datetime.date, datetime.date]:
+    start_date = datetime.date(year, month, 1)
+    if month == 12:
+        end_date = datetime.date(year + 1, 1, 1)
+    else:
+        end_date = datetime.date(year, month + 1, 1)
+    return start_date, end_date
+
+
+def _normalize_shift_type(raw_shift_type: str) -> str:
+    if raw_shift_type in {DAY_SHIFT_LABEL, "day", "day_shift"}:
+        return "day"
+    if raw_shift_type in {NIGHT_SHIFT_LABEL, "night", "night_shift"}:
+        return "night"
+    return str(raw_shift_type)
 
 
 @router.post("/save")
@@ -58,11 +84,7 @@ async def save_schedule(
                     detail=f"Unknown doctor_id in schedule: {missing_values}",
                 )
 
-        start_date = datetime.date(req.year, req.month, 1)
-        if req.month == 12:
-            end_date = datetime.date(req.year + 1, 1, 1)
-        else:
-            end_date = datetime.date(req.year, req.month + 1, 1)
+        start_date, end_date = _month_bounds(req.year, req.month)
 
         await db.execute(
             delete(ShiftAssignment).where(
@@ -80,7 +102,7 @@ async def save_schedule(
                     ShiftAssignment(
                         date=current_date,
                         doctor_id=item.day_shift,
-                        shift_type="日直",
+                        shift_type=DAY_SHIFT_LABEL,
                     )
                 )
 
@@ -89,7 +111,7 @@ async def save_schedule(
                     ShiftAssignment(
                         date=current_date,
                         doctor_id=item.night_shift,
-                        shift_type="当直",
+                        shift_type=NIGHT_SHIFT_LABEL,
                     )
                 )
 
@@ -98,7 +120,7 @@ async def save_schedule(
 
         return {
             "success": True,
-            "message": "シフトをデータベースに保存しました！",
+            "message": "\u30b7\u30d5\u30c8\u3092\u30c7\u30fc\u30bf\u30d9\u30fc\u30b9\u306b\u4fdd\u5b58\u3057\u307e\u3057\u305f\uff01",
             "saved_count": len(new_assignments),
         }
 
@@ -110,14 +132,52 @@ async def save_schedule(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/range", response_model=List[RangeShiftItem])
+async def get_schedule_range(
+    start_date: datetime.date,
+    end_date: datetime.date,
+    db: AsyncSession = Depends(get_db),
+):
+    if start_date > end_date:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date must be on or before end_date",
+        )
+
+    try:
+        result = await db.execute(
+            select(ShiftAssignment)
+            .where(
+                ShiftAssignment.date >= start_date,
+                ShiftAssignment.date <= end_date,
+            )
+            .order_by(
+                ShiftAssignment.date,
+                ShiftAssignment.shift_type,
+                ShiftAssignment.doctor_id,
+            )
+        )
+        assignments = result.scalars().all()
+
+        return [
+            {
+                "date": assignment.date.isoformat(),
+                "shift_type": _normalize_shift_type(assignment.shift_type),
+                "doctor_id": str(assignment.doctor_id),
+            }
+            for assignment in assignments
+        ]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{year}/{month}")
 async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
     try:
-        start_date = datetime.date(year, month, 1)
-        if month == 12:
-            end_date = datetime.date(year + 1, 1, 1)
-        else:
-            end_date = datetime.date(year, month + 1, 1)
+        start_date, end_date = _month_bounds(year, month)
 
         result = await db.execute(
             select(ShiftAssignment)
@@ -140,7 +200,7 @@ async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)
                     "night_shift": None,
                 }
 
-            if assignment.shift_type == "日直":
+            if _normalize_shift_type(assignment.shift_type) == "day":
                 formatted_data[day]["day_shift"] = assignment.doctor.name
             else:
                 formatted_data[day]["night_shift"] = assignment.doctor.name

@@ -58,7 +58,10 @@ export default function DashboardPage() {
   const savedScheduleSignatureRef = useRef<string>(getScheduleSignature([]));
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [isHardConstraintsOpen, setIsHardConstraintsOpen] = useState(false);
+  const [isPreviousMonthShiftsOpen, setIsPreviousMonthShiftsOpen] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [isOverrideMode, setIsOverrideMode] = useState(false);
+  const [saveValidationMessages, setSaveValidationMessages] = useState<string[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [unavailableMap, setUnavailableMap] = useState<UnavailableDateMap>({});
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<FixedUnavailableWeekdayMap>({});
@@ -67,7 +70,6 @@ export default function DashboardPage() {
   const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
   const [maxScoreMap, setMaxScoreMap] = useState<Record<string, number>>({});
   const [targetScoreMap, setTargetScoreMap] = useState<Record<string, number>>({});
-  const [satPrevMap, setSatPrevMap] = useState<Record<string, boolean>>({});
 
   const calcPrevMonthLastDay = (y: number, m: number) => new Date(y, m - 1, 0).getDate();
   const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(() => calcPrevMonthLastDay(year, month));
@@ -79,12 +81,20 @@ export default function DashboardPage() {
 
   const handleToggleWeightsPanel = () => {
     setIsHardConstraintsOpen(false);
+    setIsPreviousMonthShiftsOpen(false);
     setIsWeightsOpen((prev) => !prev);
   };
 
   const handleToggleHardConstraintsPanel = () => {
     setIsWeightsOpen(false);
+    setIsPreviousMonthShiftsOpen(false);
     setIsHardConstraintsOpen((prev) => !prev);
+  };
+
+  const handleTogglePreviousMonthShiftsPanel = () => {
+    setIsWeightsOpen(false);
+    setIsHardConstraintsOpen(false);
+    setIsPreviousMonthShiftsOpen((prev) => !prev);
   };
 
   const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
@@ -372,12 +382,15 @@ export default function DashboardPage() {
     handleLockAll,
     handleUnlockAll,
     buildLockedShiftsPayload,
+    validateScheduleViolations,
   } = useScheduleDnd({
     schedule,
     commitSchedule,
     year,
     month,
     prevMonthLastDay,
+    hardConstraints,
+    isOverrideMode,
     unavailableMap,
     fixedUnavailableWeekdaysMap,
     prevMonthWorkedDaysMap,
@@ -415,7 +428,6 @@ export default function DashboardPage() {
     minScoreMap,
     maxScoreMap,
     targetScoreMap,
-    satPrevMap,
     schedule,
     setSchedule,
     commitSchedule,
@@ -533,6 +545,42 @@ export default function DashboardPage() {
     return () => controller.abort();
   }, [activeDoctorIds, month, year]);
 
+  useEffect(() => {
+    if (saveValidationMessages.length === 0) return;
+    setSaveValidationMessages([]);
+  }, [hardConstraints, saveValidationMessages.length, schedule]);
+
+  const handleToggleOverrideMode = () => {
+    setIsOverrideMode((prev) => !prev);
+  };
+
+  const handleGenerateWithGuard = () => {
+    if (isOverrideMode) return;
+    void handleGenerate();
+  };
+
+  const handleSaveWithValidation = () => {
+    const violations = validateScheduleViolations();
+    if (violations.length > 0) {
+      setSaveValidationMessages(violations);
+      return;
+    }
+
+    setSaveValidationMessages([]);
+    void handleSaveToDB();
+  };
+
+  const handleForceSaveToDB = () => {
+    const violations = validateScheduleViolations();
+    if (violations.length > 0) {
+      const confirmed = typeof window !== "undefined" ? window.confirm("ルール違反がありますが、このまま確定しますか？") : false;
+      if (!confirmed) return;
+    }
+
+    setSaveValidationMessages([]);
+    void handleSaveToDB();
+  };
+
   const toggleHoliday = (day: number) => {
     const ymd = toYmd(year, month, day);
     if (getWeekday(year, month, day) === "日") return;
@@ -632,11 +680,6 @@ export default function DashboardPage() {
     });
   };
 
-  const toggleSatPrev = (doctorId: string) => {
-    if (!doctorId) return;
-    setSatPrevMap((prev) => ({ ...prev, [doctorId]: !prev[doctorId] }));
-  };
-
   const weightChanges = useMemo(() => {
     const keys = Object.keys(DEFAULT_OBJECTIVE_WEIGHTS) as (keyof ObjectiveWeights)[];
     const changed = keys
@@ -667,16 +710,19 @@ export default function DashboardPage() {
     });
   };
 
-  const handleMinScoreChange = (doctorId: string, value: string) => {
-    setMinScoreMap({ ...minScoreMap, [doctorId]: parseFloat(value) });
+  const handleMinScoreChange = (doctorId: string, value: number) => {
+    const nextValue = Number.isFinite(value) ? value : scoreMin;
+    setMinScoreMap((prev) => ({ ...prev, [doctorId]: nextValue }));
   };
 
-  const handleMaxScoreChange = (doctorId: string, value: string) => {
-    setMaxScoreMap({ ...maxScoreMap, [doctorId]: parseFloat(value) });
+  const handleMaxScoreChange = (doctorId: string, value: number) => {
+    const nextValue = Number.isFinite(value) ? value : scoreMax;
+    setMaxScoreMap((prev) => ({ ...prev, [doctorId]: nextValue }));
   };
 
-  const handleTargetScoreChange = (doctorId: string, value: string) => {
-    setTargetScoreMap({ ...targetScoreMap, [doctorId]: parseFloat(value) });
+  const handleTargetScoreChange = (doctorId: string, value: number) => {
+    const nextValue = Number.isFinite(value) ? value : 0;
+    setTargetScoreMap((prev) => ({ ...prev, [doctorId]: nextValue }));
   };
 
   const scheduleColumns = useMemo(() => {
@@ -727,6 +773,9 @@ export default function DashboardPage() {
             onToggleHardConstraints={handleToggleHardConstraintsPanel}
             onResetHardConstraints={() => setHardConstraints(DEFAULT_HARD_CONSTRAINTS)}
             onCloseHardConstraints={() => setIsHardConstraintsOpen(false)}
+            isPreviousMonthShiftsOpen={isPreviousMonthShiftsOpen}
+            onTogglePreviousMonthShifts={handleTogglePreviousMonthShiftsPanel}
+            onClosePreviousMonthShifts={() => setIsPreviousMonthShiftsOpen(false)}
             onWeightChange={setWeight}
             onHardConstraintChange={handleHardConstraintChange}
             onYearChange={handleYearChange}
@@ -743,7 +792,8 @@ export default function DashboardPage() {
             onToggleFixedWeekday={toggleFixedWeekday}
             onPrevMonthLastDayChange={handlePrevMonthLastDayChange}
             onSetPreviousMonthShift={setPreviousMonthShift}
-            onGenerate={handleGenerate}
+            onGenerate={handleGenerateWithGuard}
+            isGenerateDisabled={isOverrideMode}
           />
 
           <div className="relative min-w-0">
@@ -768,14 +818,12 @@ export default function DashboardPage() {
               minScoreMap={minScoreMap}
               maxScoreMap={maxScoreMap}
               targetScoreMap={targetScoreMap}
-              satPrevMap={satPrevMap}
               scoreMin={scoreMin}
               scoreMax={scoreMax}
               onSaveAllDoctorsSettings={saveAllDoctorsSettings}
               onMinScoreChange={handleMinScoreChange}
               onMaxScoreChange={handleMaxScoreChange}
               onTargetScoreChange={handleTargetScoreChange}
-              onToggleSatPrev={toggleSatPrev}
             />
 
             <ScheduleBoard
@@ -829,14 +877,18 @@ export default function DashboardPage() {
               onRedo={redo}
               canUndo={canUndo}
               canRedo={canRedo}
-              onRegenerateUnlocked={handleGenerate}
+              onRegenerateUnlocked={handleGenerateWithGuard}
               onTrashDragOver={handleTrashDragOver}
               onTrashDrop={handleTrashDrop}
               lockedShiftCount={lockedShiftKeys.size}
               onDeleteMonthSchedule={handleDeleteMonthSchedule}
               isDeletingMonthSchedule={isDeletingMonthSchedule}
-              onSaveToDB={handleSaveToDB}
+              onSaveToDB={handleSaveWithValidation}
               isSaving={isSaving}
+              isOverrideMode={isOverrideMode}
+              onToggleOverrideMode={handleToggleOverrideMode}
+              saveValidationMessages={saveValidationMessages}
+              onForceSaveToDB={handleForceSaveToDB}
               saveMessage={saveMessage}
             />
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { DayPicker } from "react-day-picker";
@@ -50,6 +50,7 @@ type GenerationSettingsPanelProps = {
   weightChanges: WeightChangeSummary;
   isWeightsOpen: boolean;
   isHardConstraintsOpen: boolean;
+  isPreviousMonthShiftsOpen: boolean;
   year: number;
   month: number;
   numDoctors: number;
@@ -72,6 +73,8 @@ type GenerationSettingsPanelProps = {
   onToggleHardConstraints: () => void;
   onResetHardConstraints: () => void;
   onCloseHardConstraints: () => void;
+  onTogglePreviousMonthShifts: () => void;
+  onClosePreviousMonthShifts: () => void;
   onWeightChange: (key: keyof ObjectiveWeights, value: number) => void;
   onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean) => void;
   onYearChange: (value: number) => void;
@@ -87,6 +90,7 @@ type GenerationSettingsPanelProps = {
   onPrevMonthLastDayChange: (value: number) => void;
   onSetPreviousMonthShift: (prevDay: number, shiftType: ShiftType, doctorId: string) => void;
   onGenerate: () => void;
+  isGenerateDisabled?: boolean;
 };
 
 type DoctorSettingsPanelProps = {
@@ -95,14 +99,12 @@ type DoctorSettingsPanelProps = {
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
   targetScoreMap: Record<string, number>;
-  satPrevMap: Record<string, boolean>;
   scoreMin: number;
   scoreMax: number;
   onSaveAllDoctorsSettings: () => void;
-  onMinScoreChange: (doctorId: string, value: string) => void;
-  onMaxScoreChange: (doctorId: string, value: string) => void;
-  onTargetScoreChange: (doctorId: string, value: string) => void;
-  onToggleSatPrev: (doctorId: string) => void;
+  onMinScoreChange: (doctorId: string, value: number) => void;
+  onMaxScoreChange: (doctorId: string, value: number) => void;
+  onTargetScoreChange: (doctorId: string, value: number) => void;
 };
 
 const weightInputs = [
@@ -144,7 +146,7 @@ const hardConstraintNumberInputs = [
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定2",
+    hint: "0でOFF / 既定1",
   },
   {
     key: "max_sunhol_days",
@@ -191,6 +193,8 @@ const hardConstraintToggleInputs = [
   hint: string;
 }>;
 
+const fixedWeekdayLabels = ["月", "火", "水", "木", "金", "土", "日", "祝"] as const;
+
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const toDateKey = (date: Date) => format(date, "yyyy-MM-dd");
 const parseDateKey = (value: string) => {
@@ -198,6 +202,123 @@ const parseDateKey = (value: string) => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+const clampNumber = (value: number, min?: number, max?: number) => {
+  let next = value;
+  if (typeof min === "number") next = Math.max(min, next);
+  if (typeof max === "number") next = Math.min(max, next);
+  return next;
+};
+
+const getStepPrecision = (step: number) => {
+  const stepText = String(step);
+  const decimal = stepText.includes(".") ? stepText.split(".")[1]?.length ?? 0 : 0;
+  return decimal;
+};
+
+const formatStepValue = (value: number, step: number) => {
+  const precision = getStepPrecision(step);
+  return Number(value.toFixed(precision)).toString();
+};
+
+type StepperNumberInputProps = {
+  value: number;
+  onCommit: (value: number) => void;
+  fallbackValue: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+  placeholder?: string;
+  inputMode?: "numeric" | "decimal";
+  className?: string;
+  inputClassName?: string;
+  buttonClassName?: string;
+};
+
+function StepperNumberInput({
+  value,
+  onCommit,
+  fallbackValue,
+  min,
+  max,
+  step = 1,
+  disabled = false,
+  placeholder,
+  inputMode,
+  className = "",
+  inputClassName = "",
+  buttonClassName = "",
+}: StepperNumberInputProps) {
+  const [draft, setDraft] = useState(() => formatStepValue(value, step));
+
+  useEffect(() => {
+    setDraft(formatStepValue(value, step));
+  }, [step, value]);
+
+  const commitDraft = (raw: string) => {
+    const trimmed = raw.trim();
+    const parsed = trimmed === "" ? fallbackValue : Number(trimmed);
+    const nextValue = clampNumber(Number.isFinite(parsed) ? parsed : fallbackValue, min, max);
+    const nextText = formatStepValue(nextValue, step);
+    setDraft(nextText);
+    onCommit(nextValue);
+  };
+
+  const handleStep = (direction: -1 | 1) => {
+    const parsed = draft.trim() === "" ? fallbackValue : Number(draft);
+    const baseValue = Number.isFinite(parsed) ? parsed : fallbackValue;
+    const nextValue = clampNumber(baseValue + direction * step, min, max);
+    const nextText = formatStepValue(nextValue, step);
+    setDraft(nextText);
+    onCommit(nextValue);
+  };
+
+  return (
+    <div className={["flex items-center gap-1", className].filter(Boolean).join(" ")}>
+      <button
+        type="button"
+        onClick={() => handleStep(-1)}
+        disabled={disabled}
+        className={[
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-base font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
+          buttonClassName,
+        ].filter(Boolean).join(" ")}
+      >
+        -
+      </button>
+      <input
+        type="text"
+        inputMode={inputMode ?? (step % 1 === 0 ? "numeric" : "decimal")}
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => commitDraft(draft)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commitDraft(draft);
+          }
+        }}
+        disabled={disabled}
+        placeholder={placeholder}
+        className={[
+          "min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
+          inputClassName,
+        ].filter(Boolean).join(" ")}
+      />
+      <button
+        type="button"
+        onClick={() => handleStep(1)}
+        disabled={disabled}
+        className={[
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-base font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
+          buttonClassName,
+        ].filter(Boolean).join(" ")}
+      >
+        +
+      </button>
+    </div>
+  );
+}
 const dayPickerBaseClassName = [
   "w-full",
   "[--rdp-day-width:2.35rem] [--rdp-day-height:2.35rem]",
@@ -283,6 +404,7 @@ export function GenerationSettingsPanel({
   weightChanges,
   isWeightsOpen,
   isHardConstraintsOpen,
+  isPreviousMonthShiftsOpen,
   year,
   month,
   numDoctors,
@@ -293,7 +415,6 @@ export function GenerationSettingsPanel({
   unavailableMap,
   fixedUnavailableWeekdaysMap,
   pyWeekdays,
-  pyWeekdaysJp,
   prevMonthLastDay,
   prevMonthTailDays,
   getPreviousMonthShiftDoctorId,
@@ -305,6 +426,8 @@ export function GenerationSettingsPanel({
   onToggleHardConstraints,
   onResetHardConstraints,
   onCloseHardConstraints,
+  onTogglePreviousMonthShifts,
+  onClosePreviousMonthShifts,
   onWeightChange,
   onHardConstraintChange,
   onYearChange,
@@ -320,6 +443,7 @@ export function GenerationSettingsPanel({
   onPrevMonthLastDayChange,
   onSetPreviousMonthShift,
   onGenerate,
+  isGenerateDisabled = false,
 }: GenerationSettingsPanelProps) {
   const displayMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
   const currentMonthPrefix = `${year}-${pad2(month)}-`;
@@ -565,22 +689,22 @@ export function GenerationSettingsPanel({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="rounded-xl border border-gray-200 bg-gray-50 p-3">
             <div className="mb-1 text-[11px] font-bold text-gray-700">score_min</div>
-            <input
-              type="number"
-              step="0.1"
+            <StepperNumberInput
               value={scoreMin}
-              onChange={(event) => onScoreMinChange(Number(event.target.value))}
-              className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm"
+              onCommit={onScoreMinChange}
+              fallbackValue={0.5}
+              step={0.5}
+              inputMode="decimal"
             />
           </label>
           <label className="rounded-xl border border-gray-200 bg-gray-50 p-3">
             <div className="mb-1 text-[11px] font-bold text-gray-700">score_max</div>
-            <input
-              type="number"
-              step="0.1"
+            <StepperNumberInput
               value={scoreMax}
-              onChange={(event) => onScoreMaxChange(Number(event.target.value))}
-              className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm"
+              onCommit={onScoreMaxChange}
+              fallbackValue={4.5}
+              step={0.5}
+              inputMode="decimal"
             />
           </label>
         </div>
@@ -601,7 +725,7 @@ export function GenerationSettingsPanel({
           人数が少ない月は score_max を少し広げると解なしを避けやすくなります。
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
             onClick={onToggleWeights}
@@ -616,8 +740,16 @@ export function GenerationSettingsPanel({
           >
             ルール（ハード制約）設定を開く
           </button>
+          <button
+            type="button"
+            onClick={onTogglePreviousMonthShifts}
+            className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-100"
+          >
+            前月末勤務を確認・修正する
+          </button>
         </div>
       </div>
+
 
       {isWeightsOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
@@ -689,7 +821,7 @@ export function GenerationSettingsPanel({
             <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
-                <p className="mt-1 text-xs text-gray-500">0 を入れると該当ルールを OFF にします。トグルは hard constraint として送信します。</p>
+                <p className="mt-1 text-xs text-gray-500">数値は 0 で OFF、トグルは hard constraint として optimize に送信します。</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -710,87 +842,98 @@ export function GenerationSettingsPanel({
             </div>
             <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto p-4 sm:p-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {hardConstraintNumberInputs.map((constraint) => (
-                  <label key={constraint.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">{constraint.label}</div>
-                    <div className="mb-2 text-[11px] text-gray-500">{constraint.hint}</div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={hardConstraints[constraint.key]}
-                        onChange={(event) => onHardConstraintChange(constraint.key, Number(event.target.value))}
-                        className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm font-bold"
-                        min={constraint.min}
-                        max={constraint.max}
-                        step={constraint.step}
-                      />
-                      <span className="text-xs font-bold text-gray-500">{constraint.unit}</span>
-                    </div>
-                  </label>
-                ))}
+                {hardConstraintNumberInputs.map((constraint) => {
+                  const value = typeof hardConstraints[constraint.key] === "number" ? hardConstraints[constraint.key] : 0;
+                  return (
+                    <label key={constraint.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                      <div className="mb-1 text-[11px] font-bold text-gray-700">{constraint.label}</div>
+                      <div className="mb-2 text-[11px] text-gray-500">{constraint.hint}</div>
+                      <div className="flex items-center gap-2">
+                        <StepperNumberInput
+                          value={value}
+                          onCommit={(nextValue) => onHardConstraintChange(constraint.key, nextValue)}
+                          fallbackValue={value}
+                          min={constraint.min}
+                          max={constraint.max}
+                          step={constraint.step}
+                          inputMode="numeric"
+                          inputClassName="text-sm font-bold"
+                        />
+                        <span className="shrink-0 text-xs font-bold text-gray-500">{constraint.unit}</span>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
 
               <div className="space-y-3">
-                {hardConstraintToggleInputs.map((constraint) => (
-                  <div
-                    key={constraint.key}
-                    className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-gray-800">{constraint.label}</div>
-                      <div className="mt-1 text-[11px] text-gray-500">{constraint.hint}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onHardConstraintChange(constraint.key, !hardConstraints[constraint.key])}
-                      className={`inline-flex h-10 min-w-28 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
-                        hardConstraints[constraint.key]
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 bg-gray-50 text-gray-500"
-                      }`}
+                {hardConstraintToggleInputs.map((constraint) => {
+                  const enabled = Boolean(hardConstraints[constraint.key]);
+                  return (
+                    <div
+                      key={constraint.key}
+                      className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
                     >
-                      {hardConstraints[constraint.key] ? "ON" : "OFF"}
-                    </button>
-                  </div>
-                ))}
+                      <div className="min-w-0">
+                        <div className="text-sm font-bold text-gray-800">{constraint.label}</div>
+                        <div className="mt-1 text-[11px] text-gray-500">{constraint.hint}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onHardConstraintChange(constraint.key, !enabled)}
+                        className={`inline-flex h-10 min-w-28 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
+                          enabled
+                            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                            : "border-gray-200 bg-gray-50 text-gray-500"
+                        }`}
+                      >
+                        {enabled ? "ON" : "OFF"}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       ) : null}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+      <div className="mb-4 grid grid-cols-1 gap-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm sm:grid-cols-2">
         <label>
           <div className="mb-1 text-sm font-bold text-gray-700">年</div>
-          <input
-            type="number"
+          <StepperNumberInput
             value={year}
-            onChange={(event) => handleYearInputChange(Number(event.target.value))}
-            className="w-full rounded-lg border border-gray-200 p-2"
+            onCommit={handleYearInputChange}
+            fallbackValue={year}
+            step={1}
+            inputMode="numeric"
           />
         </label>
         <label>
           <div className="mb-1 text-sm font-bold text-gray-700">月</div>
-          <input
-            type="number"
+          <StepperNumberInput
             value={month}
-            onChange={(event) => handleMonthInputChange(Number(event.target.value))}
-            className="w-full rounded-lg border border-gray-200 p-2"
+            onCommit={handleMonthInputChange}
+            fallbackValue={month}
+            min={1}
+            max={12}
+            step={1}
+            inputMode="numeric"
           />
         </label>
-        <div className="col-span-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
           稼働医師数: <span className="font-bold text-gray-800">{numDoctors}名</span>
+        </div>
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
+          対象日数: <span className="font-bold text-gray-800">{daysInMonth}日</span>
         </div>
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-sm font-bold text-gray-800">祝日・休日設定</h3>
-            <p className="mt-1 text-[11px] text-gray-500">
-              通常日を押すと追加休日、標準祝日を押すと通常出勤へ切り替えます。
-            </p>
+            <h3 className="text-sm font-bold text-gray-800">祝日・手動休日</h3>
+            <p className="mt-1 text-[11px] text-gray-500">通常日を押すと追加休日、標準祝日を押すと通常出勤へ切り替えます。</p>
           </div>
           <button
             type="button"
@@ -986,7 +1129,7 @@ export function GenerationSettingsPanel({
                           : "border-gray-100 bg-gray-50 text-gray-700"
                     }`}
                   >
-                    {pyWeekdaysJp[weekday]}
+                    {fixedWeekdayLabels[weekday]}
                   </div>
                 );
               })}
@@ -1037,7 +1180,7 @@ export function GenerationSettingsPanel({
           position={fixedWeekdayPopover?.position ?? null}
           title={
             fixedWeekdayPopover
-              ? `${activeDoctors.find((doctor) => doctor.id === fixedWeekdayPopover.doctorId)?.name ?? ""} / ${pyWeekdaysJp[fixedWeekdayPopover.weekday] ?? ""}`
+              ? `${activeDoctors.find((doctor) => doctor.id === fixedWeekdayPopover.doctorId)?.name ?? ""} / ${fixedWeekdayLabels[fixedWeekdayPopover.weekday] ?? ""}`
               : "固定不可設定"
           }
           currentValue={
@@ -1060,88 +1203,106 @@ export function GenerationSettingsPanel({
           <span className="ml-1 font-bold text-gray-700">{selectedDoctor?.name ?? "未選択"}</span>
           <span className="ml-2">
             {selectedFixedWeekdays.length === 0
-              ? "固定不可なし"
+              ? "未設定"
               : selectedFixedWeekdays
                   .slice()
                   .sort((left, right) => left.day_of_week - right.day_of_week)
-                  .map((entry) => `${pyWeekdaysJp[entry.day_of_week]}(${getTargetShiftSummaryLabel(entry.target_shift)})`)
+                  .map((entry) => `${fixedWeekdayLabels[entry.day_of_week]}(${getTargetShiftSummaryLabel(entry.target_shift)})`)
                   .join(" / ")}
           </span>
         </div>
       </div>
 
-      <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-gray-800">前月末勤務</h3>
-            <p className="mt-1 text-[11px] text-gray-500">対象月の連続勤務判定に使う前月末の勤務を、日付ごとに日直 / 当直で指定します。</p>
-          </div>
-          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
-            入力済み {previousMonthShiftCount}枠
-          </span>
-        </div>
-
-        <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
-          <label>
-            <div className="mb-1 text-[11px] font-bold text-gray-700">前月の最終日</div>
-            <input
-              type="number"
-              value={prevMonthLastDay}
-              onChange={(event) => onPrevMonthLastDayChange(Number(event.target.value))}
-              className="w-full rounded-lg border border-gray-200 p-2 text-sm"
-            />
-          </label>
-          <div className="text-[10px] text-gray-500">年月変更時は自動計算されます</div>
-        </div>
-
-        <div className="space-y-2">
-          {prevMonthTailDays.map((day) => (
-            <div
-              key={day}
-              className="grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border border-gray-100 bg-gray-50 p-2"
-            >
-              <div className="flex items-center justify-center rounded-lg bg-white text-sm font-bold text-gray-700">{day}日</div>
-              <label className="min-w-0">
-                <div className="mb-1 text-[11px] font-bold text-amber-700">日直</div>
-                <select
-                  value={getPreviousMonthShiftDoctorId(day, "day")}
-                  onChange={(event) => onSetPreviousMonthShift(day, "day", event.target.value)}
-                  className="w-full rounded-lg border border-amber-200 bg-white px-2 py-2 text-sm text-gray-700"
+      {isPreviousMonthShiftsOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-violet-100 bg-violet-50 px-4 py-4 sm:px-5">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">前月末勤務</h3>
+                <p className="mt-1 text-xs text-gray-500">前月末の勤務を日付ごとに確認・修正します。</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-700">
+                  入力済み {previousMonthShiftCount}枠
+                </span>
+                <button
+                  type="button"
+                  onClick={onClosePreviousMonthShifts}
+                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
                 >
-                  <option value="">未設定</option>
-                  {activeDoctors.map((doctor) => (
-                    <option key={String(day) + "-day-" + doctor.id} value={doctor.id}>
-                      {doctor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="min-w-0">
-                <div className="mb-1 text-[11px] font-bold text-sky-700">当直</div>
-                <select
-                  value={getPreviousMonthShiftDoctorId(day, "night")}
-                  onChange={(event) => onSetPreviousMonthShift(day, "night", event.target.value)}
-                  className="w-full rounded-lg border border-sky-200 bg-white px-2 py-2 text-sm text-gray-700"
-                >
-                  <option value="">未設定</option>
-                  {activeDoctors.map((doctor) => (
-                    <option key={String(day) + "-night-" + doctor.id} value={doctor.id}>
-                      {doctor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  閉じる
+                </button>
+              </div>
             </div>
-          ))}
+            <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto p-4 sm:p-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
+                <label>
+                  <div className="mb-1 text-[11px] font-bold text-gray-700">前月の最終日</div>
+                  <StepperNumberInput
+                    value={prevMonthLastDay}
+                    onCommit={onPrevMonthLastDayChange}
+                    fallbackValue={prevMonthLastDay}
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                  />
+                </label>
+                <div className="text-[11px] text-gray-500">直近4日分を previous_month_shifts として optimize に送信します。</div>
+              </div>
+
+              <div className="space-y-2">
+                {prevMonthTailDays.map((day) => (
+                  <div
+                    key={day}
+                    className="grid grid-cols-1 gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:grid-cols-[84px_minmax(0,1fr)_minmax(0,1fr)]"
+                  >
+                    <div className="flex items-center justify-center rounded-lg bg-white text-sm font-bold text-gray-700">
+                      {format(new Date(year, month - 2, day), "M/d")}
+                    </div>
+                    <label className="min-w-0">
+                      <div className="mb-1 text-[11px] font-bold text-amber-700">日直</div>
+                      <select
+                        value={getPreviousMonthShiftDoctorId(day, "day")}
+                        onChange={(event) => onSetPreviousMonthShift(day, "day", event.target.value)}
+                        className="w-full rounded-lg border border-amber-200 bg-white px-2 py-2 text-sm text-gray-700"
+                      >
+                        <option value="">未設定</option>
+                        {activeDoctors.map((doctor) => (
+                          <option key={String(day) + "-day-" + doctor.id} value={doctor.id}>
+                            {doctor.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="min-w-0">
+                      <div className="mb-1 text-[11px] font-bold text-sky-700">当直</div>
+                      <select
+                        value={getPreviousMonthShiftDoctorId(day, "night")}
+                        onChange={(event) => onSetPreviousMonthShift(day, "night", event.target.value)}
+                        className="w-full rounded-lg border border-sky-200 bg-white px-2 py-2 text-sm text-gray-700"
+                      >
+                        <option value="">未設定</option>
+                        {activeDoctors.map((doctor) => (
+                          <option key={String(day) + "-night-" + doctor.id} value={doctor.id}>
+                            {doctor.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <button
         type="button"
         onClick={onGenerate}
-        disabled={isLoading || activeDoctors.length === 0}
+        disabled={isLoading || activeDoctors.length === 0 || isGenerateDisabled}
         className={`flex min-h-12 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 font-bold text-white shadow-md transition ${
-          isLoading ? "cursor-not-allowed bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
+          isLoading || isGenerateDisabled ? "cursor-not-allowed bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
         }`}
       >
         {isLoading ? (
@@ -1150,7 +1311,7 @@ export function GenerationSettingsPanel({
             <span>生成中...</span>
           </>
         ) : (
-          <span>未固定枠を再作成</span>
+          <span>シフトを自動生成</span>
         )}
       </button>
     </div>
@@ -1163,14 +1324,12 @@ export function DoctorSettingsPanel({
   minScoreMap,
   maxScoreMap,
   targetScoreMap,
-  satPrevMap,
   scoreMin,
   scoreMax,
   onSaveAllDoctorsSettings,
   onMinScoreChange,
   onMaxScoreChange,
   onTargetScoreChange,
-  onToggleSatPrev,
 }: DoctorSettingsPanelProps) {
   return (
     <>
@@ -1182,23 +1341,20 @@ export function DoctorSettingsPanel({
           className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
             isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
           }`}
-          title="全医師のスコア設定、休み希望、固定不可をまとめて保存します"
+          title="全医師の Min / Max / 目標値と不可設定を保存します。"
         >
-          {isBulkSavingDoctors ? "保存中..." : "全員の休み希望を一括保存"}
+          {isBulkSavingDoctors ? "保存中..." : "全員の設定を保存"}
         </button>
         <div className="mt-2 text-[11px] text-gray-500">
-          ※ 現在の「スコア設定」「Min/Max/目標」「固定不可曜日」「個別不可日」を全員まとめて保存します。
+          各医師の Min / Max / 目標値をまとめて調整し、そのまま保存できます。
         </div>
       </div>
 
       <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm md:mb-5 md:p-4">
         <h3 className="mb-3 flex flex-wrap items-center gap-2 text-md font-bold text-orange-800">
-          <span>医師別 スコア設定</span>
+          <span>医師別スコア設定</span>
           <span className="rounded bg-orange-100 px-2 py-1 text-xs font-normal text-orange-600">
-            ※ 最適化で直接使う値です
-          </span>
-          <span className="rounded border border-orange-200 bg-white px-2 py-1 text-xs font-normal text-gray-500">
-            ※ 保存後の再生成に反映されます
+            個別 min / max / target
           </span>
         </h3>
 
@@ -1206,58 +1362,51 @@ export function DoctorSettingsPanel({
           <table className="min-w-full text-center text-[12px]">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="border-b px-2 py-2 text-left">医師名</th>
+                <th className="border-b px-2 py-2 text-left">医師</th>
                 <th className="border-b px-2 py-2">Min</th>
                 <th className="border-b px-2 py-2">Max</th>
                 <th className="border-b px-2 py-2">目標</th>
-                <th className="border-b px-2 py-2 text-orange-700">前週土曜当直</th>
               </tr>
             </thead>
             <tbody>
               {activeDoctors.map((doctor) => (
                 <tr key={doctor.id} className="border-b hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-2 py-1 text-left font-bold text-gray-700">{doctor.name}</td>
-                  <td className="px-2 py-1">
-                    <input
-                      type="number"
-                      step="0.5"
-                      className="w-12 rounded border p-1 text-center md:w-14"
-                      value={minScoreMap[doctor.id] === undefined ? "" : minScoreMap[doctor.id]}
-                      onChange={(event) => onMinScoreChange(doctor.id, event.target.value)}
-                      placeholder={String(scoreMin)}
+                  <td className="whitespace-nowrap px-2 py-2 text-left font-bold text-gray-700">{doctor.name}</td>
+                  <td className="px-2 py-2">
+                    <StepperNumberInput
+                      value={minScoreMap[doctor.id] ?? scoreMin}
+                      onCommit={(value) => onMinScoreChange(doctor.id, value)}
+                      fallbackValue={scoreMin}
+                      step={0.5}
+                      inputMode="decimal"
+                      className="justify-center"
+                      inputClassName="w-14 min-w-[3.5rem] px-1 py-1 text-[12px]"
+                      buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
-                  <td className="px-2 py-1">
-                    <input
-                      type="number"
-                      step="0.5"
-                      className="w-12 rounded border p-1 text-center md:w-14"
-                      value={maxScoreMap[doctor.id] === undefined ? "" : maxScoreMap[doctor.id]}
-                      onChange={(event) => onMaxScoreChange(doctor.id, event.target.value)}
-                      placeholder={String(scoreMax)}
+                  <td className="px-2 py-2">
+                    <StepperNumberInput
+                      value={maxScoreMap[doctor.id] ?? scoreMax}
+                      onCommit={(value) => onMaxScoreChange(doctor.id, value)}
+                      fallbackValue={scoreMax}
+                      step={0.5}
+                      inputMode="decimal"
+                      className="justify-center"
+                      inputClassName="w-14 min-w-[3.5rem] px-1 py-1 text-[12px]"
+                      buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
-                  <td className="px-2 py-1">
-                    <input
-                      type="number"
-                      className="w-12 rounded border bg-blue-50 p-1 text-center md:w-16"
-                      value={targetScoreMap[doctor.id] === undefined ? "" : targetScoreMap[doctor.id]}
-                      onChange={(event) => onTargetScoreChange(doctor.id, event.target.value)}
-                      placeholder="任意"
+                  <td className="px-2 py-2">
+                    <StepperNumberInput
+                      value={targetScoreMap[doctor.id] ?? 0}
+                      onCommit={(value) => onTargetScoreChange(doctor.id, value)}
+                      fallbackValue={0}
+                      step={0.5}
+                      inputMode="decimal"
+                      className="justify-center"
+                      inputClassName="w-16 min-w-[4rem] bg-blue-50 px-1 py-1 text-[12px]"
+                      buttonClassName="h-8 w-8 text-sm"
                     />
-                  </td>
-                  <td className="px-2 py-1">
-                    <button
-                      type="button"
-                      onClick={() => onToggleSatPrev(doctor.id)}
-                      className={`rounded border px-2 py-1 text-[10px] font-bold ${
-                        satPrevMap[doctor.id]
-                          ? "border-orange-600 bg-orange-500 text-white"
-                          : "border-gray-200 bg-white text-gray-400"
-                      }`}
-                    >
-                      {satPrevMap[doctor.id] ? "考慮あり" : "なし"}
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -1268,4 +1417,3 @@ export function DoctorSettingsPanel({
     </>
   );
 }
-

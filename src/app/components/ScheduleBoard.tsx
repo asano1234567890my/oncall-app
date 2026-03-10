@@ -28,6 +28,7 @@ type ScheduleBoardProps = {
   invalidHoverShiftKey: string | null;
   touchHoverShiftKey: string | null;
   isSwapMode: boolean;
+  isOverrideMode: boolean;
   swapSource: SwapSource | null;
   isSwapSourceSelected: (day: number, shiftType: ShiftType) => boolean;
   onHandleShiftDragOver: (
@@ -71,6 +72,7 @@ type ScheduleBoardProps = {
   onClearDragState: () => void;
   onToggleShiftLock: (day: number, shiftType: ShiftType) => void;
   onToggleSwapMode: () => void;
+  onToggleOverrideMode: () => void;
   onLockAll: () => void;
   onUnlockAll: () => void;
   onUndo: () => void;
@@ -84,8 +86,10 @@ type ScheduleBoardProps = {
   onDeleteMonthSchedule: () => void;
   isDeletingMonthSchedule: boolean;
   onSaveToDB: () => void;
+  onForceSaveToDB: () => void;
   isSaving: boolean;
   saveMessage: string;
+  saveValidationMessages: string[];
 };
 
 export default function ScheduleBoard({
@@ -112,6 +116,7 @@ export default function ScheduleBoard({
   invalidHoverShiftKey,
   touchHoverShiftKey,
   isSwapMode,
+  isOverrideMode,
   swapSource,
   isSwapSourceSelected,
   onHandleShiftDragOver,
@@ -133,6 +138,7 @@ export default function ScheduleBoard({
   onClearDragState,
   onToggleShiftLock,
   onToggleSwapMode,
+  onToggleOverrideMode,
   onLockAll,
   onUnlockAll,
   onUndo,
@@ -146,8 +152,10 @@ export default function ScheduleBoard({
   onDeleteMonthSchedule,
   isDeletingMonthSchedule,
   onSaveToDB,
+  onForceSaveToDB,
   isSaving,
   saveMessage,
+  saveValidationMessages,
 }: ScheduleBoardProps) {
   const highlightedDoctorName = highlightedDoctorId ? getDoctorName(highlightedDoctorId) : null;
   const manualSelectionLabel = selectedManualDoctorId ? getDoctorName(selectedManualDoctorId) : null;
@@ -457,6 +465,7 @@ export default function ScheduleBoard({
                 {manualSelectionLabel ? <div className="mt-0.5 font-semibold text-emerald-700">タップ配置: {manualSelectionLabel}</div> : null}
                 {isEraseSelectionActive ? <div className="mt-0.5 font-semibold text-red-600">タップ削除: 削除アイテム選択中</div> : null}
                 {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
+                {isOverrideMode ? <div className="mt-0.5 font-semibold text-amber-700">強制配置モード: 手動配置の制約チェックを無効化中</div> : null}
               </div>
               <div className="flex w-full flex-wrap items-center gap-1.5 md:w-auto md:shrink-0 md:justify-end">
                 <button
@@ -469,6 +478,17 @@ export default function ScheduleBoard({
                   }`}
                 >
                   入れ替えモード
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleOverrideMode}
+                  className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
+                    isOverrideMode
+                      ? "border-amber-300 bg-amber-100 text-amber-800"
+                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  強制配置モード
                 </button>
                 <button
                   type="button"
@@ -505,7 +525,7 @@ export default function ScheduleBoard({
                 <button
                   type="button"
                   onClick={onRegenerateUnlocked}
-                  disabled={isLoading}
+                  disabled={isLoading || isOverrideMode}
                   className="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-1 text-[9px] font-bold text-sky-700 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {lockedShiftCount > 0 ? "未固定枠を再生成" : "全体を自動生成"}
@@ -520,6 +540,11 @@ export default function ScheduleBoard({
                 </button>
               </div>
             </div>
+            {isOverrideMode ? (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-800">
+                強制配置モード中は制約違反を許可するため、自動生成を無効化しています。
+              </div>
+            ) : null}
 
             <div
               data-touch-drop-target="trash"
@@ -600,6 +625,28 @@ export default function ScheduleBoard({
           <div className="grid grid-cols-1 gap-1 lg:grid-cols-2">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
 
           <div className="mt-2 flex flex-col items-center gap-1">
+            {saveValidationMessages.length > 0 ? (
+              <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-800">
+                <div className="font-bold">制約違反があります。修正してください。</div>
+                <div className="mt-1 space-y-1">
+                  {saveValidationMessages.slice(0, 3).map((message, index) => (
+                    <div key={String(index) + message} className="whitespace-pre-line leading-snug">
+                      {message}
+                    </div>
+                  ))}
+                  {saveValidationMessages.length > 3 ? (
+                    <div className="text-[9px] text-amber-700">ほか {saveValidationMessages.length - 3} 件</div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={onForceSaveToDB}
+                  className="mt-1 text-[10px] font-semibold text-gray-500 underline underline-offset-2 transition hover:text-gray-700"
+                >
+                  違反を無視して確定する
+                </button>
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={onSaveToDB}

@@ -41,6 +41,15 @@ def test_fill_all_slots_weekday_only():
     for row in res["schedule"]:
         assert row["night_shift"] is not None
 
+def test_objective_weights_accepts_month_fairness():
+    opt = OnCallOptimizer(
+        num_doctors=6,
+        year=2024,
+        month=4,
+        holidays=[],
+        objective_weights={"month_fairness": 123},
+    )
+    assert opt.objective_weights.month_fairness == 123
 
 def test_sun_holiday_has_day_and_night_and_not_same_doctor():
     opt = OnCallOptimizer(num_doctors=8, year=2024, month=4, holidays=[29])

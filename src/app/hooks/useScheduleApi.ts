@@ -33,7 +33,6 @@ type UseScheduleApiParams = {
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
   targetScoreMap: Record<string, number>;
-  satPrevMap: Record<string, boolean>;
   schedule: ScheduleRow[];
   setSchedule: (nextSchedule: ScheduleRow[]) => void;
   commitSchedule: (nextSchedule: ScheduleRow[]) => void;
@@ -78,7 +77,6 @@ export function useScheduleApi({
   minScoreMap,
   maxScoreMap,
   targetScoreMap,
-  satPrevMap,
   schedule,
   setSchedule,
   commitSchedule,
@@ -302,6 +300,8 @@ export function useScheduleApi({
             target_shift: entry.target_shift,
           })),
           unavailable_days: unavailableDays,
+          unavailable_year: year,
+          unavailable_month: month,
         };
 
         return fetch(`${apiUrl}/api/doctors/${doc.id}`, {
@@ -381,7 +381,6 @@ export function useScheduleApi({
       const formattedMinScore = filterRecordByActiveDoctors(minScoreMap);
       const formattedMaxScore = filterRecordByActiveDoctors(maxScoreMap);
       const formattedTargetScore = filterRecordByActiveDoctors(targetScoreMap);
-      const formattedSatPrev = filterRecordByActiveDoctors(satPrevMap);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/optimize/`, {
@@ -402,7 +401,6 @@ export function useScheduleApi({
           min_score_by_doctor: formattedMinScore,
           max_score_by_doctor: formattedMaxScore,
           target_score_by_doctor: formattedTargetScore,
-          sat_prev: formattedSatPrev,
           past_sat_counts: new Array(activeCount).fill(0),
           past_sunhol_counts: new Array(activeCount).fill(0),
           past_total_scores: {},

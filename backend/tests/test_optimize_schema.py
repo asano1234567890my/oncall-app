@@ -21,7 +21,7 @@ def test_optimize_request_ignores_legacy_pre_clinic_weight():
 def test_hard_constraints_model_has_expected_defaults():
     constraints = HardConstraints()
 
-    assert constraints.max_saturday_nights == 2
+    assert constraints.max_saturday_nights == 1
     assert constraints.max_sunhol_days == 2
     assert constraints.max_sunhol_works == 3
     assert constraints.prevent_sunhol_consecutive is True
@@ -54,3 +54,31 @@ def test_optimize_request_normalizes_hard_constraints_aliases():
     assert req.hard_constraints["strict_weekend_hol_max"] is True
     assert req.hard_constraints["max_weekend_holiday_works"] == 4
     assert "weekend_hol_max_count" not in req.hard_constraints
+
+
+def test_optimize_request_normalizes_missing_previous_sat_data():
+    req = OptimizeRequest(
+        year=2026,
+        month=4,
+        num_doctors=3,
+        past_sat_counts=None,
+        sat_prev=None,
+    )
+
+    assert req.past_sat_counts == []
+    assert req.sat_prev == {}
+
+
+def test_optimize_request_ignores_legacy_previous_sat_field():
+    req = OptimizeRequest(
+        year=2026,
+        month=4,
+        num_doctors=3,
+        past_sat_worked_doctors=[0, 1],
+    )
+
+    dumped = req.model_dump()
+
+    assert "past_sat_worked_doctors" not in dumped
+    assert req.past_sat_counts == []
+    assert req.sat_prev == {}

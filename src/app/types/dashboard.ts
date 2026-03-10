@@ -114,7 +114,7 @@ export type ObjectiveWeights = {
 export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   interval_days: 4,
   max_weekend_holiday_works: 3,
-  max_saturday_nights: 2,
+  max_saturday_nights: 1,
   max_sunhol_days: 2,
   max_sunhol_works: 3,
   prevent_sunhol_consecutive: true,
