@@ -87,6 +87,7 @@ type ScheduleBoardProps = {
   isDeletingMonthSchedule: boolean;
   onSaveToDB: () => void;
   onForceSaveToDB: () => void;
+  onDismissSaveValidation: () => void;
   isSaving: boolean;
   saveMessage: string;
   saveValidationMessages: string[];
@@ -153,6 +154,7 @@ export default function ScheduleBoard({
   isDeletingMonthSchedule,
   onSaveToDB,
   onForceSaveToDB,
+  onDismissSaveValidation,
   isSaving,
   saveMessage,
   saveValidationMessages,
@@ -638,13 +640,22 @@ export default function ScheduleBoard({
                     <div className="text-[9px] text-amber-700">ほか {saveValidationMessages.length - 3} 件</div>
                   ) : null}
                 </div>
-                <button
-                  type="button"
-                  onClick={onForceSaveToDB}
-                  className="mt-1 text-[10px] font-semibold text-gray-500 underline underline-offset-2 transition hover:text-gray-700"
-                >
-                  違反を無視して確定する
-                </button>
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={onDismissSaveValidation}
+                    className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-amber-800 transition hover:bg-amber-100"
+                  >
+                    {"戻る"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onForceSaveToDB}
+                    className="text-[10px] font-semibold text-gray-500 underline underline-offset-2 transition hover:text-gray-700"
+                  >
+                    {"違反を無視して確定する"}
+                  </button>
+                </div>
               </div>
             ) : null}
             <button

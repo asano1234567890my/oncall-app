@@ -274,7 +274,7 @@ function StepperNumberInput({
   };
 
   return (
-    <div className={["flex items-center gap-1", className].filter(Boolean).join(" ")}>
+    <div className={["flex w-full min-w-0 items-center gap-1", className].filter(Boolean).join(" ")}>
       <button
         type="button"
         onClick={() => handleStep(-1)}
@@ -301,7 +301,7 @@ function StepperNumberInput({
         disabled={disabled}
         placeholder={placeholder}
         className={[
-          "min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
+          "w-full min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
           inputClassName,
         ].filter(Boolean).join(" ")}
       />
@@ -752,8 +752,8 @@ export function GenerationSettingsPanel({
 
 
       {isWeightsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-blue-100 bg-blue-50 px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-base font-bold text-gray-900">重み設定</h3>
@@ -776,7 +776,7 @@ export function GenerationSettingsPanel({
                 </button>
               </div>
             </div>
-            <div className="max-h-[calc(90vh-88px)] space-y-3 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
               {weightInputs.map((weight) => (
                 <div key={weight.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
                   <div className="mb-2 flex items-center justify-between gap-3">
@@ -816,8 +816,8 @@ export function GenerationSettingsPanel({
       ) : null}
 
       {isHardConstraintsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
@@ -840,7 +840,7 @@ export function GenerationSettingsPanel({
                 </button>
               </div>
             </div>
-            <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {hardConstraintNumberInputs.map((constraint) => {
                   const value = typeof hardConstraints[constraint.key] === "number" ? hardConstraints[constraint.key] : 0;
@@ -1214,8 +1214,8 @@ export function GenerationSettingsPanel({
       </div>
 
       {isPreviousMonthShiftsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-2xl sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-violet-100 bg-violet-50 px-4 py-4 sm:px-5">
               <div>
                 <h3 className="text-base font-bold text-gray-900">前月末勤務</h3>
@@ -1234,7 +1234,7 @@ export function GenerationSettingsPanel({
                 </button>
               </div>
             </div>
-            <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto p-4 sm:p-5">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">
                 <label>
                   <div className="mb-1 text-[11px] font-bold text-gray-700">前月の最終日</div>

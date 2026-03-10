@@ -545,13 +545,13 @@ export default function DashboardPage() {
     return () => controller.abort();
   }, [activeDoctorIds, month, year]);
 
-  useEffect(() => {
-    if (saveValidationMessages.length === 0) return;
-    setSaveValidationMessages([]);
-  }, [hardConstraints, saveValidationMessages.length, schedule]);
 
   const handleToggleOverrideMode = () => {
     setIsOverrideMode((prev) => !prev);
+  };
+
+  const handleDismissSaveValidation = () => {
+    setSaveValidationMessages([]);
   };
 
   const handleGenerateWithGuard = () => {
@@ -888,6 +888,7 @@ export default function DashboardPage() {
               isOverrideMode={isOverrideMode}
               onToggleOverrideMode={handleToggleOverrideMode}
               saveValidationMessages={saveValidationMessages}
+              onDismissSaveValidation={handleDismissSaveValidation}
               onForceSaveToDB={handleForceSaveToDB}
               saveMessage={saveMessage}
             />
