@@ -1,7 +1,7 @@
 // src/app/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { GenerationSettingsPanel, DoctorSettingsPanel } from "./components/SettingsPanel";
 import ScheduleBoard from "./components/ScheduleBoard";
@@ -12,15 +12,10 @@ import { useScheduleDnd } from "./hooks/useScheduleDnd";
 import { useScheduleHistory } from "./hooks/useScheduleHistory";
 import { useRealtimeScores } from "./hooks/useRealtimeScores";
 import {
-  DEFAULT_HARD_CONSTRAINTS,
   DEFAULT_OBJECTIVE_WEIGHTS,
   type Doctor,
   type FixedUnavailableWeekdayMap,
-  type HardConstraints,
   type ObjectiveWeights,
-  type PreviousMonthShift,
-  type ScheduleRow,
-  type ShiftType,
   type TargetShift,
   type UnavailableDateMap,
 } from "./types/dashboard";
@@ -31,17 +26,6 @@ import {
   setFixedWeekdayTargetShift,
   setUnavailableDateTargetShift,
 } from "./utils/unavailableSettings";
-
-const getScheduleSignature = (rows: ScheduleRow[]) =>
-  JSON.stringify(
-    rows.map((row) => ({
-      day: row.day,
-      day_shift: row.day_shift ?? null,
-      night_shift: row.night_shift ?? null,
-      is_holiday: Boolean(row.is_holiday),
-      is_sunhol: Boolean(row.is_sunhol),
-    }))
-  );
 
 export default function DashboardPage() {
   const defaultTargetMonth = getDefaultTargetMonth();
@@ -55,15 +39,11 @@ export default function DashboardPage() {
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
   const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
-  const savedScheduleSignatureRef = useRef<string>(getScheduleSignature([]));
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
-  const [isHardConstraintsOpen, setIsHardConstraintsOpen] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [unavailableMap, setUnavailableMap] = useState<UnavailableDateMap>({});
   const [fixedUnavailableWeekdaysMap, setFixedUnavailableWeekdaysMap] = useState<FixedUnavailableWeekdayMap>({});
-  const [hardConstraints, setHardConstraints] = useState<HardConstraints>(DEFAULT_HARD_CONSTRAINTS);
-  const [previousMonthShifts, setPreviousMonthShifts] = useState<PreviousMonthShift[]>([]);
+  const [prevMonthWorkedDaysMap, setPrevMonthWorkedDaysMap] = useState<Record<string, number[]>>({});
   const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
   const [maxScoreMap, setMaxScoreMap] = useState<Record<string, number>>({});
   const [targetScoreMap, setTargetScoreMap] = useState<Record<string, number>>({});
@@ -77,27 +57,13 @@ export default function DashboardPage() {
     setObjectiveWeights((prev) => ({ ...prev, [key]: nextValue }));
   };
 
-  const handleToggleWeightsPanel = () => {
-    setIsHardConstraintsOpen(false);
-    setIsWeightsOpen((prev) => !prev);
-  };
-
-  const handleToggleHardConstraintsPanel = () => {
-    setIsWeightsOpen(false);
-    setIsHardConstraintsOpen((prev) => !prev);
-  };
-
   const getDaysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const weekdaysJp = ["æ—¥", "æœˆ", "ç«", "æ°´", "æœ¨", "é‡‘", "åœŸ"];
-  const pyWeekdaysJp = ["æœˆ", "ç«", "æ°´", "æœ¨", "é‡‘", "åœŸ", "æ—¥", "ç¥"];
+  const weekdaysJp = ["“ú", "Œ", "‰Î", "…", "–Ø", "‹à", "“y"];
+  const pyWeekdaysJp = ["Œ", "‰Î", "…", "–Ø", "‹à", "“y", "“ú", "j"];
   const pyWeekdays = [0, 1, 2, 3, 4, 5, 6, 7];
   const pad2 = (n: number) => String(n).padStart(2, "0");
   const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
   const getWeekday = (y: number, m: number, day: number) => weekdaysJp[new Date(y, m - 1, day).getDay()];
-  const getPreviousMonthDateKey = (day: number) => {
-    const previousDate = new Date(year, month - 2, day);
-    return toYmd(previousDate.getFullYear(), previousDate.getMonth() + 1, previousDate.getDate());
-  };
 
   const manualHolidayStorageKey = (y: number, m: number) => `oncall.holidays.manual.${y}-${pad2(m)}`;
   const overrideHolidayStorageKey = (y: number) => `oncall.holidays.override.${y}`;
@@ -164,36 +130,12 @@ export default function DashboardPage() {
 
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
-    return doctorNameById[doctorId] ?? "ä¸æ˜";
+    return doctorNameById[doctorId] ?? "•s–¾";
   };
 
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
   const activeDoctorIds = useMemo(() => activeDoctors.map((doctor) => doctor.id), [activeDoctors]);
   const numDoctors = activeDoctors.length;
-
-  const previousMonthShiftDoctorIdByKey = useMemo(() => {
-    const next: Record<string, string> = {};
-    previousMonthShifts.forEach((entry) => {
-      const day = Number(entry.date.slice(-2));
-      if (!Number.isFinite(day)) return;
-      next[String(day) + "_" + entry.shift_type] = entry.doctor_id;
-    });
-    return next;
-  }, [previousMonthShifts]);
-
-  const prevMonthWorkedDaysMap = useMemo(() => {
-    const next: Record<string, number[]> = {};
-
-    previousMonthShifts.forEach((entry) => {
-      const day = Number(entry.date.slice(-2));
-      if (!Number.isFinite(day)) return;
-      next[entry.doctor_id] = next[entry.doctor_id] ?? [];
-      if (!next[entry.doctor_id].includes(day)) next[entry.doctor_id].push(day);
-    });
-
-    Object.values(next).forEach((days) => days.sort((left, right) => left - right));
-    return next;
-  }, [previousMonthShifts]);
 
   const filterRecordByActiveDoctors = <T,>(input: Record<string, T>) => {
     const next: Record<string, T> = {};
@@ -208,30 +150,6 @@ export default function DashboardPage() {
   const isActiveDoctorId = (doctorId: string | null | undefined) => {
     if (!doctorId) return false;
     return activeDoctorIds.includes(doctorId);
-  };
-
-  const markScheduleClean = (rows: ScheduleRow[] = schedule) => {
-    savedScheduleSignatureRef.current = getScheduleSignature(rows);
-    setIsDirty(false);
-  };
-
-  const confirmMoveWithUnsavedChanges = () => {
-    if (!isDirty || typeof window === "undefined") return true;
-    const confirmed = window.confirm("ä¿å­˜ã•ã‚Œã¦ã„ã¾ã›ã‚“ãŒç§»å‹•ã—ã¾ã™ã‹ï¼Ÿ");
-    if (confirmed) markScheduleClean();
-    return confirmed;
-  };
-
-  const handleYearChange = (value: number) => {
-    if (!Number.isFinite(value) || value === year) return;
-    if (!confirmMoveWithUnsavedChanges()) return;
-    setYear(value);
-  };
-
-  const handleMonthChange = (value: number) => {
-    if (!Number.isFinite(value) || value === month) return;
-    if (!confirmMoveWithUnsavedChanges()) return;
-    setMonth(value);
   };
 
   const { holidaySet } = useHolidays(year);
@@ -251,22 +169,6 @@ export default function DashboardPage() {
   useEffect(() => {
     setHolidayWorkdayOverrides(new Set(disabledHolidaySetYear));
   }, [disabledHolidaySetYear]);
-
-  useEffect(() => {
-    setIsDirty(getScheduleSignature(schedule) !== savedScheduleSignatureRef.current);
-  }, [schedule]);
-
-  useEffect(() => {
-    if (!isDirty || typeof window === "undefined") return;
-
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [isDirty]);
 
   useEffect(() => {
     const prefix = `${year}-${pad2(month)}-`;
@@ -311,7 +213,7 @@ export default function DashboardPage() {
   const isHolidayLikeDay = (day: number) => {
     const ymd = toYmd(year, month, day);
     const wd = getWeekday(year, month, day);
-    const isSun = wd === "æ—¥";
+    const isSun = wd === "“ú";
     const isAutoHoliday = holidaySet.has(ymd);
     const isManualHoliday = manualHolidaySetInMonth.has(ymd);
     return { ymd, wd, isSun, isAutoHoliday, isManualHoliday, isHolidayLike: isSun || isAutoHoliday || isManualHoliday };
@@ -408,10 +310,9 @@ export default function DashboardPage() {
     scoreMin,
     scoreMax,
     objectiveWeights,
-    hardConstraints,
     unavailableMap,
     fixedUnavailableWeekdaysMap,
-    previousMonthShifts,
+    prevMonthWorkedDaysMap,
     minScoreMap,
     maxScoreMap,
     targetScoreMap,
@@ -434,7 +335,6 @@ export default function DashboardPage() {
     filterRecordByActiveDoctors,
     buildLockedShiftsPayload,
     lockedShiftKeys,
-    markScheduleClean,
   });
 
   useEffect(() => {
@@ -449,93 +349,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setPrevMonthLastDay(calcPrevMonthLastDay(year, month));
-    setPreviousMonthShifts([]);
+    setPrevMonthWorkedDaysMap({});
     clearHistory();
   }, [year, month, clearHistory]);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const activeDoctorIdSet = new Set(activeDoctorIds);
-
-    const fetchPreviousMonthShifts = async () => {
-      if (activeDoctorIdSet.size === 0) {
-        setPreviousMonthShifts([]);
-        return;
-      }
-
-      const previousMonthDate = new Date(year, month - 2, 1);
-      const previousYear = previousMonthDate.getFullYear();
-      const previousMonth = previousMonthDate.getMonth() + 1;
-      const previousMonthLastDay = new Date(previousYear, previousMonth, 0).getDate();
-      const formatDate = (value: number) => `${previousYear}-${String(previousMonth).padStart(2, "0")}-${String(value).padStart(2, "0")}`;
-      const startDate = formatDate(Math.max(1, previousMonthLastDay - 3));
-      const endDate = formatDate(previousMonthLastDay);
-
-      try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(
-          `${apiUrl}/api/schedule/range?start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
-          { signal: controller.signal }
-        );
-
-        if (!res.ok) {
-          setPreviousMonthShifts([]);
-          return;
-        }
-
-        const data: unknown = await res.json();
-        if (!Array.isArray(data)) {
-          setPreviousMonthShifts([]);
-          return;
-        }
-
-        const next: PreviousMonthShift[] = [];
-
-        data.forEach((item) => {
-          if (!item || typeof item !== "object") return;
-
-          const entry = item as Record<string, unknown>;
-          const date = typeof entry.date === "string" ? entry.date : "";
-          const shiftType = entry.shift_type;
-          const doctorId =
-            typeof entry.doctor_id === "string"
-              ? entry.doctor_id
-              : typeof entry.doctorId === "string"
-                ? entry.doctorId
-                : "";
-
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
-          if (shiftType !== "day" && shiftType !== "night") return;
-          if (!activeDoctorIdSet.has(doctorId)) return;
-
-          next.push({
-            date,
-            shift_type: shiftType,
-            doctor_id: doctorId,
-          });
-        });
-
-        next.sort((left, right) => {
-          if (left.date !== right.date) return left.date.localeCompare(right.date);
-          if (left.shift_type !== right.shift_type) return left.shift_type === "day" ? -1 : 1;
-          return left.doctor_id.localeCompare(right.doctor_id);
-        });
-
-        setPreviousMonthShifts(next);
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        console.warn("Failed to fetch previous month shifts.", error);
-        setPreviousMonthShifts([]);
-      }
-    };
-
-    void fetchPreviousMonthShifts();
-    return () => controller.abort();
-  }, [activeDoctorIds, month, year]);
-
   const toggleHoliday = (day: number) => {
     const ymd = toYmd(year, month, day);
-    if (getWeekday(year, month, day) === "æ—¥") return;
+    if (getWeekday(year, month, day) === "“ú") return;
 
     setManualHolidaySetYear((prev) => {
       const next = new Set(prev);
@@ -596,39 +416,12 @@ export default function DashboardPage() {
     });
   };
 
-  const handleHardConstraintChange = (key: keyof HardConstraints, value: number | boolean) => {
-    setHardConstraints((prev) => {
-      const currentValue = prev[key];
-      if (typeof currentValue === "boolean") {
-        return { ...prev, [key]: Boolean(value) };
-      }
-
-      const numericValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
-      return { ...prev, [key]: numericValue };
-    });
-  };
-
-  const handlePrevMonthLastDayChange = (value: number) => {
-    const actualLastDay = calcPrevMonthLastDay(year, month);
-    const nextValue = Number.isFinite(value) ? Math.max(1, Math.min(actualLastDay, Math.round(value))) : actualLastDay;
-    setPrevMonthLastDay(nextValue);
-    setPreviousMonthShifts((prev) => prev.filter((entry) => Number(entry.date.slice(-2)) <= nextValue));
-  };
-
-  const getPreviousMonthShiftDoctorId = (prevDay: number, shiftType: ShiftType) =>
-    previousMonthShiftDoctorIdByKey[String(prevDay) + "_" + shiftType] ?? "";
-
-  const setPreviousMonthShift = (prevDay: number, shiftType: ShiftType, doctorId: string) => {
-    const dateKey = getPreviousMonthDateKey(prevDay);
-
-    setPreviousMonthShifts((prev) => {
-      const next = prev.filter((entry) => !(entry.date === dateKey && entry.shift_type === shiftType));
-      if (!doctorId) return next;
-      return [...next, { date: dateKey, shift_type: shiftType, doctor_id: doctorId }].sort((left, right) => {
-        if (left.date !== right.date) return left.date.localeCompare(right.date);
-        if (left.shift_type === right.shift_type) return left.doctor_id.localeCompare(right.doctor_id);
-        return left.shift_type === "day" ? -1 : 1;
-      });
+  const togglePrevMonthWorkedDay = (doctorId: string, prevDay: number) => {
+    if (!doctorId) return;
+    setPrevMonthWorkedDaysMap((prev) => {
+      const current = prev[doctorId] || [];
+      const next = current.includes(prevDay) ? current.filter((value) => value !== prevDay) : [...current, prevDay].sort((a, b) => a - b);
+      return { ...prev, [doctorId]: next };
     });
   };
 
@@ -688,7 +481,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
       <main className="mx-auto w-full max-w-7xl rounded-xl bg-white p-3 shadow-lg md:p-6 xl:p-8">
-        <h1 className="mb-4 border-b pb-4 text-xl font-bold text-gray-800 md:mb-8 md:text-3xl">å½“ç›´è¡¨ è‡ªå‹•ç”Ÿæˆãƒ€ãƒƒã‚·ãƒ¥ãƒœãƒ¼ãƒ‰</h1>
+        <h1 className="mb-4 border-b pb-4 text-xl font-bold text-gray-800 md:mb-8 md:text-3xl">“–’¼•\ ©“®¶¬ƒ_ƒbƒVƒ…ƒ{[ƒh</h1>
 
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,0.98fr)_minmax(0,1.32fr)] lg:items-start md:mb-6">
           <GenerationSettingsPanel
@@ -701,10 +494,8 @@ export default function DashboardPage() {
             scoreMin={scoreMin}
             scoreMax={scoreMax}
             objectiveWeights={objectiveWeights}
-            hardConstraints={hardConstraints}
             weightChanges={weightChanges}
             isWeightsOpen={isWeightsOpen}
-            isHardConstraintsOpen={isHardConstraintsOpen}
             year={year}
             month={month}
             numDoctors={numDoctors}
@@ -718,19 +509,15 @@ export default function DashboardPage() {
             pyWeekdaysJp={pyWeekdaysJp}
             prevMonthLastDay={prevMonthLastDay}
             prevMonthTailDays={prevMonthTailDays}
-            getPreviousMonthShiftDoctorId={getPreviousMonthShiftDoctorId}
+            prevMonthWorkedDaysMap={prevMonthWorkedDaysMap}
             onScoreMinChange={setScoreMin}
             onScoreMaxChange={setScoreMax}
-            onToggleWeights={handleToggleWeightsPanel}
+            onToggleWeights={() => setIsWeightsOpen((prev) => !prev)}
             onResetWeights={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
             onCloseWeights={() => setIsWeightsOpen(false)}
-            onToggleHardConstraints={handleToggleHardConstraintsPanel}
-            onResetHardConstraints={() => setHardConstraints(DEFAULT_HARD_CONSTRAINTS)}
-            onCloseHardConstraints={() => setIsHardConstraintsOpen(false)}
             onWeightChange={setWeight}
-            onHardConstraintChange={handleHardConstraintChange}
-            onYearChange={handleYearChange}
-            onMonthChange={handleMonthChange}
+            onYearChange={setYear}
+            onMonthChange={setMonth}
             isHolidayLikeDay={isHolidayLikeDay}
             onToggleHoliday={toggleHoliday}
             onToggleHolidayOverride={handleHolidayOverrideToggle}
@@ -741,8 +528,8 @@ export default function DashboardPage() {
             onToggleAllUnavailable={toggleAllUnavailable}
             onToggleUnavailable={toggleUnavailable}
             onToggleFixedWeekday={toggleFixedWeekday}
-            onPrevMonthLastDayChange={handlePrevMonthLastDayChange}
-            onSetPreviousMonthShift={setPreviousMonthShift}
+            onPrevMonthLastDayChange={setPrevMonthLastDay}
+            onTogglePrevMonthWorkedDay={togglePrevMonthWorkedDay}
             onGenerate={handleGenerate}
           />
 
@@ -752,8 +539,8 @@ export default function DashboardPage() {
                 <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl md:px-6">
                   <div className="flex flex-col items-center text-center">
                     <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
-                    <div className="text-base font-bold text-gray-800 md:text-lg">å½“ç›´è¡¨ã‚’è‡ªå‹•ç”Ÿæˆã—ã¦ã„ã¾ã™</div>
-                    <div className="mt-2 text-sm text-gray-500">æœªå›ºå®šæ ã‚’ç™½ç´™åŒ–ã—ã¤ã¤ã€æ¡ä»¶ã‚’ã‚‚ã¨ã«å†è¨ˆç®—ã—ã¦ã„ã¾ã™ã€‚</div>
+                    <div className="text-base font-bold text-gray-800 md:text-lg">“–’¼•\‚ğ©“®¶¬‚µ‚Ä‚¢‚Ü‚·</div>
+                    <div className="mt-2 text-sm text-gray-500">–¢ŒÅ’è˜g‚ğ”’†‰»‚µ‚Â‚ÂAğŒ‚ğ‚à‚Æ‚ÉÄŒvZ‚µ‚Ä‚¢‚Ü‚·B</div>
                     <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                       <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
                     </div>

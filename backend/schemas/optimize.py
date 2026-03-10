@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ObjectiveWeights(BaseModel):
@@ -29,6 +29,26 @@ class LockedShift(BaseModel):
     doctor_id: UUID
 
 
+class ShiftAssignmentPayload(BaseModel):
+    date: Union[date, str]
+    shift_type: str
+    doctor_id: UUID
+
+
+class HardConstraints(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    interval_days: Optional[int] = None
+    max_shifts: Optional[int] = None
+    max_saturday_nights: int = Field(default=2)
+    max_sunhol_days: int = Field(default=2)
+    max_sunhol_works: int = Field(default=3)
+    prevent_sunhol_consecutive: bool = Field(default=True)
+    respect_unavailable_days: bool = Field(default=True)
+    strict_weekend_hol_max: bool = Field(default=False)
+    max_weekend_holiday_works: Optional[int] = Field(default=None, alias="weekend_hol_max_count")
+
+
 class OptimizeRequest(BaseModel):
     year: int
     month: int
@@ -40,6 +60,7 @@ class OptimizeRequest(BaseModel):
 
     prev_month_worked_days: Dict[str, List[int]] = Field(default_factory=dict)
     prev_month_last_day: Optional[int] = None
+    previous_month_shifts: Optional[List[ShiftAssignmentPayload]] = None
 
     score_min: float = 0.5
     score_max: float = 4.5
@@ -56,6 +77,17 @@ class OptimizeRequest(BaseModel):
     objective_weights: ObjectiveWeights = Field(default_factory=ObjectiveWeights)
     hard_constraints: Dict[str, Any] = Field(default_factory=dict)
     locked_shifts: List[LockedShift] = Field(default_factory=list)
+
+    @field_validator("hard_constraints", mode="before")
+    @classmethod
+    def validate_hard_constraints(cls, value: Any) -> Dict[str, Any]:
+        if value is None:
+            return {}
+        if isinstance(value, dict) and not value:
+            return {}
+
+        constraints = HardConstraints.model_validate(value)
+        return constraints.model_dump(exclude_unset=True)
 
 
 class OptimizeResponse(BaseModel):

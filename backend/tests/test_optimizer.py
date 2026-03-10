@@ -186,6 +186,27 @@ def test_month_cross_spacing_blocks_early_days():
             assert row["day_shift"] != 0
 
 
+
+def test_month_cross_spacing_accepts_previous_month_shifts_payload():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        prev_month_last_day=31,
+        previous_month_shifts=[
+            {"date": "2024-03-31", "shift_type": "night", "doctor_idx": 0},
+        ],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+    assert res["success"] is True
+
+    for day in range(1, 5):
+        row = next(r for r in res["schedule"] if r["day"] == day)
+        assert row["night_shift"] != 0
+        if row["day_shift"] is not None:
+            assert row["day_shift"] != 0
+
 def test_score_bounds_enforced_or_infeasible():
     opt = OnCallOptimizer(
         num_doctors=8,
@@ -240,6 +261,99 @@ def test_hard_constraints_can_disable_spacing_rule():
     row5 = next(r for r in res["schedule"] if r["day"] == 5)
     assert row1["night_shift"] == 0
     assert row5["night_shift"] == 0
+
+
+
+def test_hard_constraints_zero_can_skip_new_monthly_caps():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        hard_constraints={
+            "interval_days": 0,
+            "max_saturday_nights": 0,
+            "max_sunhol_days": 0,
+            "max_sunhol_works": 0,
+        },
+        locked_shifts=[
+            {"date": 6, "shift_type": "night", "doctor_idx": 0},
+            {"date": 13, "shift_type": "night", "doctor_idx": 0},
+            {"date": 7, "shift_type": "day", "doctor_idx": 0},
+            {"date": 14, "shift_type": "day", "doctor_idx": 0},
+            {"date": 21, "shift_type": "day", "doctor_idx": 0},
+            {"date": 28, "shift_type": "night", "doctor_idx": 0},
+        ],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is True
+    for date, shift_type in [
+        (6, "night_shift"),
+        (13, "night_shift"),
+        (7, "day_shift"),
+        (14, "day_shift"),
+        (21, "day_shift"),
+        (28, "night_shift"),
+    ]:
+        row = next(r for r in res["schedule"] if r["day"] == date)
+        assert row[shift_type] == 0
+
+
+def test_hard_constraints_can_allow_same_doctor_for_sunhol_day_and_night():
+    opt = OnCallOptimizer(
+        num_doctors=8,
+        year=2024,
+        month=4,
+        holidays=[29],
+        hard_constraints={"prevent_sunhol_consecutive": False},
+        locked_shifts=[
+            {"date": 29, "shift_type": "day", "doctor_idx": 0},
+            {"date": 29, "shift_type": "night", "doctor_idx": 0},
+        ],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is True
+    row = next(r for r in res["schedule"] if r["day"] == 29)
+    assert row["day_shift"] == 0
+    assert row["night_shift"] == 0
+
+
+def test_hard_constraints_can_ignore_unavailable_day_rules():
+    opt = OnCallOptimizer(
+        num_doctors=8,
+        year=2024,
+        month=4,
+        unavailable={0: [8]},
+        fixed_unavailable_weekdays={0: [0]},
+        hard_constraints={"respect_unavailable_days": False},
+        locked_shifts=[{"date": 8, "shift_type": "night", "doctor_idx": 0}],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is True
+    row = next(r for r in res["schedule"] if r["day"] == 8)
+    assert row["night_shift"] == 0
+
+
+def test_respect_unavailable_days_flag_does_not_disable_previous_month_spacing():
+    opt = OnCallOptimizer(
+        num_doctors=10,
+        year=2024,
+        month=4,
+        prev_month_last_day=31,
+        prev_month_worked_days={0: [31]},
+        hard_constraints={"respect_unavailable_days": False},
+        locked_shifts=[{"date": 1, "shift_type": "night", "doctor_idx": 0}],
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+
+    assert res["success"] is False
+    assert res["message"]
 
 
 def test_hard_constraints_can_cap_combined_weekend_holiday_works():

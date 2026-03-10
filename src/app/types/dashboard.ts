@@ -1,4 +1,4 @@
-﻿export type TargetShift = "all" | "day" | "night";
+export type TargetShift = "all" | "day" | "night";
 
 export type UnavailableDayRecord = {
   date: string | null;
@@ -55,6 +55,22 @@ export type LockedShiftPayload = {
   doctor_id: string;
 };
 
+export type PreviousMonthShift = {
+  date: string;
+  shift_type: ShiftType;
+  doctor_id: string;
+};
+
+export type HardConstraints = {
+  interval_days: number;
+  max_weekend_holiday_works: number;
+  max_saturday_nights: number;
+  max_sunhol_days: number;
+  max_sunhol_works: number;
+  prevent_sunhol_consecutive: boolean;
+  respect_unavailable_days: boolean;
+};
+
 export type SwapSource = {
   day: number;
   shiftType: ShiftType;
@@ -85,7 +101,7 @@ export type ObjectiveWeights = {
   gap5: number;
   soft_unavailable: number;
   sat_consec: number;
-  sunhol_3rd: number;
+  weekend_hol_3rd: number;
   gap6: number;
   month_fairness: number;
   target: number;
@@ -95,11 +111,21 @@ export type ObjectiveWeights = {
   past_sunhol_gap: number;
 };
 
+export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
+  interval_days: 4,
+  max_weekend_holiday_works: 3,
+  max_saturday_nights: 2,
+  max_sunhol_days: 2,
+  max_sunhol_works: 3,
+  prevent_sunhol_consecutive: true,
+  respect_unavailable_days: true,
+};
+
 export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   gap5: 100,
   soft_unavailable: 100,
   sat_consec: 80,
-  sunhol_3rd: 80,
+  weekend_hol_3rd: 80,
   gap6: 50,
   month_fairness: 50,
   target: 30,
@@ -108,5 +134,3 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   past_sat_gap: 10,
   past_sunhol_gap: 5,
 };
-
-

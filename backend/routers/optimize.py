@@ -84,6 +84,19 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
             for locked in req.locked_shifts
         ]
 
+        previous_month_shifts_idx = [
+            {
+                "date": (
+                    shift.date.isoformat()
+                    if hasattr(shift.date, "isoformat")
+                    else str(shift.date)
+                ),
+                "shift_type": shift.shift_type,
+                "doctor_idx": _key_to_idx(shift.doctor_id),
+            }
+            for shift in (req.previous_month_shifts or [])
+        ]
+
         _u = _remap_keys(req.unavailable)
         formatted_unavailable: Dict[int, Any] = {
             idx: [
@@ -117,6 +130,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
             fixed_unavailable_weekdays=formatted_fixed_weekdays,
             prev_month_worked_days=formatted_prev_month,
             prev_month_last_day=req.prev_month_last_day,
+            previous_month_shifts=previous_month_shifts_idx,
             score_min=req.score_min,
             score_max=req.score_max,
             past_sat_counts=req.past_sat_counts,
@@ -137,7 +151,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
         if not solve_result.get("success"):
             raise HTTPException(
                 status_code=400,
-                detail=solve_result.get("message", "譛驕ｩ蛹悶↓螟ｱ謨励＠縺ｾ縺励◆"),
+                detail=solve_result.get("message", "Optimization failed"),
             )
 
         if isinstance(solve_result.get("schedule"), list):

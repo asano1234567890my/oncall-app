@@ -8,9 +8,7 @@ import "react-day-picker/dist/style.css";
 import TargetShiftPopover from "./TargetShiftPopover";
 import type {
   FixedUnavailableWeekdayMap,
-  HardConstraints,
   ObjectiveWeights,
-  ShiftType,
   TargetShift,
   UnavailableDateMap,
 } from "../types/dashboard";
@@ -46,10 +44,8 @@ type GenerationSettingsPanelProps = {
   scoreMin: number;
   scoreMax: number;
   objectiveWeights: ObjectiveWeights;
-  hardConstraints: HardConstraints;
   weightChanges: WeightChangeSummary;
   isWeightsOpen: boolean;
-  isHardConstraintsOpen: boolean;
   year: number;
   month: number;
   numDoctors: number;
@@ -63,17 +59,13 @@ type GenerationSettingsPanelProps = {
   pyWeekdaysJp: string[];
   prevMonthLastDay: number;
   prevMonthTailDays: number[];
-  getPreviousMonthShiftDoctorId: (prevDay: number, shiftType: ShiftType) => string;
+  prevMonthWorkedDaysMap: Record<string, number[]>;
   onScoreMinChange: (value: number) => void;
   onScoreMaxChange: (value: number) => void;
   onToggleWeights: () => void;
   onResetWeights: () => void;
   onCloseWeights: () => void;
-  onToggleHardConstraints: () => void;
-  onResetHardConstraints: () => void;
-  onCloseHardConstraints: () => void;
   onWeightChange: (key: keyof ObjectiveWeights, value: number) => void;
-  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean) => void;
   onYearChange: (value: number) => void;
   onMonthChange: (value: number) => void;
   isHolidayLikeDay: (day: number) => HolidayMeta;
@@ -85,7 +77,7 @@ type GenerationSettingsPanelProps = {
   onToggleUnavailable: (doctorId: string, ymd: string, targetShift?: TargetShift | null) => void;
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
   onPrevMonthLastDayChange: (value: number) => void;
-  onSetPreviousMonthShift: (prevDay: number, shiftType: ShiftType, doctorId: string) => void;
+  onTogglePrevMonthWorkedDay: (doctorId: string, prevDay: number) => void;
   onGenerate: () => void;
 };
 
@@ -106,88 +98,23 @@ type DoctorSettingsPanelProps = {
 };
 
 const weightInputs = [
-  { key: "gap5", label: "5æ—¥é–“éš”", min: 0, max: 200, step: 5, hint: "å‹¤å‹™é–“éš”" },
-  { key: "soft_unavailable", label: "å¿Œé¿æ—¥ã®ã‚½ãƒ•ãƒˆå›é¿", min: 0, max: 200, step: 5, hint: "å¸Œæœ›æ—¥ã®å°Šé‡" },
-  { key: "sat_consec", label: "2ã‹æœˆé€£ç¶šåœŸæ›œå›é¿", min: 0, max: 200, step: 5, hint: "é€£ç¶šåœŸæ›œæŠ‘åˆ¶" },
-  { key: "weekend_hol_3rd", label: "åœŸæ—¥ç¥åˆç®—3å›ç›®ãƒšãƒŠãƒ«ãƒ†ã‚£", min: 0, max: 200, step: 5, hint: "åœŸæ—¥ç¥å›æ•°æŠ‘åˆ¶" },
-  { key: "gap6", label: "6æ—¥é–“éš”", min: 0, max: 200, step: 5, hint: "ä½™è£•ã‚’æŒã¤" },
-  { key: "month_fairness", label: "åŒæœˆã®ã‚¹ã‚³ã‚¢å¹³æº–åŒ–", min: 0, max: 200, step: 5, hint: "åŒæœˆã®åã‚ŠæŠ‘åˆ¶" },
-  { key: "target", label: "ç›®æ¨™ã‚¹ã‚³ã‚¢ã¸ã®è¿‘ä¼¼åº¦", min: 0, max: 200, step: 5, hint: "å€‹åˆ¥ç›®æ¨™å¯„ã›" },
-  { key: "score_balance", label: "éå»æ•°ã‹æœˆã®ã‚¹ã‚³ã‚¢å¹³æº–åŒ–", min: 0, max: 200, step: 5, hint: "è² æ‹…ãƒãƒ©ãƒ³ã‚¹" },
-  { key: "sunhol_fairness", label: "åŒæœˆã®æ—¥ç¥å›æ•°å¹³æº–åŒ–", min: 0, max: 200, step: 5, hint: "æ—¥ç¥å›æ•°ã®å‡ç­‰åŒ–" },
-  { key: "past_sat_gap", label: "éå»æ•°ã‹æœˆã®åœŸæ›œå‹¤å‹™å¹³æº–åŒ–", min: 0, max: 200, step: 5, hint: "éå»å®Ÿç¸¾è€ƒæ…®" },
-  { key: "past_sunhol_gap", label: "éå»æ•°ã‹æœˆã®æ—¥ç¥å‹¤å‹™å¹³æº–åŒ–", min: 0, max: 200, step: 5, hint: "éå»å®Ÿç¸¾è€ƒæ…®" },
+  { key: "gap5", label: "5“úŠÔŠu", min: 0, max: 200, step: 5, hint: "‹Î–±ŠÔŠu" },
+  { key: "soft_unavailable", label: "Šõ”ğ“ú‚Ìƒ\ƒtƒg‰ñ”ğ", min: 0, max: 200, step: 5, hint: "Šó–]“ú‚Ì‘¸d" },
+  { key: "sat_consec", label: "2‚©Œ˜A‘±“y—j‰ñ”ğ", min: 0, max: 200, step: 5, hint: "˜A‘±“y—j—}§" },
+  { key: "sunhol_3rd", label: "“új3‰ñ–Ú", min: 0, max: 200, step: 5, hint: "“új‰ñ”—}§" },
+  { key: "gap6", label: "6“úŠÔŠu", min: 0, max: 200, step: 5, hint: "—]—T‚ğ‚Â" },
+  { key: "month_fairness", label: "“¯Œ‚ÌƒXƒRƒA•½€‰»", min: 0, max: 200, step: 5, hint: "“¯Œ‚Ì•Î‚è—}§" },
+  { key: "target", label: "–Ú•WƒXƒRƒA‚Ö‚Ì‹ß—“x", min: 0, max: 200, step: 5, hint: "ŒÂ•Ê–Ú•WŠñ‚¹" },
+  { key: "score_balance", label: "‰ß‹”‚©Œ‚ÌƒXƒRƒA•½€‰»", min: 0, max: 200, step: 5, hint: "•‰’Sƒoƒ‰ƒ“ƒX" },
+  { key: "sunhol_fairness", label: "“¯Œ‚Ì“új‰ñ”•½€‰»", min: 0, max: 200, step: 5, hint: "“új‰ñ”‚Ì‹Ï“™‰»" },
+  { key: "past_sat_gap", label: "‰ß‹”‚©Œ‚Ì“y—j‹Î–±•½€‰»", min: 0, max: 200, step: 5, hint: "‰ß‹ÀÑl—¶" },
+  { key: "past_sunhol_gap", label: "‰ß‹”‚©Œ‚Ì“új‹Î–±•½€‰»", min: 0, max: 200, step: 5, hint: "‰ß‹ÀÑl—¶" },
 ] as const satisfies ReadonlyArray<{
   key: keyof ObjectiveWeights;
   label: string;
   min: number;
   max: number;
   step: number;
-  hint: string;
-}>;
-
-const hardConstraintNumberInputs = [
-  { key: "interval_days", label: "å‹¤å‹™é–“éš”ãƒ«ãƒ¼ãƒ«", min: 0, max: 10, step: 1, unit: "æ—¥", hint: "0ã§OFF / æ—¢å®š4" },
-  {
-    key: "max_weekend_holiday_works",
-    label: "åœŸæ—¥ç¥ã®åˆç®—å‹¤å‹™ä¸Šé™",
-    min: 0,
-    max: 10,
-    step: 1,
-    unit: "å›",
-    hint: "0ã§OFF / æ—¢å®š3",
-  },
-  {
-    key: "max_saturday_nights",
-    label: "åœŸæ›œå½“ç›´ä¸Šé™",
-    min: 0,
-    max: 10,
-    step: 1,
-    unit: "å›",
-    hint: "0ã§OFF / æ—¢å®š2",
-  },
-  {
-    key: "max_sunhol_days",
-    label: "æ—¥ç¥ãƒ»æ—¥ç›´ä¸Šé™",
-    min: 0,
-    max: 10,
-    step: 1,
-    unit: "å›",
-    hint: "0ã§OFF / æ—¢å®š2",
-  },
-  {
-    key: "max_sunhol_works",
-    label: "æ—¥ç¥å‹¤å‹™ä¸Šé™",
-    min: 0,
-    max: 10,
-    step: 1,
-    unit: "å›",
-    hint: "0ã§OFF / æ—¢å®š3",
-  },
-] as const satisfies ReadonlyArray<{
-  key: keyof HardConstraints;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  unit: string;
-  hint: string;
-}>;
-
-const hardConstraintToggleInputs = [
-  {
-    key: "prevent_sunhol_consecutive",
-    label: "æ—¥ç¥ã®æ˜¼å¤œé€£ç¶šå‹¤å‹™ã‚’ç¦æ­¢",
-    hint: "ON ã§æ—¥ç¥ã®æ—¥ç›´ã¨å½“ç›´ã®é€£ç¶šå‹¤å‹™ã‚’ãƒãƒ¼ãƒ‰åˆ¶ç´„ã¨ã—ã¦ç¦æ­¢ã—ã¾ã™ã€‚",
-  },
-  {
-    key: "respect_unavailable_days",
-    label: "åŒ»å¸«ã®ä¼‘ã¿å¸Œæœ›ã‚’çµ¶å¯¾å®ˆã‚‹",
-    hint: "ON ã§ä¸å¯æ—¥ãƒ»ä¸å¯æ›œæ—¥ã‚’å³å®ˆã—ã€OFF ã§ optimizer å´ã®ç·©å’Œä½™åœ°ã‚’æ®‹ã—ã¾ã™ã€‚",
-  },
-] as const satisfies ReadonlyArray<{
-  key: keyof HardConstraints;
-  label: string;
   hint: string;
 }>;
 
@@ -236,10 +163,10 @@ const baseCalendarModifierClasses = {
 };
 
 const getTargetShiftSummaryLabel = (targetShift: TargetShift | null) => {
-  if (targetShift === "all") return "çµ‚æ—¥ä¼‘ã¿";
-  if (targetShift === "day") return "æ—¥ç›´ã®ã¿ä¼‘ã¿";
-  if (targetShift === "night") return "å½“ç›´ã®ã¿ä¼‘ã¿";
-  return "è¨­å®šãªã—";
+  if (targetShift === "all") return "I“ú‹x‚İ";
+  if (targetShift === "day") return "“ú’¼‚Ì‚İ‹x‚İ";
+  if (targetShift === "night") return "“–’¼‚Ì‚İ‹x‚İ";
+  return "İ’è‚È‚µ";
 };
 
 const getAnchorPosition = (target: HTMLElement, container: HTMLElement | null) => {
@@ -279,10 +206,8 @@ export function GenerationSettingsPanel({
   scoreMin,
   scoreMax,
   objectiveWeights,
-  hardConstraints,
   weightChanges,
   isWeightsOpen,
-  isHardConstraintsOpen,
   year,
   month,
   numDoctors,
@@ -296,17 +221,13 @@ export function GenerationSettingsPanel({
   pyWeekdaysJp,
   prevMonthLastDay,
   prevMonthTailDays,
-  getPreviousMonthShiftDoctorId,
+  prevMonthWorkedDaysMap,
   onScoreMinChange,
   onScoreMaxChange,
   onToggleWeights,
   onResetWeights,
   onCloseWeights,
-  onToggleHardConstraints,
-  onResetHardConstraints,
-  onCloseHardConstraints,
   onWeightChange,
-  onHardConstraintChange,
   onYearChange,
   onMonthChange,
   isHolidayLikeDay,
@@ -318,7 +239,7 @@ export function GenerationSettingsPanel({
   onToggleUnavailable,
   onToggleFixedWeekday,
   onPrevMonthLastDayChange,
-  onSetPreviousMonthShift,
+  onTogglePrevMonthWorkedDay,
   onGenerate,
 }: GenerationSettingsPanelProps) {
   const displayMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
@@ -355,16 +276,6 @@ export function GenerationSettingsPanel({
   const selectedFixedWeekdays = useMemo(
     () => (selectedDoctorId ? fixedUnavailableWeekdaysMap[selectedDoctorId] ?? [] : []),
     [fixedUnavailableWeekdaysMap, selectedDoctorId]
-  );
-
-  const previousMonthShiftCount = useMemo(
-    () =>
-      prevMonthTailDays.reduce((count, day) => {
-        const dayDoctorId = getPreviousMonthShiftDoctorId(day, "day");
-        const nightDoctorId = getPreviousMonthShiftDoctorId(day, "night");
-        return count + (dayDoctorId ? 1 : 0) + (nightDoctorId ? 1 : 0);
-      }, 0),
-    [getPreviousMonthShiftDoctorId, prevMonthTailDays]
   );
 
   const unavailableCounts = useMemo(
@@ -530,34 +441,34 @@ export function GenerationSettingsPanel({
         <div className="pointer-events-auto absolute inset-0 z-10 flex items-start justify-center rounded-xl bg-white/50 p-4 backdrop-blur-[1px]">
           <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-2 text-sm font-bold text-blue-700 shadow-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
-            <span>ç”Ÿæˆä¸­ã¯å…¥åŠ›ã‚’ä¸€æ™‚ãƒ­ãƒƒã‚¯ã—ã¦ã„ã¾ã™</span>
+            <span>¶¬’†‚Í“ü—Í‚ğˆêƒƒbƒN‚µ‚Ä‚¢‚Ü‚·</span>
           </div>
         </div>
       ) : null}
 
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-blue-900">ç”Ÿæˆæ¡ä»¶ã¨ä¼‘æ—¥è¨­å®š</h2>
-          <p className="mt-1 text-sm text-blue-700">å¯¾è±¡æœˆã¨ä¸å¯æ¡ä»¶ã‚’æ•´ãˆã¦ã‹ã‚‰æœªå›ºå®šæ ã‚’å†ç”Ÿæˆã—ã¾ã™ã€‚</p>
+          <h2 className="text-xl font-bold text-blue-900">¶¬ğŒ‚Æ‹x“úİ’è</h2>
+          <p className="mt-1 text-sm text-blue-700">‘ÎÛŒ‚Æ•s‰ÂğŒ‚ğ®‚¦‚Ä‚©‚ç–¢ŒÅ’è˜g‚ğÄ¶¬‚µ‚Ü‚·B</p>
         </div>
         <div className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">
-          {format(displayMonth, "yyyyå¹´Mæœˆ")}
+          {format(displayMonth, "yyyy”NMŒ")}
         </div>
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-sm font-bold text-gray-800">æœ€é©åŒ–ã‚µãƒãƒªãƒ¼</div>
-            <div className="text-xs text-gray-500">ã‚¹ã‚³ã‚¢å¸¯ã€é‡ã¿ã€ãƒãƒ¼ãƒ‰åˆ¶ç´„ã®çŠ¶æ…‹ã‚’ã“ã“ã§ç¢ºèªã§ãã¾ã™ã€‚</div>
+            <div className="text-sm font-bold text-gray-800">Å“K‰»ƒTƒ}ƒŠ[</div>
+            <div className="text-xs text-gray-500">ƒXƒRƒA‘Ñ‚Æd‚İ‚Ìó‘Ô‚ğ‚±‚±‚ÅŠm”F‚Å‚«‚Ü‚·B</div>
           </div>
           {weightChanges.isDefault ? (
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">
-              æ—¢å®šå€¤
+              Šù’è’l
             </span>
           ) : (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-800">
-              å¤‰æ›´ã‚ã‚Š {weightChanges.changedCount}ä»¶
+              •ÏX‚ ‚è {weightChanges.changedCount}Œ
             </span>
           )}
         </div>
@@ -593,176 +504,84 @@ export function GenerationSettingsPanel({
               </span>
             ))
           ) : (
-            <span className="text-gray-500">é‡ã¿ã¯æ—¢å®šå€¤ã®ã¾ã¾ã§ã™ã€‚</span>
+            <span className="text-gray-500">d‚İ‚ÍŠù’è’l‚Ì‚Ü‚Ü‚Å‚·B</span>
           )}
         </div>
 
         <div className="mt-3 text-[11px] text-gray-500">
-          äººæ•°ãŒå°‘ãªã„æœˆã¯ score_max ã‚’å°‘ã—åºƒã’ã‚‹ã¨è§£ãªã—ã‚’é¿ã‘ã‚„ã™ããªã‚Šã¾ã™ã€‚
+          l”‚ª­‚È‚¢Œ‚Í score_max ‚ğ­‚µL‚°‚é‚Æ‰ğ‚È‚µ‚ğ”ğ‚¯‚â‚·‚­‚È‚è‚Ü‚·B
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex items-center justify-between gap-2">
           <button
             type="button"
             onClick={onToggleWeights}
             className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
           >
-            é‡ã¿è¨­å®šã‚’é–‹ã
+            {isWeightsOpen ? "d‚İİ’è‚ğ•Â‚¶‚é" : "d‚İİ’è‚ğŠJ‚­"}
           </button>
-          <button
-            type="button"
-            onClick={onToggleHardConstraints}
-            className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
-          >
-            ãƒ«ãƒ¼ãƒ«ï¼ˆãƒãƒ¼ãƒ‰åˆ¶ç´„ï¼‰è¨­å®šã‚’é–‹ã
-          </button>
-        </div>
-      </div>
-
-      {isWeightsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-blue-100 bg-blue-50 px-4 py-4 sm:px-5">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">é‡ã¿è¨­å®š</h3>
-                <p className="mt-1 text-xs text-gray-500">ãƒšãƒŠãƒ«ãƒ†ã‚£é‡ã¿ã‚’èª¿æ•´ã—ã€optimizer ã®ç›®çš„é–¢æ•°ã«åæ˜ ã—ã¾ã™ã€‚</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onResetWeights}
-                  className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50"
-                >
-                  æ—¢å®šå€¤ã«æˆ»ã™
-                </button>
-                <button
-                  type="button"
-                  onClick={onCloseWeights}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-                >
-                  é–‰ã˜ã‚‹
-                </button>
-              </div>
+          {isWeightsOpen ? (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onResetWeights}
+                className="rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50"
+              >
+                Šù’è’l‚É–ß‚·
+              </button>
+              <button
+                type="button"
+                onClick={onCloseWeights}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
+              >
+                •Â‚¶‚é
+              </button>
             </div>
-            <div className="max-h-[calc(90vh-88px)] space-y-3 overflow-y-auto p-4 sm:p-5">
-              {weightInputs.map((weight) => (
-                <div key={weight.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-                  <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-gray-800">{weight.label}</div>
-                      <div className="text-[11px] text-gray-500">{weight.hint}</div>
-                    </div>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={objectiveWeights[weight.key]}
-                      onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
-                      className="w-20 rounded-lg border border-gray-200 bg-white p-2 text-center text-sm font-bold"
-                      min={weight.min}
-                      max={weight.max}
-                      step={weight.step}
-                    />
+          ) : null}
+        </div>
+
+        {isWeightsOpen ? (
+          <div className="mt-4 space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-3">
+            {weightInputs.map((weight) => (
+              <div key={weight.key} className="rounded-xl border border-white bg-white p-3 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-gray-800">{weight.label}</div>
+                    <div className="text-[11px] text-gray-500">{weight.hint}</div>
                   </div>
                   <input
-                    type="range"
+                    type="number"
+                    inputMode="numeric"
                     value={objectiveWeights[weight.key]}
                     onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
+                    className="w-20 rounded-lg border border-gray-200 bg-gray-50 p-2 text-center text-sm font-bold"
                     min={weight.min}
                     max={weight.max}
                     step={weight.step}
-                    className="w-full accent-blue-600"
                   />
-                  <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-                    <span>{weight.min}</span>
-                    <span>{weight.max}</span>
-                  </div>
                 </div>
-              ))}
-            </div>
+                <input
+                  type="range"
+                  value={objectiveWeights[weight.key]}
+                  onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
+                  min={weight.min}
+                  max={weight.max}
+                  step={weight.step}
+                  className="w-full accent-blue-600"
+                />
+                <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                  <span>{weight.min}</span>
+                  <span>{weight.max}</span>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      ) : null}
-
-      {isHardConstraintsOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-3 py-6 backdrop-blur-sm">
-          <div className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">ãƒ«ãƒ¼ãƒ«ï¼ˆãƒãƒ¼ãƒ‰åˆ¶ç´„ï¼‰è¨­å®š</h3>
-                <p className="mt-1 text-xs text-gray-500">0 ã‚’å…¥ã‚Œã‚‹ã¨è©²å½“ãƒ«ãƒ¼ãƒ«ã‚’ OFF ã«ã—ã¾ã™ã€‚ãƒˆã‚°ãƒ«ã¯ hard constraint ã¨ã—ã¦é€ä¿¡ã—ã¾ã™ã€‚</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onResetHardConstraints}
-                  className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
-                >
-                  æ—¢å®šå€¤ã«æˆ»ã™
-                </button>
-                <button
-                  type="button"
-                  onClick={onCloseHardConstraints}
-                  className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-                >
-                  é–‰ã˜ã‚‹
-                </button>
-              </div>
-            </div>
-            <div className="max-h-[calc(90vh-88px)] space-y-4 overflow-y-auto p-4 sm:p-5">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {hardConstraintNumberInputs.map((constraint) => (
-                  <label key={constraint.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">{constraint.label}</div>
-                    <div className="mb-2 text-[11px] text-gray-500">{constraint.hint}</div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        value={hardConstraints[constraint.key]}
-                        onChange={(event) => onHardConstraintChange(constraint.key, Number(event.target.value))}
-                        className="w-full rounded-lg border border-gray-200 bg-white p-2 text-sm font-bold"
-                        min={constraint.min}
-                        max={constraint.max}
-                        step={constraint.step}
-                      />
-                      <span className="text-xs font-bold text-gray-500">{constraint.unit}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                {hardConstraintToggleInputs.map((constraint) => (
-                  <div
-                    key={constraint.key}
-                    className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm font-bold text-gray-800">{constraint.label}</div>
-                      <div className="mt-1 text-[11px] text-gray-500">{constraint.hint}</div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => onHardConstraintChange(constraint.key, !hardConstraints[constraint.key])}
-                      className={`inline-flex h-10 min-w-28 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
-                        hardConstraints[constraint.key]
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                          : "border-gray-200 bg-gray-50 text-gray-500"
-                      }`}
-                    >
-                      {hardConstraints[constraint.key] ? "ON" : "OFF"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
         <label>
-          <div className="mb-1 text-sm font-bold text-gray-700">å¹´</div>
+          <div className="mb-1 text-sm font-bold text-gray-700">”N</div>
           <input
             type="number"
             value={year}
@@ -771,7 +590,7 @@ export function GenerationSettingsPanel({
           />
         </label>
         <label>
-          <div className="mb-1 text-sm font-bold text-gray-700">æœˆ</div>
+          <div className="mb-1 text-sm font-bold text-gray-700">Œ</div>
           <input
             type="number"
             value={month}
@@ -780,16 +599,16 @@ export function GenerationSettingsPanel({
           />
         </label>
         <div className="col-span-2 rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-          ç¨¼åƒåŒ»å¸«æ•°: <span className="font-bold text-gray-800">{numDoctors}å</span>
+          ‰Ò“­ˆãt”: <span className="font-bold text-gray-800">{numDoctors}–¼</span>
         </div>
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-bold text-gray-800">ç¥æ—¥ãƒ»ä¼‘æ—¥è¨­å®š</h3>
+            <h3 className="text-sm font-bold text-gray-800">j“úE‹x“úİ’è</h3>
             <p className="mt-1 text-[11px] text-gray-500">
-              é€šå¸¸æ—¥ã‚’æŠ¼ã™ã¨è¿½åŠ ä¼‘æ—¥ã€æ¨™æº–ç¥æ—¥ã‚’æŠ¼ã™ã¨é€šå¸¸å‡ºå‹¤ã¸åˆ‡ã‚Šæ›¿ãˆã¾ã™ã€‚
+              ’Êí“ú‚ğ‰Ÿ‚·‚Æ’Ç‰Á‹x“úA•W€j“ú‚ğ‰Ÿ‚·‚Æ’Êío‹Î‚ÖØ‚è‘Ö‚¦‚Ü‚·B
             </p>
           </div>
           <button
@@ -804,7 +623,7 @@ export function GenerationSettingsPanel({
                   : "bg-slate-600 hover:bg-slate-700"
             }`}
           >
-            {isSavingCustom ? "ä¿å­˜ä¸­..." : "ç¥æ—¥è¨­å®šã‚’ä¿å­˜"}
+            {isSavingCustom ? "•Û‘¶’†..." : "j“úİ’è‚ğ•Û‘¶"}
           </button>
         </div>
 
@@ -819,8 +638,8 @@ export function GenerationSettingsPanel({
             }`}
           >
             {customError
-              ? `ç¥æ—¥è¨­å®šã®ä¿å­˜ã«å¤±æ•—ã—ã¾ã—ãŸ: ${customError}`
-              : customSaveMessage || "ç¥æ—¥è¨­å®šã‚’èª­ã¿è¾¼ã¿ä¸­ã§ã™..."}
+              ? `j“úİ’è‚Ì•Û‘¶‚É¸”s‚µ‚Ü‚µ‚½: ${customError}`
+              : customSaveMessage || "j“úİ’è‚ğ“Ç‚İ‚İ’†‚Å‚·..."}
           </div>
         ) : null}
 
@@ -846,17 +665,17 @@ export function GenerationSettingsPanel({
 
         <div className="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
           <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-red-600">
-            æ¨™æº–ç¥æ—¥ {holidayCounts.autoCount}
+            •W€j“ú {holidayCounts.autoCount}
           </span>
           <span className="rounded-full border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700">
-            è¿½åŠ ä¼‘æ—¥ {holidayCounts.manualCount}
+            ’Ç‰Á‹x“ú {holidayCounts.manualCount}
           </span>
           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-emerald-700">
-            å¹³æ—¥æ‰±ã„ {holidayCounts.overrideCount}
+            •½“úˆµ‚¢ {holidayCounts.overrideCount}
           </span>
           {hasUnsavedCustomChanges ? (
             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-700">
-              æœªä¿å­˜ã®å¤‰æ›´ãŒã‚ã‚Šã¾ã™
+              –¢•Û‘¶‚Ì•ÏX‚ª‚ ‚è‚Ü‚·
             </span>
           ) : null}
         </div>
@@ -865,9 +684,9 @@ export function GenerationSettingsPanel({
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-gray-800">åŒ»å¸«åˆ¥ä¸å¯æ—¥è¨­å®š</h3>
+            <h3 className="text-sm font-bold text-gray-800">ˆãt•Ê•s‰Â“úİ’è</h3>
             <p className="mt-1 text-[11px] text-gray-500">
-              å¹³æ—¥ãƒ»åœŸæ›œã¯1ã‚¿ãƒƒãƒ—ã§çµ‚æ—¥ä¼‘ã¿ã€æ—¥æ›œãƒ»ç¥æ—¥ã¯ãƒãƒƒãƒ—ã‚¢ãƒƒãƒ—ã§æ—¥ç›´/å½“ç›´åˆ¥ã«è¨­å®šã§ãã¾ã™ã€‚
+              •½“úE“y—j‚Í1ƒ^ƒbƒv‚ÅI“ú‹x‚İA“ú—jEj“ú‚Íƒ|ƒbƒvƒAƒbƒv‚Å“ú’¼/“–’¼•Ê‚Éİ’è‚Å‚«‚Ü‚·B
             </p>
           </div>
           <button
@@ -876,7 +695,7 @@ export function GenerationSettingsPanel({
             disabled={!selectedDoctorId}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
           >
-            å¯¾è±¡æœˆã‚’ä¸€æ‹¬ãƒˆã‚°ãƒ«
+            ‘ÎÛŒ‚ğˆêŠ‡ƒgƒOƒ‹
           </button>
         </div>
 
@@ -925,8 +744,8 @@ export function GenerationSettingsPanel({
             position={unavailablePopover?.position ?? null}
             title={
               unavailablePopover
-                ? `${month}æœˆ${Number(unavailablePopover.dateKey.slice(-2))}æ—¥ã®ä¸å¯è¨­å®š`
-                : "ä¸å¯è¨­å®š"
+                ? `${month}Œ${Number(unavailablePopover.dateKey.slice(-2))}“ú‚Ì•s‰Âİ’è`
+                : "•s‰Âİ’è"
             }
             currentValue={
               unavailablePopover
@@ -942,11 +761,11 @@ export function GenerationSettingsPanel({
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-[11px] text-gray-600">
-          <span className="font-bold">{selectedDoctor?.name ?? "åŒ»å¸«æœªé¸æŠ"}</span>
-          <span className="font-bold text-indigo-600">é¸æŠä¸­: {unavailableCounts.total}ä»¶</span>
-          <span className="text-gray-500">çµ‚æ—¥ {unavailableCounts.all}</span>
-          <span className="text-amber-700">æ—¥ç›´ã®ã¿ {unavailableCounts.day}</span>
-          <span className="text-sky-700">å½“ç›´ã®ã¿ {unavailableCounts.night}</span>
+          <span className="font-bold">{selectedDoctor?.name ?? "ˆãt–¢‘I‘ğ"}</span>
+          <span className="font-bold text-indigo-600">‘I‘ğ’†: {unavailableCounts.total}Œ</span>
+          <span className="text-gray-500">I“ú {unavailableCounts.all}</span>
+          <span className="text-amber-700">“ú’¼‚Ì‚İ {unavailableCounts.day}</span>
+          <span className="text-sky-700">“–’¼‚Ì‚İ {unavailableCounts.night}</span>
         </div>
       </div>
 
@@ -955,22 +774,22 @@ export function GenerationSettingsPanel({
         className="relative mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm"
       >
         <div className="mb-3">
-          <h3 className="text-sm font-bold text-gray-800">å›ºå®šä¸å¯æ›œæ—¥</h3>
+          <h3 className="text-sm font-bold text-gray-800">ŒÅ’è•s‰Â—j“ú</h3>
           <p className="mt-1 text-[11px] text-gray-500">
-            æœˆã€œåœŸã¯1ã‚¿ãƒƒãƒ—ã§çµ‚æ—¥ä¸å¯ã€æ—¥æ›œã¨ç¥æ—¥ã¯ãƒãƒƒãƒ—ã‚¢ãƒƒãƒ—ã§ã‚·ãƒ•ãƒˆåˆ¥ã«è¨­å®šã§ãã¾ã™ã€‚
+            Œ?“y‚Í1ƒ^ƒbƒv‚ÅI“ú•s‰ÂA“ú—j‚Æj“ú‚Íƒ|ƒbƒvƒAƒbƒv‚ÅƒVƒtƒg•Ê‚Éİ’è‚Å‚«‚Ü‚·B
           </p>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
-          <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">çµ‚ = çµ‚æ—¥</span>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = æ—¥ç›´ã®ã¿</span>
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = å½“ç›´ã®ã¿</span>
+          <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">I = I“ú</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = “ú’¼‚Ì‚İ</span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = “–’¼‚Ì‚İ</span>
         </div>
 
         <div className="overflow-x-auto">
           <div className="min-w-[320px]">
             <div className="mb-2 grid grid-cols-[88px_repeat(8,1fr)] items-center gap-1">
-              <div className="text-[11px] font-bold text-gray-600">åŒ»å¸«</div>
+              <div className="text-[11px] font-bold text-gray-600">ˆãt</div>
               {pyWeekdays.map((weekday) => {
                 const isSat = weekday === 5;
                 const isSun = weekday === 6;
@@ -1022,7 +841,7 @@ export function GenerationSettingsPanel({
                           targetShift
                         )}`}
                       >
-                        {targetShift === "all" ? "çµ‚" : targetShift === "day" ? "D" : targetShift === "night" ? "N" : ""}
+                        {targetShift === "all" ? "I" : targetShift === "day" ? "D" : targetShift === "night" ? "N" : ""}
                       </button>
                     );
                   })}
@@ -1038,7 +857,7 @@ export function GenerationSettingsPanel({
           title={
             fixedWeekdayPopover
               ? `${activeDoctors.find((doctor) => doctor.id === fixedWeekdayPopover.doctorId)?.name ?? ""} / ${pyWeekdaysJp[fixedWeekdayPopover.weekday] ?? ""}`
-              : "å›ºå®šä¸å¯è¨­å®š"
+              : "ŒÅ’è•s‰Âİ’è"
           }
           currentValue={
             fixedWeekdayPopover
@@ -1056,11 +875,11 @@ export function GenerationSettingsPanel({
         />
 
         <div className="mt-3 text-[11px] text-gray-500">
-          é¸æŠä¸­:
-          <span className="ml-1 font-bold text-gray-700">{selectedDoctor?.name ?? "æœªé¸æŠ"}</span>
+          ‘I‘ğ’†:
+          <span className="ml-1 font-bold text-gray-700">{selectedDoctor?.name ?? "–¢‘I‘ğ"}</span>
           <span className="ml-2">
             {selectedFixedWeekdays.length === 0
-              ? "å›ºå®šä¸å¯ãªã—"
+              ? "ŒÅ’è•s‰Â‚È‚µ"
               : selectedFixedWeekdays
                   .slice()
                   .sort((left, right) => left.day_of_week - right.day_of_week)
@@ -1071,19 +890,14 @@ export function GenerationSettingsPanel({
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold text-gray-800">å‰æœˆæœ«å‹¤å‹™</h3>
-            <p className="mt-1 text-[11px] text-gray-500">å¯¾è±¡æœˆã®é€£ç¶šå‹¤å‹™åˆ¤å®šã«ä½¿ã†å‰æœˆæœ«ã®å‹¤å‹™ã‚’ã€æ—¥ä»˜ã”ã¨ã«æ—¥ç›´ / å½“ç›´ã§æŒ‡å®šã—ã¾ã™ã€‚</p>
-          </div>
-          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
-            å…¥åŠ›æ¸ˆã¿ {previousMonthShiftCount}æ 
-          </span>
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-gray-800">‘OŒ––‹Î–±</h3>
+          <p className="mt-1 text-[11px] text-gray-500">‘ÎÛŒ‚Ì˜A‘±‹Î–±”»’è‚Ég‚¤‘OŒ––‚Ì‹Î–±‚ğw’è‚µ‚Ü‚·B</p>
         </div>
 
         <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
           <label>
-            <div className="mb-1 text-[11px] font-bold text-gray-700">å‰æœˆã®æœ€çµ‚æ—¥</div>
+            <div className="mb-1 text-[11px] font-bold text-gray-700">‘OŒ‚ÌÅI“ú</div>
             <input
               type="number"
               value={prevMonthLastDay}
@@ -1091,48 +905,50 @@ export function GenerationSettingsPanel({
               className="w-full rounded-lg border border-gray-200 p-2 text-sm"
             />
           </label>
-          <div className="text-[10px] text-gray-500">å¹´æœˆå¤‰æ›´æ™‚ã¯è‡ªå‹•è¨ˆç®—ã•ã‚Œã¾ã™</div>
+          <div className="text-[10px] text-gray-500">”NŒ•ÏX‚Í©“®ŒvZ‚³‚ê‚Ü‚·</div>
         </div>
 
-        <div className="space-y-2">
-          {prevMonthTailDays.map((day) => (
-            <div
-              key={day}
-              className="grid grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-xl border border-gray-100 bg-gray-50 p-2"
-            >
-              <div className="flex items-center justify-center rounded-lg bg-white text-sm font-bold text-gray-700">{day}æ—¥</div>
-              <label className="min-w-0">
-                <div className="mb-1 text-[11px] font-bold text-amber-700">æ—¥ç›´</div>
-                <select
-                  value={getPreviousMonthShiftDoctorId(day, "day")}
-                  onChange={(event) => onSetPreviousMonthShift(day, "day", event.target.value)}
-                  className="w-full rounded-lg border border-amber-200 bg-white px-2 py-2 text-sm text-gray-700"
+        <div className="overflow-x-auto">
+          <div className="min-w-[220px]">
+            <div className="mb-2 grid grid-cols-[90px_repeat(4,1fr)] items-center gap-1">
+              <div className="text-[11px] font-bold text-gray-600">ˆãt</div>
+              {prevMonthTailDays.map((day) => (
+                <div
+                  key={day}
+                  className="rounded border border-gray-100 bg-gray-50 py-1 text-center text-[11px] font-bold text-gray-700"
                 >
-                  <option value="">æœªè¨­å®š</option>
-                  {activeDoctors.map((doctor) => (
-                    <option key={String(day) + "-day-" + doctor.id} value={doctor.id}>
-                      {doctor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="min-w-0">
-                <div className="mb-1 text-[11px] font-bold text-sky-700">å½“ç›´</div>
-                <select
-                  value={getPreviousMonthShiftDoctorId(day, "night")}
-                  onChange={(event) => onSetPreviousMonthShift(day, "night", event.target.value)}
-                  className="w-full rounded-lg border border-sky-200 bg-white px-2 py-2 text-sm text-gray-700"
-                >
-                  <option value="">æœªè¨­å®š</option>
-                  {activeDoctors.map((doctor) => (
-                    <option key={String(day) + "-night-" + doctor.id} value={doctor.id}>
-                      {doctor.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  {day}“ú
+                </div>
+              ))}
             </div>
-          ))}
+
+            <div className="space-y-1">
+              {activeDoctors.map((doctor) => (
+                <div key={doctor.id} className="grid grid-cols-[90px_repeat(4,1fr)] items-center gap-1">
+                  <div className="truncate rounded border border-gray-200 bg-white px-2 py-2 text-[11px] font-bold text-gray-700">
+                    {doctor.name}
+                  </div>
+                  {prevMonthTailDays.map((day) => {
+                    const selected = (prevMonthWorkedDaysMap[doctor.id] || []).includes(day);
+                    return (
+                      <button
+                        key={`${doctor.id}-prev-${day}`}
+                        type="button"
+                        onClick={() => onTogglePrevMonthWorkedDay(doctor.id, day)}
+                        className={`h-9 rounded border text-[12px] font-bold transition ${
+                          selected
+                            ? "border-gray-900 bg-gray-900 text-white"
+                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                        }`}
+                      >
+                        {selected ? "~" : ""}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1147,10 +963,10 @@ export function GenerationSettingsPanel({
         {isLoading ? (
           <>
             <Loader2 className="h-5 w-5 animate-spin" />
-            <span>ç”Ÿæˆä¸­...</span>
+            <span>¶¬’†...</span>
           </>
         ) : (
-          <span>æœªå›ºå®šæ ã‚’å†ä½œæˆ</span>
+          <span>–¢ŒÅ’è˜g‚ğÄì¬</span>
         )}
       </button>
     </div>
@@ -1182,23 +998,23 @@ export function DoctorSettingsPanel({
           className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
             isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
           }`}
-          title="å…¨åŒ»å¸«ã®ã‚¹ã‚³ã‚¢è¨­å®šã€ä¼‘ã¿å¸Œæœ›ã€å›ºå®šä¸å¯ã‚’ã¾ã¨ã‚ã¦ä¿å­˜ã—ã¾ã™"
+          title="‘Sˆãt‚ÌƒXƒRƒAİ’èA‹x‚İŠó–]AŒÅ’è•s‰Â‚ğ‚Ü‚Æ‚ß‚Ä•Û‘¶‚µ‚Ü‚·"
         >
-          {isBulkSavingDoctors ? "ä¿å­˜ä¸­..." : "å…¨å“¡ã®ä¼‘ã¿å¸Œæœ›ã‚’ä¸€æ‹¬ä¿å­˜"}
+          {isBulkSavingDoctors ? "•Û‘¶’†..." : "‘Sˆõ‚Ì‹x‚İŠó–]‚ğˆêŠ‡•Û‘¶"}
         </button>
         <div className="mt-2 text-[11px] text-gray-500">
-          â€» ç¾åœ¨ã®ã€Œã‚¹ã‚³ã‚¢è¨­å®šã€ã€ŒMin/Max/ç›®æ¨™ã€ã€Œå›ºå®šä¸å¯æ›œæ—¥ã€ã€Œå€‹åˆ¥ä¸å¯æ—¥ã€ã‚’å…¨å“¡ã¾ã¨ã‚ã¦ä¿å­˜ã—ã¾ã™ã€‚
+          ¦ Œ»İ‚ÌuƒXƒRƒAİ’èvuMin/Max/–Ú•WvuŒÅ’è•s‰Â—j“úvuŒÂ•Ê•s‰Â“úv‚ğ‘Sˆõ‚Ü‚Æ‚ß‚Ä•Û‘¶‚µ‚Ü‚·B
         </div>
       </div>
 
       <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm md:mb-5 md:p-4">
         <h3 className="mb-3 flex flex-wrap items-center gap-2 text-md font-bold text-orange-800">
-          <span>åŒ»å¸«åˆ¥ ã‚¹ã‚³ã‚¢è¨­å®š</span>
+          <span>ˆãt•Ê ƒXƒRƒAİ’è</span>
           <span className="rounded bg-orange-100 px-2 py-1 text-xs font-normal text-orange-600">
-            â€» æœ€é©åŒ–ã§ç›´æ¥ä½¿ã†å€¤ã§ã™
+            ¦ Å“K‰»‚Å’¼Úg‚¤’l‚Å‚·
           </span>
           <span className="rounded border border-orange-200 bg-white px-2 py-1 text-xs font-normal text-gray-500">
-            â€» ä¿å­˜å¾Œã®å†ç”Ÿæˆã«åæ˜ ã•ã‚Œã¾ã™
+            ¦ •Û‘¶Œã‚ÌÄ¶¬‚É”½‰f‚³‚ê‚Ü‚·
           </span>
         </h3>
 
@@ -1206,11 +1022,11 @@ export function DoctorSettingsPanel({
           <table className="min-w-full text-center text-[12px]">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="border-b px-2 py-2 text-left">åŒ»å¸«å</th>
+                <th className="border-b px-2 py-2 text-left">ˆãt–¼</th>
                 <th className="border-b px-2 py-2">Min</th>
                 <th className="border-b px-2 py-2">Max</th>
-                <th className="border-b px-2 py-2">ç›®æ¨™</th>
-                <th className="border-b px-2 py-2 text-orange-700">å‰é€±åœŸæ›œå½“ç›´</th>
+                <th className="border-b px-2 py-2">–Ú•W</th>
+                <th className="border-b px-2 py-2 text-orange-700">‘OT“y—j“–’¼</th>
               </tr>
             </thead>
             <tbody>
@@ -1243,7 +1059,7 @@ export function DoctorSettingsPanel({
                       className="w-12 rounded border bg-blue-50 p-1 text-center md:w-16"
                       value={targetScoreMap[doctor.id] === undefined ? "" : targetScoreMap[doctor.id]}
                       onChange={(event) => onTargetScoreChange(doctor.id, event.target.value)}
-                      placeholder="ä»»æ„"
+                      placeholder="”CˆÓ"
                     />
                   </td>
                   <td className="px-2 py-1">
@@ -1256,7 +1072,7 @@ export function DoctorSettingsPanel({
                           : "border-gray-200 bg-white text-gray-400"
                       }`}
                     >
-                      {satPrevMap[doctor.id] ? "è€ƒæ…®ã‚ã‚Š" : "ãªã—"}
+                      {satPrevMap[doctor.id] ? "l—¶‚ ‚è" : "‚È‚µ"}
                     </button>
                   </td>
                 </tr>
