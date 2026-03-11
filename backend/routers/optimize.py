@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +11,58 @@ from services.optimizer import OnCallOptimizer
 from services.optimizer_history import build_past_total_scores
 
 router = APIRouter(prefix="/api/optimize", tags=["Optimize"])
+
+
+def _model_dump_like(value: Any) -> Any:
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if hasattr(value, "dict"):
+        return value.dict()
+    return value
+
+
+def _serialize_scalar(value: Any) -> Any:
+    return value.isoformat() if hasattr(value, "isoformat") else value
+
+
+def _normalize_unavailable_item(item: Any) -> Optional[Dict[str, Any]]:
+    item = _model_dump_like(item)
+
+    if isinstance(item, int):
+        return {"date": item, "target_shift": "all", "is_soft_penalty": False}
+
+    if not isinstance(item, dict):
+        return None
+
+    raw_date = item.get("date")
+    if raw_date is None:
+        return None
+
+    return {
+        "date": _serialize_scalar(raw_date),
+        "target_shift": item.get("target_shift", "all"),
+        "is_soft_penalty": bool(item.get("is_soft_penalty", False)),
+    }
+
+
+def _normalize_fixed_weekday_item(item: Any) -> Optional[Dict[str, Any]]:
+    item = _model_dump_like(item)
+
+    if isinstance(item, int):
+        return {"day_of_week": item, "target_shift": "all", "is_soft_penalty": False}
+
+    if not isinstance(item, dict):
+        return None
+
+    raw_day_of_week = item.get("day_of_week", item.get("weekday"))
+    if raw_day_of_week is None:
+        return None
+
+    return {
+        "day_of_week": raw_day_of_week,
+        "target_shift": item.get("target_shift", "all"),
+        "is_soft_penalty": bool(item.get("is_soft_penalty", False)),
+    }
 
 
 @router.post("/", response_model=OptimizeResponse)
@@ -73,11 +125,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
 
         locked_shifts_idx = [
             {
-                "date": (
-                    locked.date.isoformat()
-                    if hasattr(locked.date, "isoformat")
-                    else str(locked.date)
-                ),
+                "date": _serialize_scalar(locked.date),
                 "shift_type": locked.shift_type,
                 "doctor_idx": _key_to_idx(locked.doctor_id),
             }
@@ -86,11 +134,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
 
         previous_month_shifts_idx = [
             {
-                "date": (
-                    shift.date.isoformat()
-                    if hasattr(shift.date, "isoformat")
-                    else str(shift.date)
-                ),
+                "date": _serialize_scalar(shift.date),
                 "shift_type": shift.shift_type,
                 "doctor_idx": _key_to_idx(shift.doctor_id),
             }
@@ -100,19 +144,23 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
         _u = _remap_keys(req.unavailable)
         formatted_unavailable: Dict[int, Any] = {
             idx: [
-                {"date": day, "target_shift": "all", "is_soft_penalty": False}
-                for day in (days or [])
+                normalized
+                for item in (items or [])
+                for normalized in [_normalize_unavailable_item(item)]
+                if normalized is not None
             ]
-            for idx, days in _u.items()
+            for idx, items in _u.items()
         }
 
         _fw = _remap_keys(req.fixed_unavailable_weekdays)
         formatted_fixed_weekdays: Dict[int, Any] = {
             idx: [
-                {"day_of_week": wd, "target_shift": "all", "is_soft_penalty": False}
-                for wd in (wds or [])
+                normalized
+                for item in (items or [])
+                for normalized in [_normalize_fixed_weekday_item(item)]
+                if normalized is not None
             ]
-            for idx, wds in _fw.items()
+            for idx, items in _fw.items()
         }
 
         weights_dict = (
@@ -171,7 +219,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
                         pass
 
         if isinstance(solve_result.get("scores"), dict):
-            new_scores: Dict[str, Any] = {}
+            new_scores: Dict[str, float] = {}
             for k, v in solve_result["scores"].items():
                 try:
                     idx = int(k)

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import StepperNumberInput from "../inputs/StepperNumberInput";
 import type { Doctor } from "../../types/dashboard";
@@ -53,54 +53,54 @@ export default function DoctorListManager({
           <span className="rounded bg-orange-100 px-2 py-1 text-xs font-normal text-orange-600">個別 min / max / target</span>
         </h3>
 
-        <div className="overflow-x-auto rounded-lg border bg-white">
-          <table className="min-w-full text-center text-[12px]">
+        <div className="overflow-x-auto rounded-lg border bg-white pb-1">
+          <table className="w-max min-w-full table-fixed text-center text-[12px]">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="border-b px-2 py-2 text-left">医師</th>
-                <th className="border-b px-2 py-2">Min</th>
-                <th className="border-b px-2 py-2">Max</th>
-                <th className="border-b px-2 py-2">目標</th>
+                <th className="min-w-[120px] border-b px-3 py-2 text-left whitespace-nowrap">医師</th>
+                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">Min</th>
+                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">Max</th>
+                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">目標</th>
               </tr>
             </thead>
             <tbody>
               {activeDoctors.map((doctor) => (
                 <tr key={doctor.id} className="border-b hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-2 py-2 text-left font-bold text-gray-700">{doctor.name}</td>
-                  <td className="px-2 py-2">
+                  <td className="min-w-[120px] whitespace-nowrap px-3 py-2 text-left font-bold text-gray-700">{doctor.name}</td>
+                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
                     <StepperNumberInput
                       value={minScoreMap[doctor.id] ?? scoreMin}
                       onCommit={(value) => onMinScoreChange(doctor.id, value)}
                       fallbackValue={scoreMin}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center"
-                      inputClassName="min-w-0 px-1 py-1 text-[12px]"
-                      buttonClassName="h-8 w-8 text-sm"
+                      className="justify-center !min-w-[112px] whitespace-nowrap"
+                      inputClassName="!min-w-[2.75rem] px-1 py-1 text-[12px]"
+                      buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
                     <StepperNumberInput
                       value={maxScoreMap[doctor.id] ?? scoreMax}
                       onCommit={(value) => onMaxScoreChange(doctor.id, value)}
                       fallbackValue={scoreMax}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center"
-                      inputClassName="min-w-0 px-1 py-1 text-[12px]"
-                      buttonClassName="h-8 w-8 text-sm"
+                      className="justify-center !min-w-[112px] whitespace-nowrap"
+                      inputClassName="!min-w-[2.75rem] px-1 py-1 text-[12px]"
+                      buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
                     <StepperNumberInput
                       value={targetScoreMap[doctor.id] ?? 0}
                       onCommit={(value) => onTargetScoreChange(doctor.id, value)}
                       fallbackValue={0}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center"
-                      inputClassName="min-w-0 bg-blue-50 px-1 py-1 text-[12px]"
-                      buttonClassName="h-8 w-8 text-sm"
+                      className="justify-center !min-w-[112px] whitespace-nowrap"
+                      inputClassName="!min-w-[2.75rem] bg-blue-50 px-1 py-1 text-[12px]"
+                      buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>
                 </tr>

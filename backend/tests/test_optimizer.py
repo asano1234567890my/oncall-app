@@ -410,3 +410,34 @@ def test_weekend_hol_3rd_penalty_avoids_three_or_more_when_evenly_feasible():
     assert res["success"] is True
     counts = _count_weekend_holiday_works(res["schedule"], 2024, 4, 7)
     assert max(counts.values()) <= 2
+
+def test_fixed_unavailable_holiday_only_blocks_matching_night_shifts():
+    opt = OnCallOptimizer(
+        num_doctors=8,
+        year=2024,
+        month=4,
+        holidays=[29],
+        fixed_unavailable_weekdays={0: [{"day_of_week": 7, "target_shift": "night", "is_soft_penalty": False}]},
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+    assert res["success"] is True
+
+    row = next(r for r in res["schedule"] if r["day"] == 29)
+    assert row["night_shift"] != 0
+
+
+def test_fixed_unavailable_weekday_numeric_shift_code_blocks_matching_night_shifts():
+    opt = OnCallOptimizer(
+        num_doctors=8,
+        year=2024,
+        month=4,
+        holidays=[29],
+        fixed_unavailable_weekdays={0: [{"day_of_week": 7, "target_shift": 2, "is_soft_penalty": False}]},
+    )
+    opt.build_model()
+    res = opt.solve(random_seed=SEED)
+    assert res["success"] is True
+
+    row = next(r for r in res["schedule"] if r["day"] == 29)
+    assert row["night_shift"] != 0

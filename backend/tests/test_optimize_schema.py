@@ -82,3 +82,31 @@ def test_optimize_request_ignores_legacy_previous_sat_field():
     assert "past_sat_worked_doctors" not in dumped
     assert req.past_sat_counts == []
     assert req.sat_prev == {}
+
+def test_optimize_request_accepts_structured_unavailable_and_fixed_weekday_entries():
+    req = OptimizeRequest(
+        year=2026,
+        month=4,
+        num_doctors=3,
+        unavailable={
+            "doctor-1": [
+                {"date": "2026-04-29", "target_shift": "night", "is_soft_penalty": False},
+            ]
+        },
+        fixed_unavailable_weekdays={
+            "doctor-1": [
+                {"weekday": 7, "target_shift": 2, "is_soft_penalty": False},
+            ]
+        },
+    )
+
+    unavailable_entry = req.unavailable["doctor-1"][0]
+    fixed_entry = req.fixed_unavailable_weekdays["doctor-1"][0]
+
+    unavailable_dump = unavailable_entry.model_dump() if hasattr(unavailable_entry, "model_dump") else unavailable_entry
+    fixed_dump = fixed_entry.model_dump() if hasattr(fixed_entry, "model_dump") else fixed_entry
+
+    assert unavailable_dump["date"] == "2026-04-29"
+    assert unavailable_dump["target_shift"] == "night"
+    assert fixed_dump["day_of_week"] == 7
+    assert fixed_dump["target_shift"] == 2

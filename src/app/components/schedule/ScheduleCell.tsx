@@ -268,7 +268,7 @@ export default function ScheduleCell({
               onSwapButtonPress(row.day, shiftType, locked, isHolidayLike);
             }}
             className={[
-              "rounded border px-0.5 py-px text-[7px] font-bold transition sm:px-1 sm:py-0.5 sm:text-[8px]",
+              "min-w-[1.5rem] rounded border px-1.5 py-px text-[7px] font-bold transition sm:min-w-[1.75rem] sm:px-2 sm:py-0.5 sm:text-[8px]",
               swapSelected
                 ? "border-yellow-300 bg-yellow-100 text-yellow-900"
                 : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-sky-700",
@@ -284,7 +284,7 @@ export default function ScheduleCell({
               onToggleShiftLock(row.day, shiftType);
             }}
             disabled={!doctorId}
-            className="shrink-0 rounded border border-gray-200 bg-white p-px text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:p-0.5"
+            className="inline-flex h-[18px] min-w-[1.5rem] shrink-0 items-center justify-center rounded border border-gray-200 bg-white px-1 py-px text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:h-5 sm:min-w-[1.75rem] sm:px-1.5 sm:py-0.5"
             title={locked ? "ロック解除" : "ロック"}
           >
             {locked ? <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <Unlock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}

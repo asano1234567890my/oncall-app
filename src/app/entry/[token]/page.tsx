@@ -17,6 +17,7 @@ import {
   filterUnavailableDateEntriesByMonth,
   getUnavailableDateTargetShift,
   isUnavailableDateInMonth,
+  normalizeFixedUnavailableWeekdayEntries,
   normalizeUnavailableDateEntries,
   setUnavailableDateTargetShift,
 } from "../../utils/unavailableSettings";
@@ -82,6 +83,27 @@ function toUnavailableEntriesFromDoctor(data: PublicDoctor): UnavailableDateEntr
     : [];
 
   return normalizeUnavailableDateEntries([...legacyEntries, ...structuredEntries]);
+}
+
+function toFixedWeekdayEntriesFromDoctor(data: PublicDoctor): FixedUnavailableWeekdayEntry[] {
+  const structuredEntries = Array.isArray(data.unavailable_days)
+    ? data.unavailable_days.flatMap((entry) => {
+        if (!entry || entry.is_fixed !== true) return [];
+
+        const rawDayOfWeek = entry.day_of_week ?? entry.weekday;
+        const dayOfWeek = Number(rawDayOfWeek);
+        if (!Number.isFinite(dayOfWeek)) return [];
+
+        return [
+          {
+            day_of_week: dayOfWeek,
+            target_shift: entry.target_shift ?? "all",
+          },
+        ];
+      })
+    : [];
+
+  return normalizeFixedUnavailableWeekdayEntries([...(data.fixed_weekdays ?? []), ...structuredEntries]);
 }
 
 export default function EntryPage() {
@@ -178,9 +200,13 @@ export default function EntryPage() {
       if (!res.ok) throw new Error("取得に失敗しました");
 
       const data: PublicDoctor = await res.json();
-      setDoctor(data);
+      const normalizedDoctor: PublicDoctor = {
+        ...data,
+        fixed_weekdays: toFixedWeekdayEntriesFromDoctor(data),
+      };
+      setDoctor(normalizedDoctor);
 
-      const selected = toUnavailableEntriesFromDoctor(data);
+      const selected = toUnavailableEntriesFromDoctor(normalizedDoctor);
       setSelectedEntries(selected);
 
     } catch (e) {

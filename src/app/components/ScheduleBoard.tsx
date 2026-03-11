@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Trash2 } from "lucide-react";
 import type { DragEvent, TouchEvent } from "react";
@@ -225,15 +225,6 @@ export default function ScheduleBoard({
               <div className="flex w-full flex-wrap items-center gap-1.5 md:w-auto md:shrink-0 md:justify-end">
                 <button
                   type="button"
-                  onClick={onToggleSwapMode}
-                  className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
-                    isSwapMode ? "border-sky-300 bg-sky-100 text-sky-800" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  入れ替えモード
-                </button>
-                <button
-                  type="button"
                   onClick={onToggleOverrideMode}
                   className={`rounded-md border px-1.5 py-1 text-[9px] font-bold transition ${
                     isOverrideMode ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
@@ -381,6 +372,19 @@ export default function ScheduleBoard({
                 >
                   <Trash2 className="h-3 w-3" />
                   <span className="font-semibold">削除</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleSwapMode}
+                  className={`flex items-center gap-1 rounded border px-2 py-0.5 text-[9px] font-semibold shadow-sm touch-none transition ${
+                    isSwapMode
+                      ? "border-sky-300 bg-sky-50 text-sky-800 ring-1 ring-sky-300"
+                      : "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                  }`}
+                  title="タップ配置と入れ替えモードを切り替え"
+                >
+                  <span>⇄</span>
+                  <span>配置/入替</span>
                 </button>
               </div>
             </div>

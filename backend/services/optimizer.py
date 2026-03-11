@@ -12,7 +12,7 @@ import random
 
 @dataclass
 class ObjectiveWeights:
-    # 目的関数の重み。値が大きいほど対応するペナルティを強くする。
+    # Objective weights. Larger values penalize the corresponding violations more strongly.
     month_fairness: int = 100
     past_sat_gap: int = 10
     past_sunhol_gap: int = 5
@@ -29,12 +29,7 @@ class ObjectiveWeights:
 
 
 class OnCallOptimizer:
-    """
-    OR-Tools CP-SAT を使って当月の当直表を構築する。
-
-    入力は router/service 境界で doctor index に正規化された後を前提とし、
-    このクラスは optimizer 内部の整数 index と制約モデルだけを扱う。
-    """
+    """CP-SAT model for monthly on-call schedule generation."""
 
     W_WEEKDAY_NIGHT = 10  # 1.0
     W_SAT_NIGHT = 15      # 1.5
@@ -151,13 +146,7 @@ class OnCallOptimizer:
         return arr[d] if d < len(arr) else 0
 
     def _parse_locked_day(self, raw_date: Any) -> Optional[int]:
-        """
-        locked_shifts / previous_month_shifts 由来の日付入力を当月 day に正規化する。
-
-        int や day-of-month 文字列はそのまま日番号として扱い、
-        ISO 文字列や date/datetime は当月日付なら day を返す。
-        当月外や不正値は None を返す。
-        """
+        """Normalize current-month dates to a day-of-month integer."""
         day: Optional[int] = None
         if isinstance(raw_date, int):
             day = raw_date
@@ -193,6 +182,29 @@ class OnCallOptimizer:
             return "day"
         return None
 
+    def _normalize_target_shift(self, raw_target_shift: Any) -> str:
+        if raw_target_shift is None:
+            return "all"
+        if isinstance(raw_target_shift, bool):
+            return "all"
+        if isinstance(raw_target_shift, (int, float)):
+            value = int(raw_target_shift)
+            if value == 1:
+                return "day"
+            if value == 2:
+                return "night"
+            if value == 0:
+                return "all"
+
+        s = str(raw_target_shift).strip().lower()
+        if s in {"1", "day", "day_shift"}:
+            return "day"
+        if s in {"2", "night", "night_shift"}:
+            return "night"
+        if s == "all":
+            return "all"
+        return "all"
+
     def _normalize_unavailable_entry(self, item: Any) -> Optional[Dict[str, Any]]:
         if isinstance(item, int):
             if 1 <= item <= self.num_days:
@@ -202,50 +214,45 @@ class OnCallOptimizer:
         if not isinstance(item, dict):
             return None
 
-        try:
-            day = int(item.get("date"))
-        except (TypeError, ValueError):
+        day = self._parse_locked_day(item.get("date"))
+        if day is None:
             return None
-
-        if not (1 <= day <= self.num_days):
-            return None
-
-        shift_type = str(item.get("target_shift", "all")).strip().lower()
-        if shift_type not in {"all", "day", "night"}:
-            shift_type = "all"
 
         return {
             "date": day,
-            "target_shift": shift_type,
+            "target_shift": self._normalize_target_shift(item.get("target_shift", "all")),
             "is_soft_penalty": bool(item.get("is_soft_penalty", False)),
         }
 
     def _normalize_fixed_weekday_entry(self, item: Any) -> Optional[Dict[str, Any]]:
         if isinstance(item, int):
-            if 0 <= item <= 6:
+            if 0 <= item <= 7:
                 return {"day_of_week": item, "target_shift": "all", "is_soft_penalty": False}
             return None
 
         if not isinstance(item, dict):
             return None
 
+        raw_day_of_week = item.get("day_of_week", item.get("weekday"))
         try:
-            day_of_week = int(item.get("day_of_week"))
+            day_of_week = int(raw_day_of_week)
         except (TypeError, ValueError):
             return None
 
-        if not (0 <= day_of_week <= 6):
+        if not (0 <= day_of_week <= 7):
             return None
-
-        shift_type = str(item.get("target_shift", "all")).strip().lower()
-        if shift_type not in {"all", "day", "night"}:
-            shift_type = "all"
 
         return {
             "day_of_week": day_of_week,
-            "target_shift": shift_type,
+            "target_shift": self._normalize_target_shift(item.get("target_shift", "all")),
             "is_soft_penalty": bool(item.get("is_soft_penalty", False)),
         }
+
+    def _matches_fixed_unavailable_weekday(self, day: int, day_of_week: int) -> bool:
+        if day_of_week == 7:
+            # Match frontend DnD semantics: 7 means holiday-only, excluding Sundays.
+            return self.is_holiday(day) and not self.is_sunday(day)
+        return datetime.date(self.year, self.month, day).weekday() == day_of_week
 
     def _parse_previous_month_day(self, raw_date: Any) -> Optional[int]:
         prev_year = self.year if self.month > 1 else self.year - 1
@@ -479,14 +486,13 @@ class OnCallOptimizer:
                 for d in doctors:
                     self.model.Add(self.day_shifts[(d, day)] == 0)
 
-        # 3) hard: 同日の day/night 重複禁止（日祝は同日兼務禁止）
+        # 3) hard: prevent same-day day/night double assignment
         if prevent_sunhol_consecutive:
             for d in doctors:
                 for day in days:
                     self.model.Add(self.night_shifts[(d, day)] + self.day_shifts[(d, day)] <= 1)
 
-        # 3.5) hard: locked_shifts の固定
-        # router/service 境界で doctor_idx に正規化済みの入力を前提とする
+        # 3.5) hard: enforce locked shifts fixed at the router boundary
         for item in self.locked_shifts:
             if not isinstance(item, dict):
                 continue
@@ -514,10 +520,10 @@ class OnCallOptimizer:
             else:
                 self.model.Add(self.day_shifts[(d, day)] == 1)
 
-        # === unavailable_days の反映 ===
+        # === apply unavailable constraints ===
         soft_unavail_penalties = []
 
-        # 4) hard/soft: 日付指定の unavailable_days を反映
+        # 4) hard/soft: apply date-based unavailable constraints
         if respect_unavailable_days:
             for d, items in self.unavailable.items():
                 for item in items:
@@ -555,21 +561,22 @@ class OnCallOptimizer:
                     is_soft = normalized["is_soft_penalty"]
 
                     for day in days:
-                        wd = datetime.date(self.year, self.month, day).weekday()
-                        if wd == target_dow:
-                            vars_to_constrain = []
-                            if shift_type in ["day", "all"]:
-                                vars_to_constrain.append(self.day_shifts[(d, day)])
-                            if shift_type in ["night", "all"]:
-                                vars_to_constrain.append(self.night_shifts[(d, day)])
+                        if not self._matches_fixed_unavailable_weekday(day, target_dow):
+                            continue
 
-                            for var in vars_to_constrain:
-                                if is_soft:
-                                    p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
-                                    self.model.Add(p_var == var)
-                                    soft_unavail_penalties.append(p_var)
-                                else:
-                                    self.model.Add(var == 0)
+                        vars_to_constrain = []
+                        if shift_type in ["day", "all"]:
+                            vars_to_constrain.append(self.day_shifts[(d, day)])
+                        if shift_type in ["night", "all"]:
+                            vars_to_constrain.append(self.night_shifts[(d, day)])
+
+                        for var in vars_to_constrain:
+                            if is_soft:
+                                p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
+                                self.model.Add(p_var == var)
+                                soft_unavail_penalties.append(p_var)
+                            else:
+                                self.model.Add(var == 0)
 
         # 7) hard: spacing rule
         if spacing_days is not None:
@@ -616,7 +623,7 @@ class OnCallOptimizer:
             for d in doctors:
                 self.model.Add(weekend_holiday_work_expr(d) <= max_weekend_holiday_works)
 
-        # 11) hard: 月間スコアの算出と医師別 min/max 制約
+        # 11) hard: compute monthly scores and enforce per-doctor min/max
         doctor_scores: List[cp_model.IntVar] = []
         for d in doctors:
             score_expr = 0
@@ -854,3 +861,6 @@ if __name__ == "__main__":
     )
     optimizer.build_model()
     print(optimizer.solve())
+
+
+

@@ -64,7 +64,6 @@ type MessageResponse = {
 };
 
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
-const uniqSortedNumbers = (values: number[]) => Array.from(new Set(values)).sort((a, b) => a - b);
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const sanitizeConstraintValue = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0);
 
@@ -150,18 +149,23 @@ export function useScheduleApi({
   const formatUnavailableForOptimize = (input: UnavailableDateMap) => {
     const filtered = filterRecordByActiveDoctors(input);
     const prefix = `${year}-${pad2(month)}-`;
-    const next: Record<string, number[]> = {};
+    const next: Record<
+      string,
+      { date: number; target_shift: "all" | "day" | "night"; is_soft_penalty: false }[]
+    > = {};
 
     Object.entries(filtered).forEach(([doctorId, entries]) => {
-      const days = uniqSortedNumbers(
-        (entries ?? [])
-          .filter((entry) => entry.target_shift === "all" && entry.date.startsWith(prefix))
-          .map((entry) => Number.parseInt(entry.date.slice(-2), 10))
-          .filter((day) => Number.isFinite(day))
-      );
+      const unavailableEntries = normalizeUnavailableDateEntries(entries ?? [])
+        .filter((entry) => entry.date.startsWith(prefix))
+        .map((entry) => ({
+          date: Number.parseInt(entry.date.slice(-2), 10),
+          target_shift: entry.target_shift,
+          is_soft_penalty: false as const,
+        }))
+        .filter((entry) => Number.isFinite(entry.date));
 
-      if (days.length > 0) {
-        next[doctorId] = days;
+      if (unavailableEntries.length > 0) {
+        next[doctorId] = unavailableEntries;
       }
     });
 
@@ -170,17 +174,22 @@ export function useScheduleApi({
 
   const formatFixedWeekdaysForOptimize = (input: FixedUnavailableWeekdayMap) => {
     const filtered = filterRecordByActiveDoctors(input);
-    const next: Record<string, number[]> = {};
+    const next: Record<
+      string,
+      { day_of_week: number; target_shift: "all" | "day" | "night"; is_soft_penalty: false }[]
+    > = {};
 
     Object.entries(filtered).forEach(([doctorId, entries]) => {
-      const weekdays = uniqSortedNumbers(
-        (entries ?? [])
-          .filter((entry) => entry.target_shift === "all" && entry.day_of_week >= 0 && entry.day_of_week <= 6)
-          .map((entry) => entry.day_of_week)
-      );
+      const weekdayEntries = normalizeFixedUnavailableWeekdayEntries(entries ?? [])
+        .map((entry) => ({
+          day_of_week: entry.day_of_week,
+          target_shift: entry.target_shift,
+          is_soft_penalty: false as const,
+        }))
+        .filter((entry) => entry.day_of_week >= 0 && entry.day_of_week <= 7);
 
-      if (weekdays.length > 0) {
-        next[doctorId] = weekdays;
+      if (weekdayEntries.length > 0) {
+        next[doctorId] = weekdayEntries;
       }
     });
 

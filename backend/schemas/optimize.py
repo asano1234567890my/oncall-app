@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class ObjectiveWeights(BaseModel):
@@ -35,6 +35,18 @@ class ShiftAssignmentPayload(BaseModel):
     doctor_id: UUID
 
 
+class OptimizeUnavailableEntry(BaseModel):
+    date: Union[date, str, int]
+    target_shift: Union[str, int] = "all"
+    is_soft_penalty: bool = False
+
+
+class OptimizeFixedWeekdayEntry(BaseModel):
+    day_of_week: int = Field(validation_alias=AliasChoices("day_of_week", "weekday"))
+    target_shift: Union[str, int] = "all"
+    is_soft_penalty: bool = False
+
+
 class HardConstraints(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
@@ -57,8 +69,8 @@ class OptimizeRequest(BaseModel):
     num_doctors: int
 
     holidays: List[int] = Field(default_factory=list)
-    unavailable: Dict[str, List[int]] = Field(default_factory=dict)
-    fixed_unavailable_weekdays: Dict[str, List[int]] = Field(default_factory=dict)
+    unavailable: Dict[str, List[Union[int, OptimizeUnavailableEntry]]] = Field(default_factory=dict)
+    fixed_unavailable_weekdays: Dict[str, List[Union[int, OptimizeFixedWeekdayEntry]]] = Field(default_factory=dict)
 
     prev_month_worked_days: Dict[str, List[int]] = Field(default_factory=dict)
     prev_month_last_day: Optional[int] = None
