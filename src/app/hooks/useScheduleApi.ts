@@ -1,4 +1,5 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { toast } from "react-hot-toast";
 import type {
   Doctor,
   FixedUnavailableWeekdayMap,
@@ -11,6 +12,7 @@ import type {
   UnavailableDateMap,
 } from "../types/dashboard";
 import {
+  filterUnavailableDateEntriesByMonth,
   normalizeFixedUnavailableWeekdayEntries,
   normalizeUnavailableDateEntries,
 } from "../utils/unavailableSettings";
@@ -313,7 +315,11 @@ export function useScheduleApi({
 
       const tasks = activeDoctors.map((doc) => {
         const fixedWeekdays = normalizeFixedUnavailableWeekdayEntries(fixedUnavailableWeekdaysMap[doc.id] ?? []);
-        const unavailableDays = normalizeUnavailableDateEntries(unavailableMap[doc.id] ?? []).map((entry) => ({
+        const unavailableDays = filterUnavailableDateEntriesByMonth(
+          normalizeUnavailableDateEntries(unavailableMap[doc.id] ?? []),
+          doctorUnavailableYear,
+          doctorUnavailableMonth
+        ).map((entry) => ({
           date: entry.date,
           target_shift: entry.target_shift,
         }));
@@ -348,12 +354,12 @@ export function useScheduleApi({
       await Promise.all(tasks);
       const successMessage = "全員の休み希望・スコア設定を保存しました";
       setSaveMessage(successMessage);
-      window.alert(successMessage);
+      toast.success(successMessage);
       await fetchDoctors();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "全員の設定保存に失敗しました";
       setError(message);
-      window.alert(`設定保存に失敗しました: ${message}`);
+      toast.error(message);
     } finally {
       setIsBulkSavingDoctors(false);
     }

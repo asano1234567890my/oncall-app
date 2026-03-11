@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
 import { format } from "date-fns";
@@ -13,7 +14,9 @@ import type {
   UnavailableDayRecord,
 } from "../../types/dashboard";
 import {
+  filterUnavailableDateEntriesByMonth,
   getUnavailableDateTargetShift,
+  isUnavailableDateInMonth,
   normalizeUnavailableDateEntries,
   setUnavailableDateTargetShift,
 } from "../../utils/unavailableSettings";
@@ -33,6 +36,28 @@ const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:80
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 const getNextMonthDate = (baseDate = new Date()) =>
   new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1);
+
+type MessageResponse = {
+  detail?: string;
+  message?: string;
+};
+
+const readOptionalJson = async <T,>(response: Response): Promise<T | null> => {
+  const body = await response.text();
+
+  if (!body.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return null;
+  }
+};
+
+const getResponseMessage = (payload: MessageResponse | null, fallback: string) =>
+  payload?.message || payload?.detail || fallback;
 
 const unavailableAllModifierClass =
   "[&>button]:relative [&>button]:!border-red-400 [&>button]:!bg-red-300 [&>button]:!text-transparent [&>button]:shadow-sm hover:[&>button]:!bg-red-400 [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-900 [&>button]:after:content-['[休]']";
@@ -76,6 +101,7 @@ export default function EntryPage() {
 
   const locked = Boolean(doctor?.is_locked);
   const displayedYear = month.getFullYear();
+  const displayedMonthNumber = month.getMonth() + 1;
   const { holidaySet: standardHolidaySet } = useHolidays(displayedYear);
   const { manualSet, disabledSet, customError } = useCustomHolidays(displayedYear);
 
@@ -98,9 +124,14 @@ export default function EntryPage() {
     return next;
   }, [customError, disabledSet, displayedYear, manualSet, standardHolidaySet]);
 
+  const selectedEntriesInDisplayedMonth = useMemo(
+    () => filterUnavailableDateEntriesByMonth(selectedEntries, displayedYear, displayedMonthNumber),
+    [displayedMonthNumber, displayedYear, selectedEntries]
+  );
+
   const unavailableCounts = useMemo(
     () =>
-      selectedEntries.reduce(
+      selectedEntriesInDisplayedMonth.reduce(
         (acc, entry) => {
           acc.total += 1;
           acc[entry.target_shift] += 1;
@@ -108,7 +139,7 @@ export default function EntryPage() {
         },
         { total: 0, all: 0, day: 0, night: 0 }
       ),
-    [selectedEntries]
+    [selectedEntriesInDisplayedMonth]
   );
 
   const calendarModifiers = useMemo(
@@ -116,11 +147,11 @@ export default function EntryPage() {
       saturday: (day: Date) => day.getDay() === 6,
       sunday: (day: Date) => day.getDay() === 0,
       holiday: (day: Date) => mergedHolidaySet.has(ymd(day)),
-      allUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "all",
-      dayUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "day",
-      nightUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntries, ymd(day)) === "night",
+      allUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "all",
+      dayUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "day",
+      nightUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "night",
     }),
-    [mergedHolidaySet, selectedEntries]
+    [mergedHolidaySet, selectedEntriesInDisplayedMonth]
   );
 
   const title = useMemo(() => {
@@ -175,6 +206,8 @@ export default function EntryPage() {
     if (locked) return;
 
     const dateKey = ymd(day);
+    if (!isUnavailableDateInMonth(dateKey, displayedYear, displayedMonthNumber)) return;
+
     if (isHolidayLikeDate(day)) {
       setPopover({ dateKey });
       return;
@@ -194,12 +227,20 @@ export default function EntryPage() {
     setError("");
 
     try {
+      const unavailableDays = filterUnavailableDateEntriesByMonth(
+        selectedEntries,
+        displayedYear,
+        displayedMonthNumber
+      ).map((entry) => ({
+        date: entry.date,
+        target_shift: entry.target_shift,
+      }));
+
       const payload = {
-        unavailable_days: selectedEntries.map((entry) => ({
-          date: entry.date,
-          target_shift: entry.target_shift,
-        })),
+        unavailable_days: unavailableDays,
         fixed_weekdays: doctor?.fixed_weekdays ?? [],
+        unavailable_year: displayedYear,
+        unavailable_month: displayedMonthNumber,
       };
 
       const res = await fetch(`${getApiBase()}/api/public/doctors/${token}`, {
@@ -207,23 +248,35 @@ export default function EntryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const responsePayload = await readOptionalJson<MessageResponse>(res);
 
       if (res.status === 404) {
         setInvalid(true);
         setDoctor(null);
+        toast.error("無効なURLです");
         return;
       }
       if (res.status === 403) {
-        setError("保存できませんでした（入力期間が終了している、または権限がありません）。");
+        const nextError = getResponseMessage(
+          responsePayload,
+          "保存できませんでした（入力期間が終了している、または権限がありません）。"
+        );
+        setError(nextError);
+        toast.error(nextError);
         return;
       }
-      if (!res.ok) throw new Error("保存に失敗しました");
+      if (!res.ok) {
+        throw new Error(getResponseMessage(responsePayload, "保存に失敗しました"));
+      }
 
-      setMessage("保存しました");
       await fetchDoctor();
+      setMessage("保存しました");
+      toast.success("保存しました");
     } catch (e) {
       console.error(e);
-      setError("保存に失敗しました。通信状況をご確認ください。");
+      const nextError = e instanceof Error ? e.message : "保存に失敗しました。通信状況をご確認ください。";
+      setError(nextError);
+      toast.error(nextError);
     } finally {
       setIsSaving(false);
     }
@@ -356,7 +409,7 @@ export default function EntryPage() {
                     <TargetShiftPopover
                       open={Boolean(popover)}
                       title={popover ? `${month.getMonth() + 1}月${Number(popover.dateKey.slice(-2))}日の不可設定` : "不可設定"}
-                      currentValue={popover ? getUnavailableDateTargetShift(selectedEntries, popover.dateKey) : null}
+                      currentValue={popover ? getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, popover.dateKey) : null}
                       onSelect={(value) => {
                         if (!popover) return;
                         setSelectedEntries((prev) => setUnavailableDateTargetShift(prev, popover.dateKey, value));

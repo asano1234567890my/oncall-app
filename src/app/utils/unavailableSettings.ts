@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   FixedUnavailableWeekdayEntry,
   TargetShift,
   UnavailableDateEntry,
@@ -35,6 +35,35 @@ export const normalizeUnavailableDateEntries = (entries: UnavailableDateEntry[])
     })
     .map(([date, target_shift]) => ({ date, target_shift }));
 };
+
+const parseUnavailableDateParts = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const day = Number.parseInt(match[3], 10);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  return { year, month, day };
+};
+
+export const isUnavailableDateInMonth = (value: string, year: number, month: number) => {
+  const parts = parseUnavailableDateParts(value);
+  if (!parts) return false;
+  return parts.year === year && parts.month === month;
+};
+
+export const filterUnavailableDateEntriesByMonth = (
+  entries: UnavailableDateEntry[],
+  year: number,
+  month: number
+) =>
+  normalizeUnavailableDateEntries(
+    entries.filter((entry) => entry?.date && isUnavailableDateInMonth(String(entry.date), year, month))
+  );
 
 export const normalizeFixedUnavailableWeekdayEntries = (entries: FixedUnavailableWeekdayEntry[]) => {
   const next = new Map<number, TargetShift>();
