@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
 import { format } from "date-fns";
@@ -63,7 +63,6 @@ export default function EntryPage() {
   const params = useParams<{ token: string }>();
   const token = params?.token;
   const router = useRouter();
-  const calendarRef = useRef<HTMLDivElement | null>(null);
 
   const [doctor, setDoctor] = useState<PublicDoctor | null>(null);
   const [invalid, setInvalid] = useState(false);
@@ -73,10 +72,7 @@ export default function EntryPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
-  const [popover, setPopover] = useState<{
-    dateKey: string;
-    position: { top: number; left: number };
-  } | null>(null);
+  const [popover, setPopover] = useState<{ dateKey: string } | null>(null);
 
   const locked = Boolean(doctor?.is_locked);
   const displayedYear = month.getFullYear();
@@ -175,24 +171,12 @@ export default function EntryPage() {
 
   const isHolidayLikeDate = (date: Date) => date.getDay() === 0 || mergedHolidaySet.has(ymd(date));
 
-  const getAnchorPosition = (target: HTMLElement) => {
-    const targetRect = target.getBoundingClientRect();
-    const containerRect = calendarRef.current?.getBoundingClientRect();
-    return {
-      top: targetRect.bottom - (containerRect?.top ?? 0) + 8,
-      left: targetRect.left - (containerRect?.left ?? 0) + targetRect.width / 2,
-    };
-  };
-
-  const handleDayClick = (day: Date, _modifiers: unknown, event: ReactMouseEvent<Element>) => {
+  const handleDayClick = (day: Date) => {
     if (locked) return;
 
     const dateKey = ymd(day);
     if (isHolidayLikeDate(day)) {
-      setPopover({
-        dateKey,
-        position: getAnchorPosition(event.currentTarget as HTMLElement),
-      });
+      setPopover({ dateKey });
       return;
     }
 
@@ -307,7 +291,7 @@ export default function EntryPage() {
                 </div>
 
                 <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
-                  <div ref={calendarRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4 relative">
+                  <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4">
                     <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
                       <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">[休] = 終日</span>
                       <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">[日] = 日直のみ</span>
@@ -371,7 +355,6 @@ export default function EntryPage() {
                     />
                     <TargetShiftPopover
                       open={Boolean(popover)}
-                      position={popover?.position ?? null}
                       title={popover ? `${month.getMonth() + 1}月${Number(popover.dateKey.slice(-2))}日の不可設定` : "不可設定"}
                       currentValue={popover ? getUnavailableDateTargetShift(selectedEntries, popover.dateKey) : null}
                       onSelect={(value) => {
@@ -423,3 +406,4 @@ export default function EntryPage() {
     </div>
   );
 }
+
