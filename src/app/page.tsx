@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
   const savedScheduleSignatureRef = useRef<string>(getScheduleSignature([]));
+  const latestScheduleRef = useRef<ScheduleRow[]>([]);
+  const dirtyRef = useRef(false);
+  const ignoreNextPopStateRef = useRef(false);
   const {
     year,
     month,
@@ -162,15 +165,19 @@ export default function DashboardPage() {
       // no-op
     }
   }, [holidayWorkdayOverrides, year]);
-  const markScheduleClean = (rows: ScheduleRow[] = schedule) => {
+  const markScheduleClean = (rows: ScheduleRow[] = latestScheduleRef.current) => {
     savedScheduleSignatureRef.current = getScheduleSignature(rows);
+    dirtyRef.current = false;
     setIsDirty(false);
   };
 
   const confirmMoveWithUnsavedChanges = () => {
-    if (!isDirty || typeof window === "undefined") return true;
+    if (!dirtyRef.current || typeof window === "undefined") return true;
+
     const confirmed = window.confirm("保存されていませんが移動しますか？");
-    if (confirmed) markScheduleClean();
+    if (confirmed) {
+      markScheduleClean(latestScheduleRef.current);
+    }
     return confirmed;
   };
 
@@ -205,7 +212,10 @@ export default function DashboardPage() {
   }, [disabledHolidaySetYear]);
 
   useEffect(() => {
-    setIsDirty(getScheduleSignature(schedule) !== savedScheduleSignatureRef.current);
+    latestScheduleRef.current = schedule;
+    const nextDirty = getScheduleSignature(schedule) !== savedScheduleSignatureRef.current;
+    dirtyRef.current = nextDirty;
+    setIsDirty(nextDirty);
   }, [schedule]);
 
   useEffect(() => {
@@ -219,6 +229,65 @@ export default function DashboardPage() {
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const confirmNavigationAway = () => {
+      if (!dirtyRef.current) return true;
+
+      const confirmed = window.confirm("保存されていませんが移動しますか？");
+      if (confirmed) {
+        savedScheduleSignatureRef.current = getScheduleSignature(latestScheduleRef.current);
+        dirtyRef.current = false;
+        setIsDirty(false);
+      }
+      return confirmed;
+    };
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const nextUrl = new URL(anchor.href, window.location.href);
+      const currentUrl = new URL(window.location.href);
+      if (nextUrl.origin !== currentUrl.origin) return;
+      if (nextUrl.href === currentUrl.href) return;
+
+      if (!confirmNavigationAway()) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handlePopState = () => {
+      if (ignoreNextPopStateRef.current) {
+        ignoreNextPopStateRef.current = false;
+        return;
+      }
+
+      if (confirmNavigationAway()) {
+        return;
+      }
+
+      ignoreNextPopStateRef.current = true;
+      window.history.go(1);
+    };
+
+    document.addEventListener("click", handleDocumentClick, true);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      document.removeEventListener("click", handleDocumentClick, true);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [setIsDirty]);
 
   useEffect(() => {
     const prefix = `${year}-${pad2(month)}-`;

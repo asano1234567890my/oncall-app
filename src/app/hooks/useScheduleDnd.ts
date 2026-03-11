@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayEntry,
@@ -173,18 +173,35 @@ export function useScheduleDnd({
     setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
   };
 
+  const matchesManualUnavailableEntry = (
+    entry: UnavailableDateEntry,
+    day: number,
+    shiftType: ShiftType
+  ) => {
+    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
+    return entry.date === ymd && matchesTargetShift(entry.target_shift, shiftType);
+  };
+
+  const matchesFixedUnavailableWeekdayEntry = (
+    entry: FixedUnavailableWeekdayEntry,
+    day: number,
+    shiftType: ShiftType
+  ) => {
+    const weekdayPy = getWeekdayPy(year, month, day);
+    const holidayInfo = isHolidayLikeDay(day);
+
+    if (!matchesTargetShift(entry.target_shift, shiftType)) return false;
+    if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
+    return entry.day_of_week === weekdayPy;
+  };
+
   const getManualUnavailableEntry = (
     doctorId: string | null | undefined,
     day: number,
     shiftType: ShiftType
   ): UnavailableDateEntry | null => {
     if (!doctorId) return null;
-    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
-    return (
-      (unavailableMap[doctorId] || []).find(
-        (entry) => entry.date === ymd && matchesTargetShift(entry.target_shift, shiftType)
-      ) ?? null
-    );
+    return (unavailableMap[doctorId] || []).find((entry) => matchesManualUnavailableEntry(entry, day, shiftType)) ?? null;
   };
 
   const getFixedUnavailableEntry = (
@@ -193,28 +210,35 @@ export function useScheduleDnd({
     shiftType: ShiftType
   ): FixedUnavailableWeekdayEntry | null => {
     if (!doctorId) return null;
-    const weekdayPy = getWeekdayPy(year, month, day);
-    const holidayInfo = isHolidayLikeDay(day);
     return (
-      (fixedUnavailableWeekdaysMap[doctorId] || []).find((entry) => {
-        if (!matchesTargetShift(entry.target_shift, shiftType)) return false;
-        if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
-        return entry.day_of_week === weekdayPy;
-      }) ?? null
+      (fixedUnavailableWeekdaysMap[doctorId] || []).find((entry) => matchesFixedUnavailableWeekdayEntry(entry, day, shiftType)) ?? null
     );
   };
 
-  const hasAnyManualUnavailableEntry = (doctorId: string | null | undefined, day: number) => {
+  const hasAnyManualUnavailableEntry = (
+    doctorId: string | null | undefined,
+    day: number,
+    shiftType?: ShiftType
+  ) => {
     if (!doctorId) return false;
     const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
-    return (unavailableMap[doctorId] || []).some((entry) => entry.date === ymd);
+    return (unavailableMap[doctorId] || []).some((entry) =>
+      shiftType ? matchesManualUnavailableEntry(entry, day, shiftType) : entry.date === ymd
+    );
   };
 
-  const hasAnyFixedUnavailableEntry = (doctorId: string | null | undefined, day: number) => {
+  const hasAnyFixedUnavailableEntry = (
+    doctorId: string | null | undefined,
+    day: number,
+    shiftType?: ShiftType
+  ) => {
     if (!doctorId) return false;
     const weekdayPy = getWeekdayPy(year, month, day);
     const holidayInfo = isHolidayLikeDay(day);
     return (fixedUnavailableWeekdaysMap[doctorId] || []).some((entry) => {
+      if (shiftType && !matchesFixedUnavailableWeekdayEntry(entry, day, shiftType)) {
+        return false;
+      }
       if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
       return entry.day_of_week === weekdayPy;
     });
@@ -231,8 +255,11 @@ export function useScheduleDnd({
     return `${weekdayLabelsPy[dayOfWeek] ?? "?"}\u66dc\u65e5`;
   };
 
-  const isDoctorBlockedByManualConstraints = (doctorId: string | null | undefined, day: number) =>
-    hasAnyManualUnavailableEntry(doctorId, day) || hasAnyFixedUnavailableEntry(doctorId, day);
+  const isDoctorBlockedByManualConstraints = (
+    doctorId: string | null | undefined,
+    day: number,
+    shiftType?: ShiftType
+  ) => hasAnyManualUnavailableEntry(doctorId, day, shiftType) || hasAnyFixedUnavailableEntry(doctorId, day, shiftType);
 
   const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
 
@@ -416,25 +443,34 @@ export function useScheduleDnd({
     if (!sourceDoctorId) return null;
 
     const scheduleRows = options?.scheduleRows ?? schedule;
+    const simulatedRows = cloneSchedule(scheduleRows);
+    const fromRow = simulatedRows.find((row) => row.day === fromDay);
+    const toRow = simulatedRows.find((row) => row.day === toDay);
+    if (!fromRow || !toRow) {
+      return "対象日のシフトが見つかりません";
+    }
+
+    const fromField = fromType === "day" ? "day_shift" : "night_shift";
+    const toField = toType === "day" ? "day_shift" : "night_shift";
+    const targetDoctorId = getShiftDoctorIdFromRow(toRow, toType);
+
+    fromRow[fromField] = targetDoctorId;
+    toRow[toField] = sourceDoctorId;
+
     const messages: string[] = [];
-    const sourceIgnoreShiftKeys = new Set<string>([getShiftKey(fromDay, fromType)]);
     const sourceMessage = getPlacementConstraintMessage(sourceDoctorId, toDay, toType, {
-      scheduleRows,
-      ignoreShiftKeys: sourceIgnoreShiftKeys,
+      scheduleRows: simulatedRows,
+      ignoreShiftKeys: new Set<string>([getShiftKey(toDay, toType)]),
     });
 
     if (sourceMessage) {
       messages.push(formatConstraintForToast(sourceDoctorId, sourceMessage));
     }
 
-    const targetRow = scheduleRows.find((row) => row.day === toDay);
-    const targetDoctorId = targetRow ? getShiftDoctorIdFromRow(targetRow, toType) : null;
-
     if (targetDoctorId && targetDoctorId !== sourceDoctorId) {
-      const targetIgnoreShiftKeys = new Set<string>([getShiftKey(toDay, toType)]);
       const targetMessage = getPlacementConstraintMessage(targetDoctorId, fromDay, fromType, {
-        scheduleRows,
-        ignoreShiftKeys: targetIgnoreShiftKeys,
+        scheduleRows: simulatedRows,
+        ignoreShiftKeys: new Set<string>([getShiftKey(fromDay, fromType)]),
       });
 
       if (targetMessage) {
