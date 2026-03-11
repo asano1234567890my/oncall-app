@@ -56,10 +56,32 @@ type UseScheduleApiParams = {
   markScheduleClean: (rows?: ScheduleRow[]) => void;
 };
 
+type MessageResponse = {
+  detail?: string;
+  message?: string;
+};
+
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const uniqSortedNumbers = (values: number[]) => Array.from(new Set(values)).sort((a, b) => a - b);
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const sanitizeConstraintValue = (value: number) => (Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0);
+
+const readOptionalJson = async <T>(response: Response): Promise<T | null> => {
+  const body = await response.text();
+
+  if (!body.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return null;
+  }
+};
+
+const getResponseMessage = (payload: MessageResponse | null, fallback: string) =>
+  payload?.message || payload?.detail || fallback;
 
 export function useScheduleApi({
   year,
@@ -284,6 +306,7 @@ export function useScheduleApi({
 
     setIsBulkSavingDoctors(true);
     setError("");
+    setSaveMessage("");
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -313,23 +336,24 @@ export function useScheduleApi({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }).then(async (res) => {
-          if (res.ok) {
-            return res.json().catch(() => doc);
-          }
+          const payload = await readOptionalJson<MessageResponse>(res);
 
-          const errData = await res.json().catch(() => ({}));
-          const message = errData.detail || `医師設定の保存に失敗しました: ${doc.name}`;
-          throw new Error(message);
+          if (!res.ok) {
+            const message = getResponseMessage(payload, `医師設定の保存に失敗しました: ${doc.name}`);
+            throw new Error(message);
+          }
         });
       });
 
       await Promise.all(tasks);
-      alert("全員の休み希望・スコア設定を保存しました");
+      const successMessage = "全員の休み希望・スコア設定を保存しました";
+      setSaveMessage(successMessage);
+      window.alert(successMessage);
       await fetchDoctors();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "全員の設定保存に失敗しました";
       setError(message);
-      alert(`設定保存に失敗しました: ${message}`);
+      window.alert(`設定保存に失敗しました: ${message}`);
     } finally {
       setIsBulkSavingDoctors(false);
     }
@@ -453,12 +477,13 @@ export function useScheduleApi({
         }),
       });
 
+      const payload = await readOptionalJson<MessageResponse>(res);
+
       if (!res.ok) {
-        throw new Error("保存に失敗しました");
+        throw new Error(getResponseMessage(payload, "保存に失敗しました"));
       }
 
-      const data = await res.json();
-      setSaveMessage(data.message);
+      setSaveMessage(getResponseMessage(payload, "保存しました"));
       markScheduleClean(schedule);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "保存に失敗しました");

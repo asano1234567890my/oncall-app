@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { domToPng } from "modern-screenshot";
+import { useCustomHolidays } from "../hooks/useCustomHolidays";
+import { useHolidays } from "../hooks/useHolidays";
 import { getDefaultTargetMonth } from "../utils/dateUtils";
 
 type ScheduleRow = {
@@ -9,6 +11,7 @@ type ScheduleRow = {
   day_shift: string | null;
   night_shift: string | null;
   is_holiday?: boolean;
+  is_sunhol?: boolean;
 };
 
 type Doctor = {
@@ -26,11 +29,14 @@ const getWeekdayLabel = (year: number, month: number, day: number) =>
 const isUuidLike = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
-const getRowTone = (weekday: string, isHoliday: boolean) => {
-  if (weekday === "日" || isHoliday) {
+const pad2 = (value: number) => String(value).padStart(2, "0");
+const toDateKey = (year: number, month: number, day: number) => `${year}-${pad2(month)}-${pad2(day)}`;
+
+const getRowTone = (weekday: string, isHolidayLike: boolean) => {
+  if (isHolidayLike) {
     return {
       weekdayClass: "text-red-600",
-      rowClass: "bg-white",
+      rowClass: "bg-red-50",
       labelClass: "text-red-700",
     };
   }
@@ -60,11 +66,36 @@ export default function ViewSchedulePage() {
   const [error, setError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
+  const { holidaySet: standardHolidaySet } = useHolidays(year);
+  const { manualSet, disabledSet, customError } = useCustomHolidays(year);
 
   const doctorNameById = useMemo(
     () => Object.fromEntries(doctors.map((doctor) => [doctor.id, doctor.name])),
     [doctors],
   );
+
+  const mergedHolidaySet = useMemo(() => {
+    const next = new Set<string>(standardHolidaySet);
+    const prefix = `${year}-`;
+
+    if (customError) {
+      return next;
+    }
+
+    for (const date of disabledSet) {
+      if (date.startsWith(prefix)) {
+        next.delete(date);
+      }
+    }
+
+    for (const date of manualSet) {
+      if (date.startsWith(prefix)) {
+        next.add(date);
+      }
+    }
+
+    return next;
+  }, [customError, disabledSet, manualSet, standardHolidaySet, year]);
 
   const getDoctorLabel = (value: string | null) => {
     if (!value) return "-";
@@ -246,7 +277,12 @@ export default function ViewSchedulePage() {
                 >
                   {rows.map((row) => {
                     const weekday = getWeekdayLabel(year, month, row.day);
-                    const { weekdayClass, rowClass, labelClass } = getRowTone(weekday, Boolean(row.is_holiday));
+                    const dateKey = toDateKey(year, month, row.day);
+                    const isHolidayLike =
+                      weekday === "日" ||
+                      Boolean(row.is_sunhol ?? row.is_holiday) ||
+                      mergedHolidaySet.has(dateKey);
+                    const { weekdayClass, rowClass, labelClass } = getRowTone(weekday, isHolidayLike);
 
                     return (
                       <div
@@ -277,4 +313,3 @@ export default function ViewSchedulePage() {
     </div>
   );
 }
-

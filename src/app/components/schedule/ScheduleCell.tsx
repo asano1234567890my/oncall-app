@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Lock, Unlock } from "lucide-react";
 import type { DragEvent, TouchEvent } from "react";
@@ -142,7 +142,7 @@ export default function ScheduleCell({
   };
 
   const dateCellClass = isHolidayLike
-    ? "border-red-100 bg-red-50 text-red-700"
+    ? "border-red-100 bg-red-50 text-red-600"
     : isSat
       ? "border-blue-100 bg-blue-50 text-blue-700"
       : "text-gray-700";
@@ -163,7 +163,9 @@ export default function ScheduleCell({
             : "border-amber-300 bg-amber-50"
           : highlightBlocked
             ? "border-red-200 bg-red-100"
-            : "border-transparent bg-white hover:border-gray-200";
+            : isHolidayLike
+              ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
+              : "border-transparent bg-white hover:border-gray-200";
   const nightCellClass = nightSwapSelected
     ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
     : nightHoverInvalid
@@ -176,7 +178,9 @@ export default function ScheduleCell({
             : "border-amber-300 bg-amber-50"
           : highlightBlocked
             ? "border-red-200 bg-red-100"
-            : "border-transparent bg-white hover:border-gray-200";
+            : isHolidayLike
+              ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
+              : "border-transparent bg-white hover:border-gray-200";
   const disabledDayCellClass = daySwapSelected
     ? "border-sky-400 bg-sky-50 text-sky-700 ring-1 ring-sky-300"
     : dayHoverInvalid
@@ -292,7 +296,7 @@ export default function ScheduleCell({
   };
 
   return (
-    <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50/30" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
+    <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
       <td className={`w-5 px-0 py-[2px] align-middle text-[7px] font-semibold sm:w-7 sm:px-0.5 sm:py-0.5 sm:text-[9px] ${dateCellClass}`}>
         <span className="sm:hidden">{row.day}</span>
         <span className="hidden sm:inline">{row.day}日</span>
