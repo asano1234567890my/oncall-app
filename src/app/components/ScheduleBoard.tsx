@@ -180,7 +180,7 @@ export default function ScheduleBoard({
           ? "bg-amber-100 text-amber-900"
           : "bg-indigo-100 text-indigo-800";
 
-    return `${tone} min-w-0 flex-1 truncate rounded-full px-1 py-0.5 text-left text-[9px] font-bold leading-tight whitespace-nowrap touch-none ${
+    return `${tone} min-w-0 flex-1 truncate rounded-full px-0.5 py-[1px] text-left text-[8px] font-bold leading-tight whitespace-nowrap touch-none sm:px-1 sm:py-0.5 sm:text-[9px] ${
       locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
     } ${isHighlighted ? "ring-1 ring-sky-500 ring-offset-1" : ""}`;
   };
@@ -215,14 +215,14 @@ export default function ScheduleBoard({
   };
 
   const renderScheduleTable = (rows: ScheduleRow[], columnKey: string) => (
-    <div key={columnKey} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="w-full table-fixed select-none bg-white text-center text-[8px] leading-tight sm:text-[10px]">
-        <thead className="bg-gray-100 text-[8px] text-gray-600">
+    <div key={columnKey} className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
+      <table className="w-full table-fixed select-none bg-white text-center text-[7px] leading-tight sm:text-[9px] md:text-[10px]">
+        <thead className="bg-gray-100 text-[7px] text-gray-600 sm:text-[8px]">
           <tr>
-            <th className="w-6 border-b px-0.5 py-0.5 sm:w-8">日付</th>
-            <th className="w-4 border-b px-0.5 py-0.5 sm:w-5">曜</th>
-            <th className="border-b bg-orange-50 px-0.5 py-0.5">日直</th>
-            <th className="border-b bg-indigo-50 px-0.5 py-0.5">当直</th>
+            <th className="w-5 border-b px-0 py-[2px] sm:w-7 sm:px-0.5 sm:py-0.5">日付</th>
+            <th className="w-4 border-b px-0 py-[2px] sm:w-5 sm:px-0.5 sm:py-0.5">曜</th>
+            <th className="border-b bg-orange-50 px-0 py-[2px] sm:px-0.5 sm:py-0.5">日直</th>
+            <th className="border-b bg-indigo-50 px-0 py-[2px] sm:px-0.5 sm:py-0.5">当直</th>
           </tr>
         </thead>
         <tbody>
@@ -294,12 +294,12 @@ export default function ScheduleBoard({
 
             return (
               <tr key={`${columnKey}-${row.day}`} className={`border-b ${isHolidayLike ? "bg-red-50/30" : isSat ? "bg-blue-50/30" : "bg-white"}`}>
-                <td className={`w-6 px-0.5 py-0.5 align-middle text-[8px] font-semibold sm:w-8 sm:text-[9px] ${dateCellClass}`}>
+                <td className={`w-5 px-0 py-[2px] align-middle text-[7px] font-semibold sm:w-7 sm:px-0.5 sm:py-0.5 sm:text-[9px] ${dateCellClass}`}>
                   <span className="sm:hidden">{row.day}</span>
                   <span className="hidden sm:inline">{row.day}日</span>
                 </td>
-                <td className={`w-4 px-0.5 py-0.5 align-middle text-[8px] font-bold sm:w-5 sm:text-[9px] ${weekdayCellClass}`}>{wd}</td>
-                <td className="px-0.5 py-0.5 align-middle">
+                <td className={`w-4 px-0 py-[2px] align-middle text-[7px] font-bold sm:w-5 sm:px-0.5 sm:py-0.5 sm:text-[9px] ${weekdayCellClass}`}>{wd}</td>
+                <td className="px-0 py-[2px] align-middle sm:px-0.5 sm:py-0.5">
                   {isDayShiftEnabled ? (
                     <div
                       data-touch-drop-target="shift"
@@ -312,7 +312,7 @@ export default function ScheduleBoard({
                       onDragOver={(event) => onHandleShiftDragOver(event, row.day, "day", dayLocked, isHolidayLike)}
                       onDragLeave={() => onHandleShiftDragLeave(row.day, "day")}
                       onDrop={(event) => onHandleShiftDrop(event, row.day, "day", dayLocked, isHolidayLike)}
-                      className={`relative flex min-h-6 w-full items-center justify-between gap-1 rounded border px-0.5 py-0.5 ${dayCellClass}`}
+                      className={`relative flex min-h-5 w-full items-center justify-between gap-0.5 rounded border px-[2px] py-[2px] sm:min-h-6 sm:gap-1 sm:px-0.5 sm:py-0.5 ${dayCellClass}`}
                     >
                       {row.day_shift ? (
                         <button
@@ -338,9 +338,9 @@ export default function ScheduleBoard({
                           {getDoctorName(row.day_shift)}
                         </button>
                       ) : (
-                        <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
+                        <span className="min-w-0 flex-1 text-[7px] text-gray-400 sm:text-[9px]">-</span>
                       )}
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="flex shrink-0 items-center gap-px sm:gap-0.5">
                         <button
                           type="button"
                           onClick={(event) => {
@@ -348,7 +348,7 @@ export default function ScheduleBoard({
                             onSwapButtonPress(row.day, "day", dayLocked, isHolidayLike);
                           }}
                           className={[
-                            "rounded border px-1 py-0.5 text-[8px] font-bold transition",
+                            "rounded border px-0.5 py-px text-[7px] font-bold transition sm:px-1 sm:py-0.5 sm:text-[8px]",
                             daySwapSelected
                               ? "border-yellow-300 bg-yellow-100 text-yellow-900"
                               : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-sky-700",
@@ -364,10 +364,10 @@ export default function ScheduleBoard({
                             onToggleShiftLock(row.day, "day");
                           }}
                           disabled={!row.day_shift}
-                          className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="shrink-0 rounded border border-gray-200 bg-white p-px text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:p-0.5"
                           title={dayLocked ? "ロック解除" : "ロック"}
                         >
-                          {dayLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                          {dayLocked ? <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <Unlock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
                         </button>
                       </div>
                       {renderHoverTooltip(dayHoverInvalid)}
@@ -383,14 +383,14 @@ export default function ScheduleBoard({
                       onDragEnter={(event) => onHandleDisabledDayDragOver(event, row.day)}
                       onDragOver={(event) => onHandleDisabledDayDragOver(event, row.day)}
                       onDragLeave={() => onHandleDisabledDayDragLeave(row.day)}
-                      className={`relative flex min-h-6 w-full items-center justify-center rounded border px-0.5 py-0.5 text-[9px] font-semibold ${disabledDayCellClass}`}
+                      className={`relative flex min-h-5 w-full items-center justify-center rounded border px-[2px] py-[2px] text-[7px] font-semibold sm:min-h-6 sm:px-0.5 sm:py-0.5 sm:text-[9px] ${disabledDayCellClass}`}
                     >
                       -
                       {renderHoverTooltip(dayHoverInvalid)}
                     </div>
                   )}
                 </td>
-                <td className="px-0.5 py-0.5 align-middle">
+                <td className="px-0 py-[2px] align-middle sm:px-0.5 sm:py-0.5">
                   <div
                     data-touch-drop-target="shift"
                     data-day={row.day}
@@ -402,7 +402,7 @@ export default function ScheduleBoard({
                     onDragOver={(event) => onHandleShiftDragOver(event, row.day, "night", nightLocked, isHolidayLike)}
                     onDragLeave={() => onHandleShiftDragLeave(row.day, "night")}
                     onDrop={(event) => onHandleShiftDrop(event, row.day, "night", nightLocked, isHolidayLike)}
-                    className={`relative flex min-h-6 w-full items-center justify-between gap-1 rounded border px-0.5 py-0.5 ${nightCellClass}`}
+                    className={`relative flex min-h-5 w-full items-center justify-between gap-0.5 rounded border px-[2px] py-[2px] sm:min-h-6 sm:gap-1 sm:px-0.5 sm:py-0.5 ${nightCellClass}`}
                   >
                     {row.night_shift ? (
                       <button
@@ -428,9 +428,9 @@ export default function ScheduleBoard({
                         {getDoctorName(row.night_shift)}
                       </button>
                     ) : (
-                      <span className="min-w-0 flex-1 text-[9px] text-gray-400">-</span>
+                      <span className="min-w-0 flex-1 text-[7px] text-gray-400 sm:text-[9px]">-</span>
                     )}
-                      <div className="flex shrink-0 items-center gap-0.5">
+                      <div className="flex shrink-0 items-center gap-px sm:gap-0.5">
                         <button
                           type="button"
                           onClick={(event) => {
@@ -438,7 +438,7 @@ export default function ScheduleBoard({
                             onSwapButtonPress(row.day, "night", nightLocked, isHolidayLike);
                           }}
                           className={[
-                            "rounded border px-1 py-0.5 text-[8px] font-bold transition",
+                            "rounded border px-0.5 py-px text-[7px] font-bold transition sm:px-1 sm:py-0.5 sm:text-[8px]",
                             nightSwapSelected
                               ? "border-yellow-300 bg-yellow-100 text-yellow-900"
                               : "border-gray-200 bg-white text-gray-500 hover:bg-gray-100 hover:text-sky-700",
@@ -454,10 +454,10 @@ export default function ScheduleBoard({
                             onToggleShiftLock(row.day, "night");
                           }}
                           disabled={!row.night_shift}
-                          className="shrink-0 rounded border border-gray-200 bg-white p-0.5 text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          className="shrink-0 rounded border border-gray-200 bg-white p-px text-gray-500 hover:text-amber-700 disabled:cursor-not-allowed disabled:opacity-40 sm:p-0.5"
                           title={nightLocked ? "ロック解除" : "ロック"}
                         >
-                          {nightLocked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                          {nightLocked ? <Lock className="h-2.5 w-2.5 sm:h-3 sm:w-3" /> : <Unlock className="h-2.5 w-2.5 sm:h-3 sm:w-3" />}
                         </button>
                       </div>
                     {renderHoverTooltip(nightHoverInvalid)}
@@ -680,7 +680,7 @@ export default function ScheduleBoard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-1 lg:grid-cols-2">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
+          <div className="grid grid-cols-1 gap-y-1 md:grid-cols-2 md:gap-x-3 md:gap-y-2">{scheduleColumns.map((rows, index) => renderScheduleTable(rows, `column-${index}`))}</div>
 
           <div className="mt-2 flex flex-col items-center gap-1">
             {saveValidationMessages.length > 0 ? (
@@ -729,6 +729,7 @@ export default function ScheduleBoard({
     </>
   );
 }
+
 
 
 

@@ -21,7 +21,6 @@ export default function DoctorManagerPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lockingId, setLockingId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
-  const [hardDeletingId, setHardDeletingId] = useState<string | null>(null);
 
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
   const archivedDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active === false), [doctors]);
@@ -102,29 +101,6 @@ export default function DoctorManagerPage() {
       alert("\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
     } finally {
       setRestoringId(null);
-    }
-  };
-
-  const handleHardDelete = async (doctor: Doctor) => {
-    const confirmed = window.confirm(
-      "\u3053\u306e\u64cd\u4f5c\u306f\u53d6\u308a\u6d88\u305b\u307e\u305b\u3093\u3002\u904e\u53bb\u306e\u5168\u5f53\u76f4\u30c7\u30fc\u30bf\u304b\u3089\u524a\u9664\u3055\u308c\u307e\u3059\u3002\u672c\u5f53\u306b\u3088\u308d\u3057\u3044\u3067\u3059\u304b\uff1f"
-    );
-    if (!confirmed) return;
-
-    const apiUrl = getApiBase();
-    setHardDeletingId(doctor.id);
-
-    try {
-      const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}/hard`, { method: "DELETE" });
-      if (!response.ok) {
-        throw new Error("hard delete failed");
-      }
-      await fetchDoctors();
-    } catch (error) {
-      console.error(error);
-      alert("\u5b8c\u5168\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
-    } finally {
-      setHardDeletingId(null);
     }
   };
 
@@ -376,21 +352,11 @@ export default function DoctorManagerPage() {
                       >
                         {restoringId === doctor.id ? "\u5fa9\u5143\u4e2d..." : "\u5fa9\u5143"}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleHardDelete(doctor)}
-                        disabled={hardDeletingId === doctor.id}
-                        className="w-full rounded border border-red-300 bg-red-100 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-                      >
-                        {hardDeletingId === doctor.id ? "\u524a\u9664\u4e2d..." : "\u5b8c\u5168\u306b\u524a\u9664"}
-                      </button>
                     </div>
                   </div>
                 ))
               )}
-              <div className="text-xs text-red-600">
-                {"\u5b8c\u5168\u524a\u9664\u306f\u5fa9\u5143\u3067\u304d\u307e\u305b\u3093\u3002\u6700\u7d42\u624b\u6bb5\u3068\u3057\u3066\u4f7f\u7528\u3057\u3066\u304f\u3060\u3055\u3044\u3002"}
-              </div>
+
             </div>
           ) : null}
         </div>
@@ -398,5 +364,6 @@ export default function DoctorManagerPage() {
     </div>
   );
 }
+
 
 
