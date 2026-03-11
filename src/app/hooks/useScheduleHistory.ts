@@ -1,4 +1,4 @@
-﻿import { useCallback, useState, type SetStateAction } from "react";
+import { useCallback, useState, type SetStateAction } from "react";
 import type { ScheduleRow } from "../types/dashboard";
 
 type UseScheduleHistoryParams = {
@@ -6,78 +6,118 @@ type UseScheduleHistoryParams = {
   limit?: number;
 };
 
+type HistoryState = {
+  history: ScheduleRow[][];
+  currentIndex: number;
+};
+
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const resolveNextSchedule = (next: SetStateAction<ScheduleRow[]>, prev: ScheduleRow[]) =>
   typeof next === "function" ? next(cloneSchedule(prev)) : next;
 const areSchedulesEqual = (left: ScheduleRow[], right: ScheduleRow[]) => JSON.stringify(left) === JSON.stringify(right);
 
+const createHistoryState = (schedule: ScheduleRow[] = []): HistoryState => ({
+  history: [cloneSchedule(schedule)],
+  currentIndex: 0,
+});
+
+const getCurrentSchedule = (state: HistoryState) => state.history[state.currentIndex] ?? [];
+
+const trimCommittedHistory = (history: ScheduleRow[][], limit: number): HistoryState => {
+  const maxSnapshots = Math.max(limit, 2);
+
+  if (history.length <= maxSnapshots) {
+    return {
+      history,
+      currentIndex: history.length - 1,
+    };
+  }
+
+  const baseline = history[0];
+  const tail = history.slice(-(maxSnapshots - 1));
+
+  return {
+    history: [baseline, ...tail],
+    currentIndex: maxSnapshots - 1,
+  };
+};
+
 export function useScheduleHistory({ initialSchedule = [], limit = 15 }: UseScheduleHistoryParams = {}) {
-  const [schedule, setScheduleState] = useState<ScheduleRow[]>(() => cloneSchedule(initialSchedule));
-  const [pastSchedules, setPastSchedules] = useState<ScheduleRow[][]>([]);
-  const [futureSchedules, setFutureSchedules] = useState<ScheduleRow[][]>([]);
+  const [state, setState] = useState<HistoryState>(() => createHistoryState(initialSchedule));
 
   const setSchedule = useCallback((next: SetStateAction<ScheduleRow[]>) => {
-    setScheduleState((prev) => cloneSchedule(resolveNextSchedule(next, prev)));
+    setState((prev) => {
+      const current = getCurrentSchedule(prev);
+      const resolved = cloneSchedule(resolveNextSchedule(next, current));
+
+      if (areSchedulesEqual(current, resolved)) {
+        return prev;
+      }
+
+      const history = prev.history.map((snapshot, index) => (index === prev.currentIndex ? resolved : snapshot));
+      return {
+        history,
+        currentIndex: prev.currentIndex,
+      };
+    });
   }, []);
 
   const commitSchedule = useCallback(
     (nextSchedule: ScheduleRow[]) => {
-      const clonedNext = cloneSchedule(nextSchedule);
-      if (areSchedulesEqual(schedule, clonedNext)) return;
+      setState((prev) => {
+        const current = getCurrentSchedule(prev);
+        const clonedNext = cloneSchedule(nextSchedule);
 
-      setPastSchedules((prev) => [...prev.slice(-(limit - 1)), cloneSchedule(schedule)]);
-      setFutureSchedules([]);
-      setScheduleState(clonedNext);
-    },
-    [limit, schedule]
-  );
+        if (areSchedulesEqual(current, clonedNext)) {
+          return prev;
+        }
 
-  const commitScheduleFrom = useCallback(
-    (baseSchedule: ScheduleRow[], nextSchedule: ScheduleRow[]) => {
-      const clonedBase = cloneSchedule(baseSchedule);
-      const clonedNext = cloneSchedule(nextSchedule);
-
-      if (areSchedulesEqual(clonedBase, clonedNext)) {
-        setFutureSchedules([]);
-        setScheduleState(clonedNext);
-        return;
-      }
-
-      setPastSchedules((prev) => [...prev.slice(-(limit - 1)), clonedBase]);
-      setFutureSchedules([]);
-      setScheduleState(clonedNext);
+        const history = [...prev.history.slice(0, prev.currentIndex + 1), clonedNext];
+        return trimCommittedHistory(history, limit);
+      });
     },
     [limit]
   );
 
+  const commitScheduleFrom = useCallback((_: ScheduleRow[], nextSchedule: ScheduleRow[]) => {
+    setState(createHistoryState(nextSchedule));
+  }, []);
+
   const resetSchedule = useCallback((nextSchedule: ScheduleRow[] = []) => {
-    setPastSchedules([]);
-    setFutureSchedules([]);
-    setScheduleState(cloneSchedule(nextSchedule));
+    setState(createHistoryState(nextSchedule));
   }, []);
 
   const clearHistory = useCallback(() => {
-    setPastSchedules([]);
-    setFutureSchedules([]);
+    setState((prev) => createHistoryState(getCurrentSchedule(prev)));
   }, []);
 
   const undo = useCallback(() => {
-    if (pastSchedules.length === 0) return;
+    setState((prev) => {
+      if (prev.currentIndex === 0) {
+        return prev;
+      }
 
-    const previous = pastSchedules[pastSchedules.length - 1];
-    setPastSchedules((prev) => prev.slice(0, -1));
-    setFutureSchedules((prev) => [cloneSchedule(schedule), ...prev].slice(0, limit));
-    setScheduleState(cloneSchedule(previous));
-  }, [limit, pastSchedules, schedule]);
+      return {
+        history: prev.history,
+        currentIndex: prev.currentIndex - 1,
+      };
+    });
+  }, []);
 
   const redo = useCallback(() => {
-    if (futureSchedules.length === 0) return;
+    setState((prev) => {
+      if (prev.currentIndex >= prev.history.length - 1) {
+        return prev;
+      }
 
-    const [next, ...rest] = futureSchedules;
-    setFutureSchedules(rest);
-    setPastSchedules((prev) => [...prev.slice(-(limit - 1)), cloneSchedule(schedule)]);
-    setScheduleState(cloneSchedule(next));
-  }, [futureSchedules, limit, schedule]);
+      return {
+        history: prev.history,
+        currentIndex: prev.currentIndex + 1,
+      };
+    });
+  }, []);
+
+  const schedule = getCurrentSchedule(state);
 
   return {
     schedule,
@@ -88,7 +128,7 @@ export function useScheduleHistory({ initialSchedule = [], limit = 15 }: UseSche
     clearHistory,
     undo,
     redo,
-    canUndo: pastSchedules.length > 0,
-    canRedo: futureSchedules.length > 0,
+    canUndo: state.currentIndex > 0,
+    canRedo: state.currentIndex < state.history.length - 1,
   };
 }
