@@ -1,11 +1,11 @@
-﻿// src/app/entry/[token]/page.tsx
+// src/app/entry/[token]/page.tsx
 "use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import TargetShiftPopover from "../../components/TargetShiftPopover";
 import type {
   FixedUnavailableWeekdayEntry,
@@ -31,6 +31,17 @@ type PublicDoctor = {
 
 const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const ymd = (d: Date) => format(d, "yyyy-MM-dd");
+const getNextMonthDate = (baseDate = new Date()) =>
+  new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1);
+
+const unavailableAllModifierClass =
+  "[&>button]:relative [&>button]:!border-red-400 [&>button]:!bg-red-300 [&>button]:!text-transparent [&>button]:shadow-sm hover:[&>button]:!bg-red-400 [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-900 [&>button]:after:content-['[休]']";
+
+const unavailableDayModifierClass =
+  "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,#fecaca_0%,#fecaca_50%,transparent_50%,transparent_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[日]']";
+
+const unavailableNightModifierClass =
+  "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,transparent_0%,transparent_50%,#fecaca_50%,#fecaca_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[当]']";
 
 function toUnavailableEntriesFromDoctor(data: PublicDoctor): UnavailableDateEntry[] {
   const legacyEntries = Array.isArray(data.unavailable_dates)
@@ -57,7 +68,7 @@ export default function EntryPage() {
   const [doctor, setDoctor] = useState<PublicDoctor | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<UnavailableDateEntry[]>([]);
-  const [month, setMonth] = useState<Date>(new Date());
+  const [month, setMonth] = useState<Date>(() => getNextMonthDate());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
@@ -145,13 +156,6 @@ export default function EntryPage() {
       const selected = toUnavailableEntriesFromDoctor(data);
       setSelectedEntries(selected);
 
-      if (selected.length > 0) {
-        try {
-          setMonth(parseISO(selected[0].date));
-        } catch {
-          // ignore
-        }
-      }
     } catch (e) {
       console.error(e);
       setError("読み込みに失敗しました。時間をおいて再度お試しください。");
@@ -292,7 +296,7 @@ export default function EntryPage() {
               <section className="mt-6">
                 <div className="text-sm font-bold text-gray-700">個別不可日（カレンダー）</div>
                 <div className="mt-1 text-xs text-gray-500">
-                  平日・土曜は1タップで終日不可、日曜・祝日は日直/当直を分けて設定できます。<br />
+                  平日・土曜は1タップで[休] 終日不可、日曜・祝日は日直/当直を分けて設定できます。<br />
                   前提条件として研究日とその前日は当直には入りません。<br />
                   外来日前日は当直に含まれるため、ご自身で不可日指定をお願いします。
                   {locked ? (
@@ -305,9 +309,9 @@ export default function EntryPage() {
                 <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
                   <div ref={calendarRef} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4 relative">
                     <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
-                      <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">終日</span>
-                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = 日直のみ</span>
-                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = 当直のみ</span>
+                      <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">[休] = 終日</span>
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">[日] = 日直のみ</span>
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">[当] = 当直のみ</span>
                     </div>
                     <DayPicker
                       month={month}
@@ -353,11 +357,11 @@ export default function EntryPage() {
                         holiday:
                           "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
                         allUnavailable:
-                          "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
+                          unavailableAllModifierClass,
                         dayUnavailable:
-                          "[&>button]:relative [&>button]:border-amber-300 [&>button]:bg-amber-50 [&>button]:text-amber-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-amber-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['D']",
+                          unavailableDayModifierClass,
                         nightUnavailable:
-                          "[&>button]:relative [&>button]:border-sky-300 [&>button]:bg-sky-50 [&>button]:text-sky-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-sky-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['N']",
+                          unavailableNightModifierClass,
                         today:
                           "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
                         outside: "[&>button]:bg-transparent [&>button]:text-slate-300",

@@ -6,6 +6,8 @@ import { Loader2 } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import "react-day-picker/dist/style.css";
 import TargetShiftPopover from "./TargetShiftPopover";
+import { useCustomHolidays } from "../hooks/useCustomHolidays";
+import { useHolidays } from "../hooks/useHolidays";
 import type {
   FixedUnavailableWeekdayMap,
   HardConstraints,
@@ -53,6 +55,7 @@ type GenerationSettingsPanelProps = {
   isPreviousMonthShiftsOpen: boolean;
   year: number;
   month: number;
+  doctorUnavailableMonth: Date;
   numDoctors: number;
   activeDoctors: DashboardDoctor[];
   holidayWorkdayOverrides: Set<string>;
@@ -84,6 +87,7 @@ type GenerationSettingsPanelProps = {
   onToggleHolidayOverride: (ymd: string) => void;
   onSaveCustomHolidays: () => void;
   onSelectedDoctorChange: (doctorId: string) => void;
+  onDoctorUnavailableMonthChange: (value: Date) => void;
   onToggleAllUnavailable: () => void;
   onToggleUnavailable: (doctorId: string, ymd: string, targetShift?: TargetShift | null) => void;
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
@@ -356,6 +360,15 @@ const baseCalendarModifierClasses = {
     "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",
 };
 
+const unavailableAllModifierClass =
+  "[&>button]:relative [&>button]:!border-red-400 [&>button]:!bg-red-300 [&>button]:!text-transparent [&>button]:shadow-sm hover:[&>button]:!bg-red-400 [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-900 [&>button]:after:content-['[休]']";
+
+const unavailableDayModifierClass =
+  "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,#fecaca_0%,#fecaca_50%,transparent_50%,transparent_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[日]']";
+
+const unavailableNightModifierClass =
+  "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,transparent_0%,transparent_50%,#fecaca_50%,#fecaca_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[当]']";
+
 const getTargetShiftSummaryLabel = (targetShift: TargetShift | null) => {
   if (targetShift === "all") return "終日休み";
   if (targetShift === "day") return "日直のみ休み";
@@ -376,18 +389,31 @@ const getFixedWeekdayButtonTone = (weekday: number, targetShift: TargetShift | n
   const isSun = weekday === 6;
   const isHoliday = weekday === 7;
   const isSat = weekday === 5;
+  const isHolidayLike = isSun || isHoliday;
+
+  if (isHolidayLike) {
+    if (targetShift === "all") return "border-red-400 bg-red-300 text-red-900";
+    if (targetShift === "day") return "border-red-300 text-red-800 bg-[linear-gradient(135deg,#fecaca_0%,#fecaca_50%,transparent_50%,transparent_100%)]";
+    if (targetShift === "night") return "border-red-300 text-red-800 bg-[linear-gradient(135deg,transparent_0%,transparent_50%,#fecaca_50%,#fecaca_100%)]";
+    return "border-red-200 bg-red-50 text-red-400 hover:bg-red-100";
+  }
 
   if (targetShift === "all") {
-    if (isSun || isHoliday) return "border-red-600 bg-red-500 text-white";
     if (isSat) return "border-blue-700 bg-blue-600 text-white";
     return "border-gray-900 bg-gray-900 text-white";
   }
 
   if (targetShift === "day") return "border-amber-300 bg-amber-50 text-amber-900";
   if (targetShift === "night") return "border-sky-300 bg-sky-50 text-sky-900";
-  if (isSun || isHoliday) return "border-red-200 bg-red-50 text-red-400 hover:bg-red-100";
   if (isSat) return "border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100";
   return "border-gray-200 bg-white text-gray-500 hover:bg-gray-50";
+};
+
+const getFixedWeekdayButtonLabel = (targetShift: TargetShift | null) => {
+  if (targetShift === "all") return "[休]";
+  if (targetShift === "day") return "[日]";
+  if (targetShift === "night") return "[当]";
+  return "";
 };
 
 export function GenerationSettingsPanel({
@@ -407,6 +433,7 @@ export function GenerationSettingsPanel({
   isPreviousMonthShiftsOpen,
   year,
   month,
+  doctorUnavailableMonth,
   numDoctors,
   activeDoctors,
   holidayWorkdayOverrides,
@@ -437,6 +464,7 @@ export function GenerationSettingsPanel({
   onToggleHolidayOverride,
   onSaveCustomHolidays,
   onSelectedDoctorChange,
+  onDoctorUnavailableMonthChange,
   onToggleAllUnavailable,
   onToggleUnavailable,
   onToggleFixedWeekday,
@@ -446,7 +474,9 @@ export function GenerationSettingsPanel({
   isGenerateDisabled = false,
 }: GenerationSettingsPanelProps) {
   const displayMonth = useMemo(() => new Date(year, month - 1, 1), [year, month]);
-  const currentMonthPrefix = `${year}-${pad2(month)}-`;
+  const doctorUnavailableYear = doctorUnavailableMonth.getFullYear();
+  const doctorUnavailableMonthNumber = doctorUnavailableMonth.getMonth() + 1;
+  const doctorUnavailableMonthPrefix = `${doctorUnavailableYear}-${pad2(doctorUnavailableMonthNumber)}-`;
   const selectedDoctor = activeDoctors.find((doctor) => doctor.id === selectedDoctorId) ?? null;
   const unavailableSectionRef = useRef<HTMLDivElement | null>(null);
   const fixedWeekdaySectionRef = useRef<HTMLDivElement | null>(null);
@@ -459,14 +489,38 @@ export function GenerationSettingsPanel({
     weekday: number;
     position: { top: number; left: number };
   } | null>(null);
+  const { holidaySet: doctorUnavailableStandardHolidaySet } = useHolidays(doctorUnavailableYear);
+  const {
+    manualSet: doctorUnavailableManualSet,
+    disabledSet: doctorUnavailableDisabledSet,
+    customError: doctorUnavailableCustomError,
+  } = useCustomHolidays(doctorUnavailableYear);
+
+  const doctorUnavailableHolidaySet = useMemo(() => {
+    const next = new Set<string>(doctorUnavailableStandardHolidaySet);
+
+    if (doctorUnavailableCustomError) {
+      return next;
+    }
+
+    for (const date of doctorUnavailableDisabledSet) {
+      next.delete(date);
+    }
+
+    for (const date of doctorUnavailableManualSet) {
+      next.add(date);
+    }
+
+    return next;
+  }, [doctorUnavailableCustomError, doctorUnavailableDisabledSet, doctorUnavailableManualSet, doctorUnavailableStandardHolidaySet]);
 
   const selectedUnavailableInMonth = useMemo(() => {
     const selectedDoctorUnavailable = unavailableMap[selectedDoctorId] ?? [];
     return selectedDoctorUnavailable
-      .filter((entry) => entry.date.startsWith(currentMonthPrefix))
+      .filter((entry) => entry.date.startsWith(doctorUnavailableMonthPrefix))
       .slice()
       .sort((left, right) => left.date.localeCompare(right.date));
-  }, [currentMonthPrefix, selectedDoctorId, unavailableMap]);
+  }, [doctorUnavailableMonthPrefix, selectedDoctorId, unavailableMap]);
 
   const selectedUnavailableDates = useMemo(
     () =>
@@ -556,11 +610,10 @@ export function GenerationSettingsPanel({
     () => ({
       saturday: (date: Date) => date.getDay() === 6,
       sunday: (date: Date) => date.getDay() === 0,
-      holiday: (date: Date) => {
-        if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
-        const info = isHolidayLikeDay(date.getDate());
-        return info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd));
-      },
+      holiday: (date: Date) =>
+        date.getFullYear() === doctorUnavailableYear &&
+        date.getMonth() === doctorUnavailableMonthNumber - 1 &&
+        doctorUnavailableHolidaySet.has(toDateKey(date)),
       allUnavailable: (date: Date) =>
         getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "all",
       dayUnavailable: (date: Date) =>
@@ -568,7 +621,7 @@ export function GenerationSettingsPanel({
       nightUnavailable: (date: Date) =>
         getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "night",
     }),
-    [holidayWorkdayOverrides, isHolidayLikeDay, month, selectedUnavailableInMonth, year]
+    [doctorUnavailableHolidaySet, doctorUnavailableMonthNumber, doctorUnavailableYear, selectedUnavailableInMonth]
   );
 
   const closePopovers = () => {
@@ -591,6 +644,11 @@ export function GenerationSettingsPanel({
     onSelectedDoctorChange(doctorId);
   };
 
+  const handleDoctorUnavailableMonthChange = (nextMonth: Date) => {
+    setUnavailablePopover(null);
+    onDoctorUnavailableMonthChange(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1));
+  };
+
 
   const handleHolidayDateClick = (date: Date) => {
     if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
@@ -609,7 +667,7 @@ export function GenerationSettingsPanel({
 
   const handleUnavailableDayClick = (date: Date, _modifiers: unknown, event: ReactMouseEvent<Element>) => {
     if (!selectedDoctorId) return;
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
+    if (date.getFullYear() !== doctorUnavailableYear || date.getMonth() !== doctorUnavailableMonthNumber - 1) return;
 
     const dateKey = toDateKey(date);
     const info = isHolidayLikeDay(date.getDate());
@@ -1043,7 +1101,8 @@ export function GenerationSettingsPanel({
         <div ref={unavailableSectionRef} className="relative">
           <DayPicker
             mode="multiple"
-            month={displayMonth}
+            month={doctorUnavailableMonth}
+            onMonthChange={handleDoctorUnavailableMonthChange}
             selected={selectedUnavailableDates}
             onDayClick={handleUnavailableDayClick}
             showOutsideDays
@@ -1056,11 +1115,11 @@ export function GenerationSettingsPanel({
               holiday:
                 "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
               allUnavailable:
-                "[&>button]:!border-indigo-600 [&>button]:!bg-indigo-600 [&>button]:!text-white [&>button]:shadow-sm hover:[&>button]:!bg-indigo-700",
+                unavailableAllModifierClass,
               dayUnavailable:
-                "[&>button]:relative [&>button]:border-amber-300 [&>button]:bg-amber-50 [&>button]:text-amber-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-amber-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['D']",
+                unavailableDayModifierClass,
               nightUnavailable:
-                "[&>button]:relative [&>button]:border-sky-300 [&>button]:bg-sky-50 [&>button]:text-sky-900 [&>button]:after:absolute [&>button]:after:right-1 [&>button]:after:top-1 [&>button]:after:rounded-full [&>button]:after:bg-sky-500 [&>button]:after:px-1 [&>button]:after:text-[9px] [&>button]:after:font-bold [&>button]:after:leading-none [&>button]:after:text-white [&>button]:after:content-['N']",
+                unavailableNightModifierClass,
             }}
           />
           <TargetShiftPopover
@@ -1068,7 +1127,7 @@ export function GenerationSettingsPanel({
             position={unavailablePopover?.position ?? null}
             title={
               unavailablePopover
-                ? `${month}月${Number(unavailablePopover.dateKey.slice(-2))}日の不可設定`
+                ? `${doctorUnavailableMonthNumber}月${Number(unavailablePopover.dateKey.slice(-2))}日の不可設定`
                 : "不可設定"
             }
             currentValue={
@@ -1105,9 +1164,9 @@ export function GenerationSettingsPanel({
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
-          <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">終 = 終日</span>
-          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">D = 日直のみ</span>
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">N = 当直のみ</span>
+          <span className="rounded-full border border-gray-200 bg-white px-2 py-1 text-gray-600">[休] = 終日</span>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">[日] = 日直のみ</span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">[当] = 当直のみ</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -1165,7 +1224,7 @@ export function GenerationSettingsPanel({
                           targetShift
                         )}`}
                       >
-                        {targetShift === "all" ? "終" : targetShift === "day" ? "D" : targetShift === "night" ? "N" : ""}
+                        {getFixedWeekdayButtonLabel(targetShift)}
                       </button>
                     );
                   })}

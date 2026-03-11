@@ -29,6 +29,8 @@ type UseScheduleApiParams = {
   hardConstraints: HardConstraints;
   unavailableMap: UnavailableDateMap;
   fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
+  doctorUnavailableYear: number;
+  doctorUnavailableMonth: number;
   previousMonthShifts: PreviousMonthShift[];
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
@@ -73,6 +75,8 @@ export function useScheduleApi({
   hardConstraints,
   unavailableMap,
   fixedUnavailableWeekdaysMap,
+  doctorUnavailableYear,
+  doctorUnavailableMonth,
   previousMonthShifts,
   minScoreMap,
   maxScoreMap,
@@ -300,8 +304,8 @@ export function useScheduleApi({
             target_shift: entry.target_shift,
           })),
           unavailable_days: unavailableDays,
-          unavailable_year: year,
-          unavailable_month: month,
+          unavailable_year: doctorUnavailableYear,
+          unavailable_month: doctorUnavailableMonth,
         };
 
         return fetch(`${apiUrl}/api/doctors/${doc.id}`, {
@@ -332,7 +336,7 @@ export function useScheduleApi({
   };
 
   const handleDeleteMonthSchedule = async () => {
-    if (!confirm(`${year}年${month}月のシフトを画面上でクリアします。よろしいですか？`)) return;
+    if (!confirm(`${year}年${month}月の未固定シフトを画面上でクリアします。よろしいですか？`)) return;
 
     setIsDeletingMonthSchedule(true);
     setError("");
@@ -341,7 +345,7 @@ export function useScheduleApi({
       const clearedSchedule = clearUnlockedSchedule(schedule);
       commitSchedule(clearedSchedule);
       setScores({});
-      setSaveMessage("固定されていないシフト枠をクリアしました（※まだ保存されていません）");
+      setSaveMessage("画面上のシフトをクリアしました（※まだ保存されていません）");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "画面上のシフトクリアに失敗しました");
     } finally {
@@ -476,6 +480,3 @@ export function useScheduleApi({
     handleSaveToDB,
   };
 }
-
-
-

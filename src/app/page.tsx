@@ -24,13 +24,28 @@ import {
   type TargetShift,
   type UnavailableDateMap,
 } from "./types/dashboard";
-import { getDefaultTargetMonth } from "./utils/dateUtils";
 import {
   getFixedWeekdayTargetShift,
   getUnavailableDateTargetShift,
   setFixedWeekdayTargetShift,
   setUnavailableDateTargetShift,
 } from "./utils/unavailableSettings";
+
+const getDashboardInitialTargetMonth = (baseDate = new Date()) => {
+  const dayOfMonth = baseDate.getDate();
+  const targetDate =
+    dayOfMonth <= 10
+      ? new Date(baseDate.getFullYear(), baseDate.getMonth(), 1)
+      : new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1);
+
+  return {
+    year: targetDate.getFullYear(),
+    month: targetDate.getMonth() + 1,
+  };
+};
+
+const getDoctorPreferenceMonthDate = (baseDate = new Date()) =>
+  new Date(baseDate.getFullYear(), baseDate.getMonth() + 1, 1);
 
 const getScheduleSignature = (rows: ScheduleRow[]) =>
   JSON.stringify(
@@ -44,9 +59,11 @@ const getScheduleSignature = (rows: ScheduleRow[]) =>
   );
 
 export default function DashboardPage() {
-  const defaultTargetMonth = getDefaultTargetMonth();
+  const defaultTargetMonth = getDashboardInitialTargetMonth();
+  const defaultDoctorPreferenceMonth = getDoctorPreferenceMonthDate();
   const [year, setYear] = useState<number>(defaultTargetMonth.year);
   const [month, setMonth] = useState<number>(defaultTargetMonth.month);
+  const [doctorUnavailableMonth, setDoctorUnavailableMonth] = useState<Date>(defaultDoctorPreferenceMonth);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [holidays, setHolidays] = useState<number[]>([]);
   const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => new Set());
@@ -426,6 +443,8 @@ export default function DashboardPage() {
     hardConstraints,
     unavailableMap,
     fixedUnavailableWeekdaysMap,
+    doctorUnavailableYear: doctorUnavailableMonth.getFullYear(),
+    doctorUnavailableMonth: doctorUnavailableMonth.getMonth() + 1,
     previousMonthShifts,
     minScoreMap,
     maxScoreMap,
@@ -755,6 +774,7 @@ export default function DashboardPage() {
             isHardConstraintsOpen={isHardConstraintsOpen}
             year={year}
             month={month}
+            doctorUnavailableMonth={doctorUnavailableMonth}
             numDoctors={numDoctors}
             activeDoctors={activeDoctors}
             holidayWorkdayOverrides={holidayWorkdayOverrides}
@@ -789,6 +809,7 @@ export default function DashboardPage() {
               void saveCustomHolidays();
             }}
             onSelectedDoctorChange={setSelectedDoctorId}
+            onDoctorUnavailableMonthChange={setDoctorUnavailableMonth}
             onToggleAllUnavailable={toggleAllUnavailable}
             onToggleUnavailable={toggleUnavailable}
             onToggleFixedWeekday={toggleFixedWeekday}
@@ -805,7 +826,7 @@ export default function DashboardPage() {
                   <div className="flex flex-col items-center text-center">
                     <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
                     <div className="text-base font-bold text-gray-800 md:text-lg">当直表を自動生成しています</div>
-                    <div className="mt-2 text-sm text-gray-500">未固定枠を白紙化しつつ、条件をもとに再計算しています。</div>
+                    <div className="mt-2 text-sm text-gray-500">未確定の枠を計算中です。完了までそのままお待ちください。</div>
                     <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                       <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
                     </div>
@@ -902,9 +923,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-
-
-
-
-
