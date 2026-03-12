@@ -62,9 +62,9 @@ export default function DoctorListManager({
             <thead className="bg-gray-100 text-gray-600">
               <tr>
                 <th className="w-32 border-b px-2 py-2 text-left whitespace-nowrap md:px-3">医師</th>
-                <th className="w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">Min</th>
-                <th className="w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">Max</th>
-                <th className="w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">目標</th>
+                <th className="max-md:w-32 md:w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">Min</th>
+                <th className="max-md:w-32 md:w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">Max</th>
+                <th className="max-md:w-32 md:w-28 border-b px-2 py-2 whitespace-nowrap md:px-3">目標</th>
               </tr>
             </thead>
             <tbody>
@@ -83,7 +83,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-[3.4rem] text-[12px] md:w-12"
+                      inputClassName="max-md:!w-[2.2rem] max-md:!flex-none text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
@@ -95,7 +95,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-[3.4rem] text-[12px] md:w-12"
+                      inputClassName="max-md:!w-[2.2rem] max-md:!flex-none text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
@@ -107,7 +107,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-[3.4rem] bg-blue-50 text-[12px] md:w-12"
+                      inputClassName="max-md:!w-[2.2rem] max-md:!flex-none bg-blue-50 text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
