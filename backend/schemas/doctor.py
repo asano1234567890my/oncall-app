@@ -73,6 +73,10 @@ class DoctorCreate(DoctorBase):
     pass
 
 
+class DoctorBulkLockUpdate(BaseModel):
+    is_locked: bool
+
+
 class DoctorUpdate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

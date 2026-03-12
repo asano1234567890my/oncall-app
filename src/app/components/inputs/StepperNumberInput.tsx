@@ -74,13 +74,13 @@ export default function StepperNumberInput({
   };
 
   return (
-    <div className={["flex w-full min-w-0 items-center gap-1", className].filter(Boolean).join(" ")}>
+    <div className={["flex w-fit min-w-0 items-center gap-0.5", className].filter(Boolean).join(" ")}>
       <button
         type="button"
         onClick={() => handleStep(-1)}
         disabled={disabled}
         className={[
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-base font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
           buttonClassName,
         ]
           .filter(Boolean)
@@ -103,7 +103,7 @@ export default function StepperNumberInput({
         disabled={disabled}
         placeholder={placeholder}
         className={[
-          "w-full min-w-[2rem] flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
+          "w-12 shrink-0 rounded-lg border border-gray-200 bg-white px-1 py-1 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
           inputClassName,
         ]
           .filter(Boolean)
@@ -114,7 +114,7 @@ export default function StepperNumberInput({
         onClick={() => handleStep(1)}
         disabled={disabled}
         className={[
-          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-base font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-white text-sm font-bold text-gray-600 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40",
           buttonClassName,
         ]
           .filter(Boolean)

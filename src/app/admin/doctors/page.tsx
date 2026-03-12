@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -21,9 +21,11 @@ export default function DoctorManagerPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lockingId, setLockingId] = useState<string | null>(null);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [bulkLockAction, setBulkLockAction] = useState<"lock" | "unlock" | null>(null);
 
   const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
   const archivedDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active === false), [doctors]);
+  const isBulkLocking = bulkLockAction !== null;
 
   const fetchDoctors = async () => {
     const apiUrl = getApiBase();
@@ -157,27 +159,86 @@ export default function DoctorManagerPage() {
     }
   };
 
+  const updateAllLocks = async (isLocked: boolean) => {
+    const confirmed = window.confirm(
+      isLocked
+        ? "\u5168\u3066\u306e\u533b\u5e2b\u306e\u500b\u5225\u5165\u529b\u3092\u7981\u6b62\u3057\u307e\u3059\u304b\uff1f"
+        : "\u5168\u3066\u306e\u533b\u5e2b\u306e\u500b\u5225\u5165\u529b\u3092\u8a31\u53ef\u3057\u307e\u3059\u304b\uff1f"
+    );
+    if (!confirmed) return;
+
+    const apiUrl = getApiBase();
+    setBulkLockAction(isLocked ? "lock" : "unlock");
+
+    try {
+      const response = await fetch(`${apiUrl}/api/doctors/bulk-lock`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_locked: isLocked }),
+      });
+
+      if (!response.ok) {
+        throw new Error("bulk lock update failed");
+      }
+
+      await fetchDoctors();
+    } catch (error) {
+      console.error(error);
+      alert(
+        isLocked
+          ? "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+          : "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u89e3\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+      );
+    } finally {
+      setBulkLockAction(null);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-md sm:p-6">
         <h1 className="mb-6 border-b pb-2 text-xl font-bold text-gray-800 md:text-2xl">{"\u533b\u5e2b\u30de\u30b9\u30bf\u7ba1\u7406"}</h1>
 
         <div className="mb-8 rounded-lg border border-blue-100 bg-blue-50 p-4">
-          <div className="mx-auto flex w-full max-w-md flex-col gap-3 sm:flex-row">
-            <input
-              type="text"
-              placeholder={"\u65b0\u3057\u3044\u533b\u5e2b\u540d\u3092\u5165\u529b"}
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              className="w-full rounded border border-gray-300 bg-white p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button
-              type="button"
-              onClick={handleAdd}
-              className="w-full whitespace-nowrap rounded bg-blue-600 px-4 py-3 font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:w-auto"
-            >
-              {"\u8ffd\u52a0"}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="mx-auto flex w-full max-w-md flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                placeholder={"\u65b0\u3057\u3044\u533b\u5e2b\u540d\u3092\u5165\u529b"}
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                className="w-full rounded border border-gray-300 bg-white p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleAdd}
+                className="w-full whitespace-nowrap rounded bg-blue-600 px-4 py-3 font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:w-auto"
+              >
+                {"\u8ffd\u52a0"}
+              </button>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <button
+                type="button"
+                onClick={() => {
+                  void updateAllLocks(true);
+                }}
+                disabled={isBulkLocking || activeDoctors.length === 0}
+                className="w-full whitespace-nowrap rounded border border-amber-200 bg-amber-100 px-4 py-3 font-bold text-amber-900 transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                {bulkLockAction === "lock" ? "\u66f4\u65b0\u4e2d..." : "\u5168\u54e1\u30ed\u30c3\u30af"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void updateAllLocks(false);
+                }}
+                disabled={isBulkLocking || activeDoctors.length === 0}
+                className="w-full whitespace-nowrap rounded border border-emerald-200 bg-emerald-100 px-4 py-3 font-bold text-emerald-800 transition-colors hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+              >
+                {bulkLockAction === "unlock" ? "\u66f4\u65b0\u4e2d..." : "\u5168\u54e1\u89e3\u9664"}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -240,8 +301,10 @@ export default function DoctorManagerPage() {
                 <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
                   <button
                     type="button"
-                    onClick={() => toggleLock(doctor)}
-                    disabled={isLocking}
+                    onClick={() => {
+                      void toggleLock(doctor);
+                    }}
+                    disabled={isLocking || isBulkLocking}
                     className={[
                       "w-full whitespace-nowrap rounded border px-4 py-2 font-bold transition-colors disabled:opacity-50 sm:w-auto",
                       locked
@@ -275,7 +338,9 @@ export default function DoctorManagerPage() {
                   {editingId === doctor.id ? (
                     <button
                       type="button"
-                      onClick={() => handleUpdate(doctor.id)}
+                      onClick={() => {
+                        void handleUpdate(doctor.id);
+                      }}
                       className="w-full whitespace-nowrap rounded bg-green-100 px-4 py-2 font-bold text-green-700 transition-colors hover:bg-green-200 sm:w-auto"
                     >
                       {"\u4fdd\u5b58"}
@@ -295,7 +360,9 @@ export default function DoctorManagerPage() {
 
                   <button
                     type="button"
-                    onClick={() => handleArchive(doctor.id)}
+                    onClick={() => {
+                      void handleArchive(doctor.id);
+                    }}
                     title={"\u30a2\u30fc\u30ab\u30a4\u30d6\uff08\u975e\u8868\u793a\uff09"}
                     className="w-full whitespace-nowrap rounded bg-red-100 px-4 py-2 font-bold text-red-700 transition-colors hover:bg-red-200 sm:w-auto"
                   >
@@ -346,7 +413,9 @@ export default function DoctorManagerPage() {
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                       <button
                         type="button"
-                        onClick={() => handleRestore(doctor)}
+                        onClick={() => {
+                          void handleRestore(doctor);
+                        }}
                         disabled={restoringId === doctor.id}
                         className="w-full rounded bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-800 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                       >
@@ -356,7 +425,6 @@ export default function DoctorManagerPage() {
                   </div>
                 ))
               )}
-
             </div>
           ) : null}
         </div>
@@ -364,6 +432,3 @@ export default function DoctorManagerPage() {
     </div>
   );
 }
-
-
-

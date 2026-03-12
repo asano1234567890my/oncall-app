@@ -10,7 +10,8 @@ from sqlalchemy.orm import selectinload
 from core.db import get_db
 from models.doctor import Doctor
 from models.unavailable_day import UnavailableDay
-from schemas.doctor import DoctorCreate, DoctorUpdate
+from schemas.doctor import DoctorBulkLockUpdate, DoctorCreate, DoctorUpdate
+from services.doctor_service import bulk_set_doctor_lock_state
 from services.unavailable_day_service import (
     FixedWeekdayEntry,
     UnavailableDateEntry,
@@ -61,6 +62,20 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
     ]
 
 
+
+@router.patch("/bulk-lock")
+async def bulk_lock_doctors(payload: DoctorBulkLockUpdate, db: AsyncSession = Depends(get_db)):
+    try:
+        updated_count = await bulk_set_doctor_lock_state(db, is_locked=payload.is_locked)
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {
+        "message": "医師の入力ロック状態を一括更新しました",
+        "updated_count": updated_count,
+        "is_locked": payload.is_locked,
+    }
 @router.get("/{doctor_id}")
 async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
     doctor_uuid = uuid.UUID(doctor_id)
