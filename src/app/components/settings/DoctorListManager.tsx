@@ -53,53 +53,53 @@ export default function DoctorListManager({
           <span className="rounded bg-orange-100 px-2 py-1 text-xs font-normal text-orange-600">個別 min / max / target</span>
         </h3>
 
-        <div className="overflow-x-auto rounded-lg border bg-white pb-1">
-          <table className="w-max min-w-full table-fixed text-center text-[12px]">
+        <div className="rounded-lg border bg-white pb-1 max-md:overflow-x-auto md:w-full">
+          <table className="w-max min-w-full table-fixed text-center text-[12px] md:w-full">
             <thead className="bg-gray-100 text-gray-600">
               <tr>
-                <th className="min-w-[120px] border-b px-3 py-2 text-left whitespace-nowrap">医師</th>
-                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">Min</th>
-                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">Max</th>
-                <th className="min-w-[128px] border-b px-3 py-2 whitespace-nowrap">目標</th>
+                <th className="border-b px-3 py-2 text-left whitespace-nowrap max-md:min-w-[120px] md:w-32">医師</th>
+                <th className="border-b px-2 py-2 whitespace-nowrap max-md:min-w-[132px] md:min-w-0">Min</th>
+                <th className="border-b px-2 py-2 whitespace-nowrap max-md:min-w-[132px] md:min-w-0">Max</th>
+                <th className="border-b px-2 py-2 whitespace-nowrap max-md:min-w-[132px] md:min-w-0">目標</th>
               </tr>
             </thead>
             <tbody>
               {activeDoctors.map((doctor) => (
                 <tr key={doctor.id} className="border-b hover:bg-gray-50">
-                  <td className="min-w-[120px] whitespace-nowrap px-3 py-2 text-left font-bold text-gray-700">{doctor.name}</td>
-                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
+                  <td className="whitespace-nowrap px-3 py-2 text-left font-bold text-gray-700 max-md:min-w-[120px] md:w-32">{doctor.name}</td>
+                  <td className="whitespace-nowrap px-2 py-2 max-md:min-w-[132px] md:min-w-0">
                     <StepperNumberInput
                       value={minScoreMap[doctor.id] ?? scoreMin}
                       onCommit={(value) => onMinScoreChange(doctor.id, value)}
                       fallbackValue={scoreMin}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center !min-w-[112px] whitespace-nowrap"
-                      inputClassName="!min-w-[2.75rem] px-1 py-1 text-[12px]"
+                      className="justify-center whitespace-nowrap max-md:!min-w-[100px] md:!min-w-0 md:w-full"
+                      inputClassName="min-w-[2rem] px-1 py-1 text-[12px]"
                       buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>
-                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
+                  <td className="whitespace-nowrap px-2 py-2 max-md:min-w-[132px] md:min-w-0">
                     <StepperNumberInput
                       value={maxScoreMap[doctor.id] ?? scoreMax}
                       onCommit={(value) => onMaxScoreChange(doctor.id, value)}
                       fallbackValue={scoreMax}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center !min-w-[112px] whitespace-nowrap"
-                      inputClassName="!min-w-[2.75rem] px-1 py-1 text-[12px]"
+                      className="justify-center whitespace-nowrap max-md:!min-w-[100px] md:!min-w-0 md:w-full"
+                      inputClassName="min-w-[2rem] px-1 py-1 text-[12px]"
                       buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>
-                  <td className="min-w-[128px] whitespace-nowrap px-3 py-2">
+                  <td className="whitespace-nowrap px-2 py-2 max-md:min-w-[132px] md:min-w-0">
                     <StepperNumberInput
                       value={targetScoreMap[doctor.id] ?? 0}
                       onCommit={(value) => onTargetScoreChange(doctor.id, value)}
                       fallbackValue={0}
                       step={0.5}
                       inputMode="decimal"
-                      className="justify-center !min-w-[112px] whitespace-nowrap"
-                      inputClassName="!min-w-[2.75rem] bg-blue-50 px-1 py-1 text-[12px]"
+                      className="justify-center whitespace-nowrap max-md:!min-w-[100px] md:!min-w-0 md:w-full"
+                      inputClassName="min-w-[2rem] bg-blue-50 px-1 py-1 text-[12px]"
                       buttonClassName="h-9 w-9 text-sm"
                     />
                   </td>

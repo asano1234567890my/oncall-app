@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 
@@ -103,7 +103,7 @@ export default function StepperNumberInput({
         disabled={disabled}
         placeholder={placeholder}
         className={[
-          "w-full min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
+          "w-full min-w-[2rem] flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-center text-sm font-semibold tabular-nums text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100",
           inputClassName,
         ]
           .filter(Boolean)
