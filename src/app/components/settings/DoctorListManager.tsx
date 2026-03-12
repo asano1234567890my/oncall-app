@@ -83,7 +83,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-12 text-[12px]"
+                      inputClassName="w-[3.4rem] text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
@@ -95,7 +95,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-12 text-[12px]"
+                      inputClassName="w-[3.4rem] text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
@@ -107,7 +107,7 @@ export default function DoctorListManager({
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
-                      inputClassName="w-12 bg-blue-50 text-[12px]"
+                      inputClassName="w-[3.4rem] bg-blue-50 text-[12px] md:w-12"
                       buttonClassName="h-8 w-8 text-sm"
                     />
                   </td>
