@@ -204,7 +204,7 @@ export default function ViewSchedulePage() {
   };
 
   return (
-    <div className="flex min-h-dvh max-h-dvh flex-col overflow-hidden bg-white text-slate-900">
+    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-white text-slate-900">
       <header className="shrink-0 border-b border-slate-300 px-2 py-2">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2">
           <div className="min-w-0">
@@ -248,7 +248,7 @@ export default function ViewSchedulePage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 min-h-0 flex-col px-2 py-2">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-2 py-2">
         {error ? (
           <div className="flex h-full items-center justify-center border border-red-300 px-3 text-center text-xs text-red-700">
             {error}
@@ -262,13 +262,13 @@ export default function ViewSchedulePage() {
             この月の当直表はまだ保存されていません。
           </div>
         ) : (
-          <div ref={tableRef} className="flex h-full min-h-0 flex-col border border-slate-300">
-            <div className="grid grid-cols-[1fr_auto] border-b border-slate-300 bg-slate-100 px-2 py-1 text-[10px] font-semibold tracking-wide text-slate-700 sm:text-xs">
+          <div ref={tableRef} className="flex min-h-0 flex-col border border-slate-300">
+            <div className="grid grid-cols-[1fr_auto] border-b border-slate-300 bg-slate-100 px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-700 sm:px-3 sm:py-1.5 sm:text-[13px]">
               <div>{year}年 {month}月</div>
               <div>{schedule.length}日分</div>
             </div>
 
-            <div className="grid flex-1 min-h-0 grid-cols-2">
+            <div className="grid grid-cols-2">
               {scheduleColumns.map((rows, columnIndex) => (
                 <div
                   key={columnIndex === 0 ? "left" : "right"}
@@ -287,7 +287,7 @@ export default function ViewSchedulePage() {
                     return (
                       <div
                         key={row.day}
-                        className={`grid h-full min-h-0 grid-cols-[2.5rem_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-slate-300 px-1 py-0.5 text-[10px] leading-none last:border-b-0 sm:grid-cols-[3rem_minmax(0,1fr)_minmax(0,1fr)] sm:px-1.5 sm:text-xs ${rowClass}`}
+                        className={`grid min-h-[2.2rem] h-full grid-cols-[3rem_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-slate-300 px-1.5 py-0.5 text-[11px] leading-tight last:border-b-0 sm:min-h-[3rem] sm:grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1fr)] sm:px-2 sm:py-1 sm:text-[13px] ${rowClass}`}
                       >
                         <div className={`flex items-center gap-0.5 font-semibold ${weekdayClass}`}>
                           <span className="tabular-nums">{row.day}</span>

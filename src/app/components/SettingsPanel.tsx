@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Loader2 } from "lucide-react";
 import { DayPicker } from "react-day-picker";
@@ -444,7 +444,7 @@ export function GenerationSettingsPanel({
           isLoading || numDoctors === 0 || isGenerateDisabled ? "cursor-not-allowed bg-gray-400" : "bg-blue-700 hover:bg-blue-800"
         }`}
       >
-        {isLoading ? "生成中..." : numDoctors === 0 ? "有効な医師がいません" : isGenerateDisabled ? "強制配置モード中は生成できません" : "未固定枠を自動生成"}
+        {isLoading ? "生成中..." : numDoctors === 0 ? "有効な医師がいません" : isGenerateDisabled ? "強制配置モード中は生成できません" : "上記設定で当直表を自動生成"}
       </button>
     </div>
   );
