@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "react-hot-toast";
 
 type Doctor = {
   id: string;
@@ -10,7 +11,43 @@ type Doctor = {
   is_active?: boolean;
 };
 
+type ApiResponseMessage = {
+  message?: string;
+  detail?: string;
+};
+
 const getApiBase = () => process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+const readResponseMessage = async (response: Response, fallback: string) => {
+  const text = await response.text();
+  if (!text) return fallback;
+
+  try {
+    const payload = JSON.parse(text) as ApiResponseMessage;
+    if (typeof payload.detail === "string" && payload.detail.trim()) return payload.detail;
+    if (typeof payload.message === "string" && payload.message.trim()) return payload.message;
+  } catch {
+    // ignore non-JSON responses
+  }
+
+  return fallback;
+};
+
+const copyText = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+};
 
 export default function DoctorManagerPage() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -31,15 +68,21 @@ export default function DoctorManagerPage() {
     const apiUrl = getApiBase();
     const response = await fetch(`${apiUrl}/api/doctors`);
     if (!response.ok) {
-      throw new Error("Failed to fetch doctors");
+      throw new Error(await readResponseMessage(response, "Failed to fetch doctors"));
     }
     setDoctors(await response.json());
   };
 
+  const applyActiveDoctorLockState = (isLocked: boolean) => {
+    setDoctors((previous) =>
+      previous.map((doctor) => (doctor.is_active === false ? doctor : { ...doctor, is_locked: isLocked }))
+    );
+  };
+
   useEffect(() => {
-    fetchDoctors().catch((error) => {
+    void fetchDoctors().catch((error) => {
       console.error(error);
-      alert("\u533b\u5e2b\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+      toast.error("\u533b\u5e2b\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
     });
   }, []);
 
@@ -48,11 +91,16 @@ export default function DoctorManagerPage() {
     if (!trimmedName) return;
 
     const apiUrl = getApiBase();
-    await fetch(`${apiUrl}/api/doctors`, {
+    const response = await fetch(`${apiUrl}/api/doctors`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: trimmedName }),
     });
+
+    if (!response.ok) {
+      toast.error(await readResponseMessage(response, "\u533b\u5e2b\u306e\u8ffd\u52a0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
+      return;
+    }
 
     setNewName("");
     await fetchDoctors();
@@ -63,11 +111,16 @@ export default function DoctorManagerPage() {
     if (!trimmedName) return;
 
     const apiUrl = getApiBase();
-    await fetch(`${apiUrl}/api/doctors/${doctorId}`, {
+    const response = await fetch(`${apiUrl}/api/doctors/${doctorId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: trimmedName }),
     });
+
+    if (!response.ok) {
+      toast.error(await readResponseMessage(response, "\u533b\u5e2b\u540d\u306e\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
+      return;
+    }
 
     setEditingId(null);
     setEditName("");
@@ -78,7 +131,12 @@ export default function DoctorManagerPage() {
     if (!window.confirm("\u3053\u306e\u533b\u5e2b\u3092\u30a2\u30fc\u30ab\u30a4\u30d6\u3057\u3066\u4e00\u89a7\u304b\u3089\u975e\u8868\u793a\u306b\u3057\u307e\u3059\u304b\uff1f")) return;
 
     const apiUrl = getApiBase();
-    await fetch(`${apiUrl}/api/doctors/${doctorId}`, { method: "DELETE" });
+    const response = await fetch(`${apiUrl}/api/doctors/${doctorId}`, { method: "DELETE" });
+    if (!response.ok) {
+      toast.error(await readResponseMessage(response, "\u30a2\u30fc\u30ab\u30a4\u30d6\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
+      return;
+    }
+
     await fetchDoctors();
   };
 
@@ -94,13 +152,13 @@ export default function DoctorManagerPage() {
       });
 
       if (!response.ok) {
-        throw new Error("restore failed");
+        throw new Error(await readResponseMessage(response, "\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
       }
 
       await fetchDoctors();
     } catch (error) {
       console.error(error);
-      alert("\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+      toast.error(error instanceof Error ? error.message : "\u5fa9\u5143\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
     } finally {
       setRestoringId(null);
     }
@@ -109,29 +167,15 @@ export default function DoctorManagerPage() {
   const copyEntryUrl = async (doctor: Doctor) => {
     if (!doctor.access_token) return;
 
-    const entryUrl = `${window.location.origin}/entry/${doctor.access_token}`;
-
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(entryUrl);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = entryUrl;
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
-
+      await copyText(`${window.location.origin}/entry/${doctor.access_token}`);
       setCopiedId(doctor.id);
       window.setTimeout(() => {
         setCopiedId((previous) => (previous === doctor.id ? null : previous));
       }, 1500);
     } catch (error) {
       console.error(error);
-      alert("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u30d6\u30e9\u30a6\u30b6\u8a2d\u5b9a\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+      toast.error("\u30b3\u30d4\u30fc\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u30d6\u30e9\u30a6\u30b6\u8a2d\u5b9a\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
     }
   };
 
@@ -147,13 +191,13 @@ export default function DoctorManagerPage() {
       });
 
       if (!response.ok) {
-        throw new Error("lock update failed");
+        throw new Error(await readResponseMessage(response, "\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
       }
 
       await fetchDoctors();
     } catch (error) {
       console.error(error);
-      alert("\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
+      toast.error(error instanceof Error ? error.message : "\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f");
     } finally {
       setLockingId(null);
     }
@@ -168,6 +212,7 @@ export default function DoctorManagerPage() {
     if (!confirmed) return;
 
     const apiUrl = getApiBase();
+    const actionLabel = isLocked ? "\u30ed\u30c3\u30af" : "\u30ed\u30c3\u30af\u89e3\u9664";
     setBulkLockAction(isLocked ? "lock" : "unlock");
 
     try {
@@ -178,16 +223,44 @@ export default function DoctorManagerPage() {
       });
 
       if (!response.ok) {
-        throw new Error("bulk lock update failed");
+        if (response.status === 404 || response.status === 405) {
+          await Promise.all(
+            activeDoctors.map(async (doctor) => {
+              const fallbackResponse = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ is_locked: isLocked }),
+              });
+
+              if (!fallbackResponse.ok) {
+                throw new Error(
+                  await readResponseMessage(fallbackResponse, `\u5168\u533b\u5e2b\u306e${actionLabel}\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f`)
+                );
+              }
+            })
+          );
+        } else {
+          throw new Error(await readResponseMessage(response, `\u5168\u533b\u5e2b\u306e${actionLabel}\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f`));
+        }
       }
 
-      await fetchDoctors();
+      applyActiveDoctorLockState(isLocked);
+      await fetchDoctors().catch((error) => {
+        console.error(error);
+      });
+      toast.success(
+        isLocked
+          ? "\u5168\u533b\u5e2b\u3092\u30ed\u30c3\u30af\u3057\u307e\u3057\u305f"
+          : "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u3092\u89e3\u9664\u3057\u307e\u3057\u305f"
+      );
     } catch (error) {
       console.error(error);
-      alert(
-        isLocked
-          ? "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
-          : "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u89e3\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : isLocked
+            ? "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u66f4\u65b0\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
+            : "\u5168\u533b\u5e2b\u306e\u30ed\u30c3\u30af\u89e3\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f"
       );
     } finally {
       setBulkLockAction(null);
@@ -211,7 +284,9 @@ export default function DoctorManagerPage() {
               />
               <button
                 type="button"
-                onClick={handleAdd}
+                onClick={() => {
+                  void handleAdd();
+                }}
                 className="w-full whitespace-nowrap rounded bg-blue-600 px-4 py-3 font-bold text-white shadow-sm transition-colors hover:bg-blue-700 sm:w-auto"
               >
                 {"\u8ffd\u52a0"}
@@ -226,7 +301,7 @@ export default function DoctorManagerPage() {
                 disabled={isBulkLocking || activeDoctors.length === 0}
                 className="w-full whitespace-nowrap rounded border border-amber-200 bg-amber-100 px-4 py-3 font-bold text-amber-900 transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
-                {bulkLockAction === "lock" ? "\u66f4\u65b0\u4e2d..." : "\u5168\u54e1\u30ed\u30c3\u30af"}
+                {bulkLockAction === "lock" ? "\u30ed\u30c3\u30af\u4e2d..." : "\u5168\u54e1\u30ed\u30c3\u30af"}
               </button>
               <button
                 type="button"
@@ -236,7 +311,7 @@ export default function DoctorManagerPage() {
                 disabled={isBulkLocking || activeDoctors.length === 0}
                 className="w-full whitespace-nowrap rounded border border-emerald-200 bg-emerald-100 px-4 py-3 font-bold text-emerald-800 transition-colors hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
               >
-                {bulkLockAction === "unlock" ? "\u66f4\u65b0\u4e2d..." : "\u5168\u54e1\u89e3\u9664"}
+                {bulkLockAction === "unlock" ? "\u89e3\u9664\u4e2d..." : "\u5168\u54e1\u89e3\u9664"}
               </button>
             </div>
           </div>
@@ -312,16 +387,14 @@ export default function DoctorManagerPage() {
                         : "border-gray-200 bg-gray-100 text-gray-800 hover:bg-gray-200",
                     ].join(" ")}
                   >
-                    {isLocking
-                      ? "\u66f4\u65b0\u4e2d..."
-                      : locked
-                        ? "\u30ed\u30c3\u30af\u89e3\u9664"
-                        : "\u30ed\u30c3\u30af\u3059\u308b"}
+                    {isLocking ? "\u66f4\u65b0\u4e2d..." : locked ? "\u30ed\u30c3\u30af\u89e3\u9664" : "\u30ed\u30c3\u30af\u3059\u308b"}
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => copyEntryUrl(doctor)}
+                    onClick={() => {
+                      void copyEntryUrl(doctor);
+                    }}
                     disabled={!doctor.access_token}
                     className={[
                       "w-full whitespace-nowrap rounded border px-4 py-2 font-bold transition-colors sm:w-auto",
@@ -406,9 +479,7 @@ export default function DoctorManagerPage() {
                           {"\u30a2\u30fc\u30ab\u30a4\u30d6\u6e08\u307f"}
                         </span>
                       </div>
-                      {doctor.access_token ? (
-                        <div className="mt-1 truncate text-[11px] text-gray-400">/entry/{doctor.access_token}</div>
-                      ) : null}
+                      {doctor.access_token ? <div className="mt-1 truncate text-[11px] text-gray-400">/entry/{doctor.access_token}</div> : null}
                     </div>
                     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                       <button

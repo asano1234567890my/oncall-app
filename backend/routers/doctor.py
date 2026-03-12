@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -64,15 +65,30 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
 
 
 @router.patch("/bulk-lock")
-async def bulk_lock_doctors(payload: DoctorBulkLockUpdate, db: AsyncSession = Depends(get_db)):
+@router.post("/bulk-lock")
+async def bulk_lock_doctors(
+    payload: DoctorBulkLockUpdate, db: AsyncSession = Depends(get_db)
+):
     try:
         updated_count = await bulk_set_doctor_lock_state(db, is_locked=payload.is_locked)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update doctor lock state",
+        ) from exc
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500,
+            detail="Unexpected error while updating doctor lock state",
+        ) from exc
 
     return {
-        "message": "医師の入力ロック状態を一括更新しました",
+        "message": "\u533b\u5e2b\u306e\u4e00\u62ec\u30ed\u30c3\u30af\u72b6\u614b\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f",
         "updated_count": updated_count,
         "is_locked": payload.is_locked,
     }

@@ -12,5 +12,9 @@ async def bulk_set_doctor_lock_state(db: AsyncSession, *, is_locked: bool) -> in
         .where(Doctor.is_active.is_(True))
         .values(is_locked=is_locked)
     )
+    updated_count = result.rowcount or 0
+    if updated_count <= 0:
+        raise ValueError("No active doctors found to update")
+
     await db.commit()
-    return result.rowcount or 0
+    return updated_count
