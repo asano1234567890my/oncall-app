@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1開発中 — Task1完了・Task2着手待ち**
+**V1.1開発中 — Task2完了・Task2.5（optimizer config保存）完了・Task3着手待ち**
 
 ---
 
@@ -33,15 +33,31 @@
 
 ---
 
-### 【次】Task2：警告UXの強化
+### 【完了】Task2：警告UXの強化
 
 **目的：** 意図しないデータ破壊・設定の取りこぼしを防ぐ。
 
 | # | 内容 | スコープ | 状態 |
 |---|------|---------|------|
-| 2-1 | シフト保存時に「登録済みシフトを上書きします」確認ポップアップを表示 | `src/app/hooks/useScheduleApi.ts` | 未着手 |
-| 2-2 | シフト保存時に「スコア計算に影響が出る」旨の警告を表示 | `src/app/hooks/useScheduleApi.ts` | 未着手 |
-| 2-3 | 医師の個別不可日・固定不可曜日を変更したのに未登録のままページ離脱しようとした際に「〇〇先生の個別不可日設定が未登録です。移動してよいですか？」を表示 | `src/app/page.tsx`, `src/app/hooks/useDashboardState.ts` | 未着手 |
+| 2-1 | シフト保存時に「登録済みシフトを上書きします」確認ポップアップを表示 | `src/app/hooks/useScheduleApi.ts` | ✅ 完了 |
+| 2-2 | シフト保存時に「スコア計算に影響が出る」旨の警告を表示 | `src/app/hooks/useScheduleApi.ts` | ✅ 完了 |
+| 2-3 | 医師の個別不可日・固定不可曜日を変更したのに未登録のままページ離脱しようとした際に警告を表示 | `src/app/page.tsx` | ✅ 完了 |
+| 2-4 | 空シフト（未定）のまま保存しようとした際に警告を表示（日直は日曜・祝日のみ対象） | `src/app/hooks/useScheduleDnd.ts` | ✅ 完了 |
+| 2-5 | `GET /api/schedule/{year}/{month}` が全日を返すよう修正（空スロットも `null` で返却） | `backend/routers/schedule.py` | ✅ 完了 |
+
+---
+
+### 【完了】Task2.5：optimizer config（スコア・重み・ハード設定）のDB永続化
+
+**目的：** スコア範囲・重みづけ・ハード制約をDBに保存し、リロード後も設定が復元されるようにする。
+
+| # | 内容 | スコープ | 状態 |
+|---|------|---------|------|
+| 2.5-1 | `system_settings` テーブルに `optimizer_config` キーで保存する backend 実装 | `backend/schemas/settings.py`, `backend/services/settings_service.py`, `backend/routers/settings.py` | ✅ 完了 |
+| 2.5-2 | `useOptimizerConfig` フックを新設（マウント時にロード・PUT保存） | `src/app/hooks/useOptimizerConfig.ts` | ✅ 完了 |
+| 2.5-3 | score_min/max エリアに「スコア・重み・ルールを保存」ボタンを追加 | `src/app/components/SettingsPanel.tsx` | ✅ 完了 |
+| 2.5-4 | WeightsConfig・RulesConfig ヘッダーに「保存」ボタンを追加 | `src/app/components/settings/WeightsConfig.tsx`, `RulesConfig.tsx` | ✅ 完了 |
+| 2.5-5 | `DoctorListManager` の説明文に重み・ルール設定の案内を追記 | `src/app/components/settings/DoctorListManager.tsx` | ✅ 完了 |
 
 ---
 
@@ -113,6 +129,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-17 | Task2.5完了（optimizer config DB永続化・スコア/重み/ルール保存ボタン追加） |
+| 2026-03-17 | Task2完了（保存時警告・離脱警告・空シフト警告・全日返却） |
 | 2026-03-17 | Task1完了（doctor_id統一・DELETE API・localStorage撤去） |
 | 2026-03-17 | Step0完了（ローカルDB・ブランチ・両PC同期） |
 | 2026-03-17 | ロードマップ・開発体制・ファイル管理ルール整備完了 |

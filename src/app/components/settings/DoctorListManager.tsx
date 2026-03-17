@@ -45,7 +45,7 @@ export default function DoctorListManager({
           {isBulkSavingDoctors ? "保存中..." : "全員の設定を保存"}
         </button>
         <div className="mt-2 text-[11px] text-gray-500">
-          各医師の Min / Max / 目標値に加えて、医師別不可日設定と個別不可曜日の設定もまとめて保存できます。
+          各医師の Min / Max / 目標値に加えて、医師別不可日設定と個別不可曜日の設定もまとめて保存できます。重み・ルール設定は上記の「スコア・重み・ルールを保存」ボタンをご使用ください。
         </div>
       </div>
 

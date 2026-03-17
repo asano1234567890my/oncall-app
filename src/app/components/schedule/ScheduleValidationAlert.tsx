@@ -11,7 +11,7 @@ export default function ScheduleValidationAlert({ messages, onDismiss, onForceSa
 
   return (
     <div className="w-full rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-800">
-      <div className="font-bold">制約違反があります。修正してください。</div>
+      <div className="font-bold">保存前に確認が必要な項目があります。</div>
       <div className="mt-1 space-y-1">
         {messages.slice(0, 3).map((message, index) => (
           <div key={String(index) + message} className="whitespace-pre-line leading-snug">

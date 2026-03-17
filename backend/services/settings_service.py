@@ -44,6 +44,37 @@ async def get_custom_holidays(db: AsyncSession, year: int) -> Dict[str, Any]:
     return value
 
 
+OPTIMIZER_CONFIG_KEY = "optimizer_config"
+
+
+def _default_optimizer_config() -> Dict[str, Any]:
+    return {"score_min": 0.5, "score_max": 4.5, "objective_weights": {}, "hard_constraints": {}}
+
+
+async def get_optimizer_config(db: AsyncSession) -> Dict[str, Any]:
+    stmt = select(SystemSetting).where(SystemSetting.key == OPTIMIZER_CONFIG_KEY)
+    res = await db.execute(stmt)
+    row: Optional[SystemSetting] = res.scalar_one_or_none()
+    if row is None or row.value is None:
+        return _default_optimizer_config()
+    result = _default_optimizer_config()
+    result.update(dict(row.value))
+    return result
+
+
+async def upsert_optimizer_config(db: AsyncSession, value: Dict[str, Any]) -> None:
+    stmt = insert(SystemSetting).values(
+        key=OPTIMIZER_CONFIG_KEY,
+        value=value,
+        description="Optimizer configuration (score ranges, weights, hard constraints)",
+    ).on_conflict_do_update(
+        index_elements=[SystemSetting.key],
+        set_={"value": value, "description": "Optimizer configuration (score ranges, weights, hard constraints)"},
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
 async def upsert_custom_holidays(db: AsyncSession, year: int, value: Dict[str, Any]) -> None:
     key = _key_for_year(year)
 

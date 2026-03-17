@@ -8,8 +8,14 @@ from schemas.settings import (
     CustomHolidaysResponse,
     CustomHolidaysUpsertRequest,
     CustomHolidaysValue,
+    OptimizerConfigRequest,
 )
-from services.settings_service import get_custom_holidays, upsert_custom_holidays
+from services.settings_service import (
+    get_custom_holidays,
+    get_optimizer_config,
+    upsert_custom_holidays,
+    upsert_optimizer_config,
+)
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
 
@@ -55,3 +61,23 @@ async def api_upsert_custom_holidays(
         "key": f"custom_holidays_{req.year}",
         "value": CustomHolidaysValue(**saved),
     }
+
+
+@router.get("/optimizer_config")
+async def api_get_optimizer_config(db: AsyncSession = Depends(get_db)):
+    return await get_optimizer_config(db)
+
+
+@router.put("/optimizer_config")
+async def api_upsert_optimizer_config(
+    req: OptimizerConfigRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    value = {
+        "score_min": req.score_min,
+        "score_max": req.score_max,
+        "objective_weights": req.objective_weights,
+        "hard_constraints": req.hard_constraints,
+    }
+    await upsert_optimizer_config(db, value)
+    return await get_optimizer_config(db)
