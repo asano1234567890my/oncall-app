@@ -1,0 +1,146 @@
+# CLAUDE.md — oncall-app プロジェクト概要
+
+> **作業開始時に必ず `CURRENT_STATE.md` を読むこと。**
+
+## プロジェクト概要
+
+病院の**当直・日直スケジュールを自動生成する**フルスタックWebアプリ。
+
+- フロントエンドで医師・制約・重みを設定し、バックエンドのCP-SAT最適化ソルバーでスケジュールを生成する
+- 医師ごとにマジックリンク（access_token）経由で個別に不可日を入力できる
+- 生成されたスケジュールはドラッグ&ドロップで手動調整でき、DB保存可能
+
+---
+
+## 技術スタック
+
+| レイヤー | 技術 |
+|---------|------|
+| フロントエンド | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4 |
+| バックエンド | Python / FastAPI（非同期） |
+| DB | PostgreSQL（Neon クラウド）/ SQLAlchemy / asyncpg |
+| 最適化 | Google OR-Tools CP-SAT |
+| マイグレーション | Alembic |
+| 祝日 | jpholiday（日本の祝日） |
+
+---
+
+## 起動方法
+
+### フロントエンド
+```bash
+npm run dev          # http://localhost:3000
+```
+
+### バックエンド
+```bash
+cd backend
+uvicorn main:app --reload   # http://localhost:8000
+# APIドキュメント: http://localhost:8000/docs
+```
+
+---
+
+## スコア設定
+
+| シフト種別 | スコア |
+|---------|------|
+| 日直（日曜・祝日の午前） | 0.5 |
+| 当直（平日・日曜・祝日の夜間） | 1.0 |
+| 当直（土曜夜間） | 1.5 |
+
+---
+
+## 主要ファイル
+
+### フロントエンド
+| ファイル | 役割 |
+|---------|------|
+| `src/app/page.tsx` | メインダッシュボード |
+| `src/app/components/ScheduleBoard.tsx` | スケジュール表示・ドラッグ編集 |
+| `src/app/components/SettingsPanel.tsx` | 設定パネル（制約・重み・休日） |
+| `src/app/hooks/useDashboardState.ts` | 全体状態管理 |
+| `src/app/hooks/useScheduleApi.ts` | API通信 |
+| `src/app/hooks/useScheduleDnd.ts` | ドラッグ&ドロップ |
+| `src/app/types/dashboard.ts` | 型定義 |
+
+### バックエンド
+| ファイル | 役割 |
+|---------|------|
+| `backend/main.py` | FastAPIエントリーポイント |
+| `backend/services/optimizer.py` | **最適化の中核**（OnCallOptimizerクラス） |
+| `backend/services/optimizer_history.py` | 過去シフト履歴のスコア計算 |
+| `backend/routers/optimize.py` | POST /api/optimize/ |
+| `backend/routers/doctor.py` | 医師管理API |
+| `backend/routers/public_doctor.py` | マジックリンクAPI |
+| `backend/core/db.py` | DB接続 |
+
+---
+
+## 詳細ドキュメント
+
+| ファイル | 内容 |
+|---------|------|
+| `docs/frontend.md` | フロントエンドの詳細（ページ・コンポーネント・フック） |
+| `docs/backend.md` | バックエンドの詳細（API・モデル・スキーマ・サービス） |
+| `docs/optimizer.md` | 最適化ロジックの詳細（制約・重み・スコア） |
+| `docs/database.md` | DBテーブル設計・マイグレーション履歴 |
+| `docs/development.md` | 開発環境セットアップ・よく使うコマンド |
+
+---
+
+## 開発ルール
+
+### 実装前に必ずdocsを更新する
+
+変更に着手する前に、影響を受けるdocsファイルを先に更新すること。
+
+**更新対象の判断基準：**
+
+| 変更内容 | 更新するdocsファイル |
+|---------|------|
+| API追加・変更 | `docs/backend.md` |
+| DBスキーマ変更 | `docs/database.md` |
+| 最適化ロジック変更 | `docs/optimizer.md` |
+| フロントエンド構造変更 | `docs/frontend.md` |
+
+**順序：**
+1. 影響範囲を特定し、該当docsを更新
+2. バックエンド（DB → API → 最適化）を実装
+3. フロントエンドを追従実装（APIの振る舞いが確定してから）
+
+---
+
+### ファイルスコープ（触ってよい範囲）
+
+タスクに応じて、以下のスコープ内のファイルのみを変更する。スコープ外への波及が必要な場合は、先に確認する。
+
+| 担当領域 | スコープ（変更してよいファイル） |
+|---------|------|
+| フロント基盤 | `src/app/page.tsx`, `src/app/hooks/*`, `src/app/types/*` |
+| フロントUI | `src/app/components/*`, `src/app/entry/*`, `src/app/admin/*` |
+| バックエンドDB | `backend/models/*`, `backend/core/*`, `alembic/*` |
+| バックエンドAPI | `backend/routers/*`, `backend/schemas/*`, `backend/services/settings_service.py` |
+| 最適化コア | `backend/services/optimizer.py` |
+| 最適化I/O | `backend/schemas/optimize.py`, `backend/routers/optimize.py`, `backend/services/optimizer_history.py` |
+| テスト | `tests/*` |
+
+---
+
+## 作業完了時の手順（毎回必ずユーザーに伝えること）
+
+作業が完了したら、以下をユーザーに案内する：
+
+1. `CURRENT_STATE.md`（このプロジェクト内）を更新した
+2. **`C:\Users\user\CURRENT_STATE.md`（親ファイル）も必要に応じて更新する**
+3. **更新した親ファイルを Claude.ai Project に再アップロードする**
+
+---
+
+## 注意事項
+
+- `.env` はgitignore済み。`DATABASE_URL` を手動で設定すること
+- バックエンドとフロントエンドは**別プロセスで起動**する必要がある
+- マイグレーションはルートの `alembic.ini` から実行する（`backend/` ではなく `oncall-app/` で）
+- `is_locked=True` の医師は不可日の自己入力ができなくなる（締切後のロック）
+- ロック済みシフト（フロントエンドで固定）は最適化で変更されない
