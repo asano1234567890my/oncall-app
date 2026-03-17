@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1開発中 — Task2完了・Task2.5（optimizer config保存）完了・Task3着手待ち**
+**V1.1開発中 — Task2/2.5/2.6フロント完了・Task2.6-5（backend）またはTask3へ**
 
 ---
 
@@ -58,6 +58,36 @@
 | 2.5-3 | score_min/max エリアに「スコア・重み・ルールを保存」ボタンを追加 | `src/app/components/SettingsPanel.tsx` | ✅ 完了 |
 | 2.5-4 | WeightsConfig・RulesConfig ヘッダーに「保存」ボタンを追加 | `src/app/components/settings/WeightsConfig.tsx`, `RulesConfig.tsx` | ✅ 完了 |
 | 2.5-5 | `DoctorListManager` の説明文に重み・ルール設定の案内を追記 | `src/app/components/settings/DoctorListManager.tsx` | ✅ 完了 |
+
+---
+
+### 【その次】Task2.6：巨大ファイルの分割リファクタリング
+
+**目的：** 1ファイルに責務が集中しすぎているファイルを分割し、Task3以降の実装を安全に進める土台を作る。
+**方針：** 動作を変えない。型・インターフェースは変えない。分割後にTypeScript 0エラー・動作確認で完了。
+
+---
+
+#### フロントエンド分割
+
+| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
+|---|------|---------|---------|------|
+| 2.6-1 | `useScheduleDnd.ts`（1380行） | 制約チェックロジック一式（`getPlacementConstraintMessage` / `validateScheduleViolations` / `isDoctorBlocked*` 等）を **`useScheduleConstraints.ts`** として分離 | ▲369行（1380→1011） | ✅ 完了 |
+| 2.6-2 | `useScheduleDnd.ts` | スケジュールミューテーション分離 — 2.6-1の方針で吸収済み | — | ✅ 完了（統合） |
+| 2.6-3 | `page.tsx`（804行） | ナビゲーションガードロジック（`confirmNavigationAway` useEffect + stale closure ref群 + `getScheduleSignature`）を **`useNavigationGuard.ts`** として分離 | ▲83行（804→721） | ✅ 完了 |
+| 2.6-4 | `useScheduleApi.ts`（590行） | 医師設定系（`fetchDoctors` / `saveAllDoctorsSettings` / `applyUnavailableDaysFromDoctors` / `applyScoresFromDoctors` / committed refs）を **`useDoctorSettings.ts`** として分離 | ▲178行（590→412） | ✅ 完了 |
+
+> ⚠️ 2.6-1・2.6-2は `useScheduleDnd` の内部state（`hardConstraints` / `schedule` 等）を参照するため、引数として渡す設計にすること
+
+---
+
+#### バックエンド分割
+
+| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
+|---|------|---------|---------|------|
+| 2.6-5 | `optimizer.py`（866行） | `build_model()` 内の制約追加メソッド群（spacing / weekend / score / unavailable 系）を **`optimizer_constraints.py`** に `OnCallOptimizerConstraints` mixin として分離 | ▲約400行 | 未着手 |
+
+> ⚠️ 2.6-5は `self.model` / `self.shifts` 等を参照するため mixin パターンを使うこと。リスク高めなので最後に実施する。
 
 ---
 
@@ -129,6 +159,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-17 | Task2.6フロント完了（2.6-1〜4: useScheduleConstraints / useNavigationGuard / useDoctorSettings の分離） |
+| 2026-03-17 | Task2.6を新設（巨大ファイル分割リファクタリング・Task3前に実施予定） |
 | 2026-03-17 | Task2.5完了（optimizer config DB永続化・スコア/重み/ルール保存ボタン追加） |
 | 2026-03-17 | Task2完了（保存時警告・離脱警告・空シフト警告・全日返却） |
 | 2026-03-17 | Task1完了（doctor_id統一・DELETE API・localStorage撤去） |
