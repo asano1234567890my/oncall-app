@@ -16,11 +16,22 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 
 ## テーブル一覧
 
+### `hospitals`（病院マスタ）
+
+| カラム | 型 | 説明 |
+|-------|-----|------|
+| `id` | UUID (PK) | 病院ID |
+| `name` | String (unique) | 病院名 |
+| `password_hash` | String | bcryptハッシュ |
+
+---
+
 ### `doctors`（医師マスタ）
 
 | カラム | 型 | 説明 |
 |-------|-----|------|
 | `id` | UUID (PK) | 医師ID |
+| `hospital_id` | UUID (FK → hospitals) | 所属病院 |
 | `name` | String | 医師名 |
 | `experience_years` | Integer | 経験年数 |
 | `is_active` | Boolean | 有効フラグ |
@@ -72,10 +83,12 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 | カラム | 型 | 説明 |
 |-------|-----|------|
 | `id` | UUID (PK) | 設定ID |
-| `key` | String (unique) | 設定キー |
+| `hospital_id` | UUID (FK → hospitals) | 所属病院 |
+| `key` | String | 設定キー |
 | `value` | JSONB | 設定値（任意のJSON） |
 
-カスタム祝日などの汎用設定を格納するKVSとして機能。
+- unique制約: `(hospital_id, key)` — `uq_system_settings_hospital_key`
+- カスタム祝日・optimizer_config などを格納するKVSとして機能
 
 ---
 
@@ -92,9 +105,11 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 ## リレーション
 
 ```
-doctors
-  ├── shift_assignments (cascade delete)
-  └── unavailable_days  (cascade delete)
+hospitals
+  ├── doctors (cascade delete)
+  │     ├── shift_assignments (cascade delete)
+  │     └── unavailable_days  (cascade delete)
+  └── system_settings (cascade delete)
 ```
 
 ---
@@ -112,6 +127,7 @@ doctors
 | `3addaa9af519` | shift_assignmentsにON DELETE CASCADE追加 |
 | `c3cddc2718ad` | unavailable_daysにshift_target関連カラム追加 |
 | `9d91c9b3e2f7` | unavailable_daysのshift_targetカラム確認・修正 |
+| `a1b2c3d4e5f6` | hospitalsテーブル追加・doctors/system_settingsにhospital_id FK追加・Ebina Hospitalシード |
 
 ---
 
