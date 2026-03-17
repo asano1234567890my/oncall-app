@@ -7,34 +7,29 @@
 
 ## 現在のフェーズ
 
-**Ver 1.0 完成・V1.1開発準備中**
-まず環境分離（Step0）を行い、安全な開発環境を確保してから実装に入る。
+**V1.1開発中 — Task1完了・Task2着手待ち**
 
 ---
 
 ## ロードマップ（優先順）
 
-### 【最初】Step0：環境分離（インフラ）← NEW
+### 【完了】Step0：環境分離（インフラ）
 
 | # | 内容 | 状態 |
 |---|------|------|
-| 0-1 | Neonのブランチ機能で「開発用DB」を作成 | 未着手 |
-| 0-2 | `feature/v1.1` ブランチを切る | 未着手 |
+| 0-1 | ローカルPostgreSQL18 + `oncall_dev` DB作成（両PC） | ✅ 完了 |
+| 0-2 | `feature/v1.1` ブランチを切る | ✅ 完了 |
 
 ---
 
-### 【最優先】Task1：リファクタリングPhase1（契約の安定化）
+### 【完了】Task1：リファクタリングPhase1（契約の安定化）
 
-**目的：** APIの契約不一致・localStorageによる状態ズレを解消する。SaaS化の前提。
-
-| # | 内容 | スコープ | 状態 |
-|---|------|---------|------|
-| 1-1 | `GET /api/schedule/{year}/{month}` レスポンスを `doctor_name` → `doctor_id` に統一 | `backend/routers/schedule.py` + FE同時変更 | 未着手 |
-| 1-2 | `DELETE /api/schedule/{year}/{month}` エンドポイントを新設 | `backend/routers/schedule.py` | 未着手 |
-| 1-3 | `page.tsx` の localStorage（祝日・休日設定）を撤去してDB管理に一本化 | `src/app/page.tsx` | 未着手 |
-| 1-4 | スケジュール「月削除」をlocalクリア → DELETE API呼び出しに変更 | `src/app/page.tsx` | 未着手 |
-
-> ⚠️ 1-1はBE+FEセットで実装すること（フロントが壊れるため）
+| # | 内容 | 状態 |
+|---|------|------|
+| 1-1 | `GET /api/schedule/{year}/{month}` レスポンスを `doctor_id` に統一 | ✅ 完了 |
+| 1-2 | `DELETE /api/schedule/{year}/{month}` エンドポイントを新設 | ✅ 完了 |
+| 1-3 | `page.tsx` の localStorage（祝日・休日設定）を撤去 | ✅ 完了 |
+| 1-4 | スケジュール「月削除」を DELETE API呼び出しに変更 | ✅ 完了 |
 
 ---
 
@@ -48,7 +43,7 @@
 
 ---
 
-### 【その次】Task3（旧Step4）：AI診断機能（制約競合の可視化） ← NEW
+### 【その次】Task3：AI診断機能（制約競合の可視化）
 
 **目的：** 「解なし」エラーを「A先生とB先生の希望がぶつかっています」という具体的なアドバイスに変える。
 
@@ -72,7 +67,7 @@
 
 | タスク | 内容 | 状態 |
 |--------|------|------|
-| タスクA | 自院でのV1.1実戦投入・実績獲得 | Task1完了後に開始 |
+| タスクA | 自院でのV1.1実戦投入・実績獲得 | Task2完了後に開始 |
 | タスクB | 他院へのヒアリング（V2要件定義） | タスクA完了後 |
 
 ---
@@ -89,8 +84,9 @@
 
 | 日付 | 内容 |
 |------|------|
-| 2026-03-17 | Step0（環境分離）・Task3（AI診断）を追加 |
-| 2026-03-17 | ロードマップをCURRENT_STATEに反映。開発体制・ファイル管理ルール整備完了 |
+| 2026-03-17 | Task1完了（doctor_id統一・DELETE API・localStorage撤去） |
+| 2026-03-17 | Step0完了（ローカルDB・ブランチ・両PC同期） |
+| 2026-03-17 | ロードマップ・開発体制・ファイル管理ルール整備完了 |
 
 ---
 
@@ -98,5 +94,6 @@
 
 - フロント: `npm run dev` → `http://localhost:3000`
 - バックエンド: `cd backend && uvicorn main:app --reload` → `http://localhost:8000`
-- DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
-- マイグレーション: リポジトリルートで `alembic upgrade head`
+- 本番DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
+- 開発DB: ローカルPostgreSQL / `DATABASE_URL_DEV` に設定済み（両PC）
+- マイグレーション: `$env:DATABASE_URL="postgresql+asyncpg://postgres:pw@localhost/oncall_dev"; backend/.venv/Scripts/alembic upgrade head`
