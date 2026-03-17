@@ -99,6 +99,7 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 | `id` | UUID (PK) | プリセットID |
 | `name` | String (unique) | プリセット名 |
 | `gap5` 〜 `sunhol_3rd` | Float | 各ソフト制約の重み値 |
+| `sat_month_fairness` | Float | 同月土曜当直回数の平準化重み |
 
 ---
 

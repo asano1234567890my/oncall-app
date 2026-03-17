@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1 — 日当直モード + 3バグ修正 + 用語統一 完了。次: テスト・動作確認・本番デプロイ**
+**V1.1 完成・mainプッシュ済み。Renderデプロイ作業中（Python 3.14→3.12固定対応中）**
 
 ---
 
@@ -61,7 +61,7 @@
 
 ---
 
-### 【その次】Task2.6：巨大ファイルの分割リファクタリング
+### 【後回し】Task2.6：巨大ファイルの分割リファクタリング
 
 **目的：** 1ファイルに責務が集中しすぎているファイルを分割し、Task3以降の実装を安全に進める土台を作る。
 **方針：** 動作を変えない。型・インターフェースは変えない。分割後にTypeScript 0エラー・動作確認で完了。
@@ -103,13 +103,6 @@
 | 3-4 | `useAuth.ts` 新設（JWT localStorage管理）・`login/page.tsx` 新設 | `src/app/hooks/useAuth.ts`, `src/app/login/page.tsx` | ✅ 完了 |
 | 3-5 | `page.tsx` に認証ガード（未認証→/loginリダイレクト）・ログアウトボタン追加 | `src/app/page.tsx` | ✅ 完了 |
 | 3-6 | 全APIフックに `getAuthHeaders()` (Authorization: Bearer) を追加 | `useScheduleApi.ts`, `useDoctorSettings.ts`, `useOptimizerConfig.ts`, `useCustomHolidays.ts` | ✅ 完了 |
-
-**次にやること：**
-1. Neon devブランチのURL取得 → `.env` の `DATABASE_URL` に設定
-2. `alembic upgrade head` でマイグレーション実行
-3. `.env` に `JWT_SECRET_KEY` を追加（強力なランダム文字列）
-4. バックエンド再起動・動作確認
-5. 本番NeonブランチにもマイグレーションをapplyしてEbina Hospitalのデータを確認
 
 ### 【後で】Task4（旧Task3）：仮保存機能
 
@@ -157,14 +150,14 @@
 
 | タスク | 内容 | 状態 |
 |--------|------|------|
-| タスクA | 自院でのV1.1実戦投入・実績獲得 | Task2完了後に開始 |
+| タスクA | 自院でのV1.1実戦投入・実績獲得 | 🔄 Renderデプロイ確認後に開始 |
 | タスクB | 他院へのヒアリング（V2要件定義） | タスクA完了後 |
 
 ---
 
 ## 全体目標
 
-- **短期（今月〜来月）**: Task1完了 + 自院での実運用開始
+- **短期（今月〜来月）**: Renderデプロイ安定化 + 自院での実運用開始
 - **中期（2〜3ヶ月）**: 他院3〜5施設を開発パートナーとして巻き込む
 - **長期（半年〜1年）**: マルチテナント型SaaSとしてV2ローンチ
 
@@ -174,6 +167,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-18 | Renderデプロイ修正: requirements.txt最小化・.python-version追加（Python 3.12.9固定） |
+| 2026-03-18 | 同月土曜回数平準化（sat_month_fairness: 100）追加・ソフト制約の自動無効化UI実装 |
 | 2026-03-18 | V1.1バグ修正3件: gap重み動的化・土曜上限ソフトペナルティ・unavailableゲート分離（respect=OFF時にソフト化） |
 | 2026-03-18 | 用語統一: 「忌避日」→「不可日」、`soft_unavailable`ラベル/`respect_unavailable_days`ラベル更新 |
 | 2026-03-18 | 日当直モード実装（`holiday_shift_mode: "combined"\|"split"`）— optimizer/スキーマ/型/UI/表示すべて対応 |
