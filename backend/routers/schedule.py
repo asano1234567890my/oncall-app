@@ -194,6 +194,8 @@ async def delete_schedule(year: int, month: int, db: AsyncSession = Depends(get_
 @router.get("/{year}/{month}")
 async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
     try:
+        import calendar as _calendar
+
         start_date, end_date = _month_bounds(year, month)
 
         result = await db.execute(
@@ -206,16 +208,14 @@ async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)
         )
         assignments = result.scalars().all()
 
-        formatted_data = {}
+        days_in_month = _calendar.monthrange(year, month)[1]
+        formatted_data: dict = {
+            day: {"day": day, "day_shift": None, "night_shift": None}
+            for day in range(1, days_in_month + 1)
+        }
+
         for assignment in assignments:
             day = assignment.date.day
-            if day not in formatted_data:
-                formatted_data[day] = {
-                    "day": day,
-                    "day_shift": None,
-                    "night_shift": None,
-                }
-
             if _normalize_shift_type(assignment.shift_type) == "day":
                 formatted_data[day]["day_shift"] = str(assignment.doctor_id)
             else:

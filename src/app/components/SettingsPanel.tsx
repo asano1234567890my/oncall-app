@@ -59,6 +59,9 @@ type GenerationSettingsPanelProps = {
   getPreviousMonthShiftDoctorId: (prevDay: number, shiftType: ShiftType) => string;
   onScoreMinChange: (value: number) => void;
   onScoreMaxChange: (value: number) => void;
+  isSavingOptimizerConfig: boolean;
+  optimizerSaveMessage: string;
+  onSaveOptimizerConfig: () => void;
   onToggleWeights: () => void;
   onResetWeights: () => void;
   onCloseWeights: () => void;
@@ -131,6 +134,9 @@ export function GenerationSettingsPanel({
   getPreviousMonthShiftDoctorId,
   onScoreMinChange,
   onScoreMaxChange,
+  isSavingOptimizerConfig,
+  optimizerSaveMessage,
+  onSaveOptimizerConfig,
   onToggleWeights,
   onResetWeights,
   onCloseWeights,
@@ -275,6 +281,19 @@ export function GenerationSettingsPanel({
             <StepperNumberInput value={scoreMax} onCommit={onScoreMaxChange} fallbackValue={4.5} step={0.5} inputMode="decimal" />
           </label>
         </div>
+        <div className="mt-3 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onSaveOptimizerConfig}
+            disabled={isSavingOptimizerConfig}
+            className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSavingOptimizerConfig ? "保存中..." : "スコア・重み・ルールを保存"}
+          </button>
+          {optimizerSaveMessage && (
+            <span className="text-xs font-bold text-emerald-700">{optimizerSaveMessage}</span>
+          )}
+        </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
           {weightChanges.top.length > 0 ? (
@@ -318,16 +337,22 @@ export function GenerationSettingsPanel({
       <WeightsConfig
         isOpen={isWeightsOpen}
         objectiveWeights={objectiveWeights}
+        isSaving={isSavingOptimizerConfig}
+        saveMessage={optimizerSaveMessage}
         onClose={onCloseWeights}
         onReset={onResetWeights}
+        onSave={onSaveOptimizerConfig}
         onWeightChange={onWeightChange}
       />
 
       <RulesConfig
         isOpen={isHardConstraintsOpen}
         hardConstraints={hardConstraints}
+        isSaving={isSavingOptimizerConfig}
+        saveMessage={optimizerSaveMessage}
         onClose={onCloseHardConstraints}
         onReset={onResetHardConstraints}
+        onSave={onSaveOptimizerConfig}
         onHardConstraintChange={onHardConstraintChange}
       />
 

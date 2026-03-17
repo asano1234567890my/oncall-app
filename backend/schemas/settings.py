@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Any, Dict, List
 from pydantic import BaseModel, Field
 
 
@@ -19,3 +19,10 @@ class CustomHolidaysResponse(BaseModel):
     year: int
     key: str
     value: CustomHolidaysValue
+
+
+class OptimizerConfigRequest(BaseModel):
+    score_min: float = 0.5
+    score_max: float = 4.5
+    objective_weights: Dict[str, Any] = Field(default_factory=dict)
+    hard_constraints: Dict[str, Any] = Field(default_factory=dict)

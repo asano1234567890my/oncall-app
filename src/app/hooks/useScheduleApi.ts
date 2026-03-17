@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "react-hot-toast";
 import type {
   Doctor,
@@ -131,6 +131,50 @@ export function useScheduleApi({
   const [saveMessage, setSaveMessage] = useState("");
   const [error, setError] = useState("");
 
+  // 医師設定の「最後にAPIから読み込んだ／保存した」状態を保持するref
+  const committedUnavailableMapRef = useRef<UnavailableDateMap>({});
+  const committedFixedWeekdaysMapRef = useRef<FixedUnavailableWeekdayMap>({});
+  const committedMinScoreMapRef = useRef<Record<string, number>>({});
+  const committedMaxScoreMapRef = useRef<Record<string, number>>({});
+  const committedTargetScoreMapRef = useRef<Record<string, number>>({});
+
+  // 未保存の設定変更がある医師名の一覧を返す
+  const getUnsavedDoctorNames = (): string[] => {
+    const names: string[] = [];
+    const allDoctorIds = new Set([
+      ...Object.keys(unavailableMap),
+      ...Object.keys(fixedUnavailableWeekdaysMap),
+      ...Object.keys(committedUnavailableMapRef.current),
+      ...Object.keys(committedFixedWeekdaysMapRef.current),
+      ...activeDoctors.map((d) => d.id),
+    ]);
+
+    for (const id of allDoctorIds) {
+      const currentUnavail = JSON.stringify(unavailableMap[id] ?? []);
+      const committedUnavail = JSON.stringify(committedUnavailableMapRef.current[id] ?? []);
+      const currentFixed = JSON.stringify(fixedUnavailableWeekdaysMap[id] ?? []);
+      const committedFixed = JSON.stringify(committedFixedWeekdaysMapRef.current[id] ?? []);
+      const currentMin = minScoreMap[id] ?? null;
+      const committedMin = committedMinScoreMapRef.current[id] ?? null;
+      const currentMax = maxScoreMap[id] ?? null;
+      const committedMax = committedMaxScoreMapRef.current[id] ?? null;
+      const currentTarget = targetScoreMap[id] ?? null;
+      const committedTarget = committedTargetScoreMapRef.current[id] ?? null;
+
+      if (
+        currentUnavail !== committedUnavail ||
+        currentFixed !== committedFixed ||
+        currentMin !== committedMin ||
+        currentMax !== committedMax ||
+        currentTarget !== committedTarget
+      ) {
+        const doctor = activeDoctors.find((d) => d.id === id);
+        if (doctor) names.push(doctor.name);
+      }
+    }
+    return names;
+  };
+
   const normalizeScheduleRows = (rows: ScheduleRow[]) =>
     rows.map((row) => ({
       ...row,
@@ -235,6 +279,7 @@ export function useScheduleApi({
 
     setUnavailableMap(nextUnavailable);
     setFixedUnavailableWeekdaysMap(nextFixedWeekdays);
+    return { nextUnavailable, nextFixedWeekdays };
   };
 
   const applyScoresFromDoctors = (docs: Doctor[]) => {
@@ -251,6 +296,7 @@ export function useScheduleApi({
     setMinScoreMap(initMin);
     setMaxScoreMap(initMax);
     setTargetScoreMap(initTarget);
+    return { initMin, initMax, initTarget };
   };
 
   const formatHardConstraintsForOptimize = () => ({
@@ -300,8 +346,15 @@ export function useScheduleApi({
       const firstActiveDoctor = data.find((doc) => doc.is_active !== false);
       setSelectedDoctorId((prev) => prev || firstActiveDoctor?.id || "");
 
-      applyUnavailableDaysFromDoctors(data);
-      applyScoresFromDoctors(data);
+      // fetchした時点を「保存済み」基準として正規化済みの値をそのまま保存
+      const { nextUnavailable, nextFixedWeekdays } = applyUnavailableDaysFromDoctors(data);
+      committedUnavailableMapRef.current = nextUnavailable;
+      committedFixedWeekdaysMapRef.current = nextFixedWeekdays;
+
+      const { initMin, initMax, initTarget } = applyScoresFromDoctors(data);
+      committedMinScoreMapRef.current = initMin;
+      committedMaxScoreMapRef.current = initMax;
+      committedTargetScoreMapRef.current = initTarget;
     } catch (err) {
       console.error("医師リストの取得に失敗しました", err);
     }
@@ -364,6 +417,7 @@ export function useScheduleApi({
       const successMessage = "全員の休み希望・スコア設定を保存しました";
       setSaveMessage(successMessage);
       toast.success(successMessage);
+      // fetchDoctors内でcommitted refsも更新される
       await fetchDoctors();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "全員の設定保存に失敗しました";
@@ -471,12 +525,25 @@ export function useScheduleApi({
   };
 
   const handleSaveToDB = async () => {
-    setIsSaving(true);
     setSaveMessage("");
     setError("");
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      // 既存データの確認（2-1 + 2-2）
+      const checkRes = await fetch(`${apiUrl}/api/schedule/${year}/${month}`);
+      if (checkRes.ok) {
+        const existing: unknown = await checkRes.json();
+        if (Array.isArray(existing) && existing.length > 0) {
+          const confirmed = window.confirm(
+            `${year}年${month}月のシフトはすでに登録されています。\n上書きすると過去シフトの記録が変わり、スコア計算にも影響します。\n続行しますか？`
+          );
+          if (!confirmed) return;
+        }
+      }
+
+      setIsSaving(true);
       const res = await fetch(`${apiUrl}/api/schedule/save`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -511,6 +578,7 @@ export function useScheduleApi({
     error,
     isLoading,
     isSaving,
+    getUnsavedDoctorNames,
     isDeletingMonthSchedule,
     isBulkSavingDoctors,
     saveMessage,

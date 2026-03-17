@@ -8,16 +8,22 @@ import { weightInputs } from "./shared";
 type WeightsConfigProps = {
   isOpen: boolean;
   objectiveWeights: ObjectiveWeights;
+  isSaving?: boolean;
+  saveMessage?: string;
   onClose: () => void;
   onReset: () => void;
+  onSave?: () => void;
   onWeightChange: (key: keyof ObjectiveWeights, value: number) => void;
 };
 
 export default function WeightsConfig({
   isOpen,
   objectiveWeights,
+  isSaving = false,
+  saveMessage = "",
   onClose,
   onReset,
+  onSave,
   onWeightChange,
 }: WeightsConfigProps) {
   return (
@@ -30,6 +36,16 @@ export default function WeightsConfig({
               <p className="mt-1 text-xs text-gray-500">ペナルティ重みを調整し、optimizer の目的関数に反映します。</p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {onSave && (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaving}
+                  className="w-full rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                >
+                  {isSaving ? "保存中..." : "保存"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onReset}
@@ -45,6 +61,9 @@ export default function WeightsConfig({
                 閉じる
               </button>
             </div>
+            {saveMessage && (
+              <div className="mt-2 text-xs font-bold text-emerald-700 sm:mt-0">{saveMessage}</div>
+            )}
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
             {weightInputs.map((weight) => (

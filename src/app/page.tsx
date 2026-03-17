@@ -12,6 +12,7 @@ import { useScheduleApi } from "./hooks/useScheduleApi";
 import { useScheduleDnd } from "./hooks/useScheduleDnd";
 import { useScheduleHistory } from "./hooks/useScheduleHistory";
 import { useRealtimeScores } from "./hooks/useRealtimeScores";
+import { useOptimizerConfig } from "./hooks/useOptimizerConfig";
 import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, type ObjectiveWeights, type PreviousMonthShift, type ScheduleRow } from "./types/dashboard";
 
 const getScheduleSignature = (rows: ScheduleRow[]) =>
@@ -111,6 +112,16 @@ export default function DashboardPage() {
     prevMonthTailDays,
   } = useDashboardState();
 
+  const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig } = useOptimizerConfig({
+    scoreMin,
+    scoreMax,
+    objectiveWeights,
+    hardConstraints,
+    setScoreMin,
+    setScoreMax,
+    setObjectiveWeights,
+    setHardConstraints,
+  });
 
   const markScheduleClean = (rows: ScheduleRow[] = latestScheduleRef.current) => {
     savedScheduleSignatureRef.current = getScheduleSignature(rows);
@@ -119,12 +130,19 @@ export default function DashboardPage() {
   };
 
   const confirmMoveWithUnsavedChanges = () => {
-    if (!dirtyRef.current || typeof window === "undefined") return true;
+    if (typeof window === "undefined") return true;
 
-    const confirmed = window.confirm("保存されていませんが移動しますか？");
-    if (confirmed) {
-      markScheduleClean(latestScheduleRef.current);
-    }
+    const lines: string[] = [];
+    if (dirtyRef.current) lines.push("シフトが保存されていません。");
+    const unsavedDoctors = getUnsavedDoctorNames();
+    if (unsavedDoctors.length > 0) lines.push(`${unsavedDoctors.join("、")}先生の設定が未登録です。`);
+    if (hasUnsavedCustomChanges) lines.push("祝日設定が保存されていません。");
+
+    if (lines.length === 0) return true;
+
+    lines.push("そのまま移動してよいですか？");
+    const confirmed = window.confirm(lines.join("\n"));
+    if (confirmed) markScheduleClean(latestScheduleRef.current);
     return confirmed;
   };
 
@@ -180,9 +198,23 @@ export default function DashboardPage() {
     if (typeof window === "undefined") return;
 
     const confirmNavigationAway = () => {
-      if (!dirtyRef.current) return true;
+      const lines: string[] = [];
+      if (dirtyRef.current) lines.push("シフトが保存されていません。");
+      const unsavedDoctors = getUnsavedDoctorNamesRef.current();
+      if (unsavedDoctors.length > 0) lines.push(`${unsavedDoctors.join("、")}先生の設定が未登録です。`);
+      if (hasUnsavedCustomChangesRef.current) lines.push("祝日設定が保存されていません。");
+      const weightKeys = Object.keys(DEFAULT_OBJECTIVE_WEIGHTS) as (keyof ObjectiveWeights)[];
+      if (weightKeys.some((k) => objectiveWeightsRef.current[k] !== DEFAULT_OBJECTIVE_WEIGHTS[k])) {
+        lines.push("重みづけ設定がデフォルトから変更されています。");
+      }
+      if (JSON.stringify(hardConstraintsRef.current) !== JSON.stringify(DEFAULT_HARD_CONSTRAINTS)) {
+        lines.push("ハード制約設定がデフォルトから変更されています。");
+      }
 
-      const confirmed = window.confirm("保存されていませんが移動しますか？");
+      if (lines.length === 0) return true;
+
+      lines.push("そのまま移動してよいですか？");
+      const confirmed = window.confirm(lines.join("\n"));
       if (confirmed) {
         savedScheduleSignatureRef.current = getScheduleSignature(latestScheduleRef.current);
         dirtyRef.current = false;
@@ -370,6 +402,7 @@ export default function DashboardPage() {
     handleDeleteMonthSchedule,
     handleGenerate,
     handleSaveToDB,
+    getUnsavedDoctorNames,
   } = useScheduleApi({
     year,
     month,
@@ -410,6 +443,16 @@ export default function DashboardPage() {
     lockedShiftKeys,
     markScheduleClean,
   });
+
+  // stale closure対策: 毎レンダーで最新値をrefに書き込む
+  const getUnsavedDoctorNamesRef = useRef(getUnsavedDoctorNames);
+  getUnsavedDoctorNamesRef.current = getUnsavedDoctorNames;
+  const hasUnsavedCustomChangesRef = useRef(hasUnsavedCustomChanges);
+  hasUnsavedCustomChangesRef.current = hasUnsavedCustomChanges;
+  const objectiveWeightsRef = useRef(objectiveWeights);
+  objectiveWeightsRef.current = objectiveWeights;
+  const hardConstraintsRef = useRef(hardConstraints);
+  hardConstraintsRef.current = hardConstraints;
 
   useEffect(() => {
     if (activeDoctors.length === 0) {
@@ -622,6 +665,9 @@ export default function DashboardPage() {
             getPreviousMonthShiftDoctorId={getPreviousMonthShiftDoctorId}
             onScoreMinChange={setScoreMin}
             onScoreMaxChange={setScoreMax}
+            isSavingOptimizerConfig={isSavingOptimizerConfig}
+            optimizerSaveMessage={optimizerSaveMessage}
+            onSaveOptimizerConfig={() => { void saveOptimizerConfig(); }}
             onToggleWeights={handleToggleWeightsPanel}
             onResetWeights={() => setObjectiveWeights(DEFAULT_OBJECTIVE_WEIGHTS)}
             onCloseWeights={() => setIsWeightsOpen(false)}

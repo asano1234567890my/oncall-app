@@ -485,6 +485,21 @@ export function useScheduleDnd({
   const validateScheduleViolations = (scheduleRows: ScheduleRow[] = schedule) => {
     const messages = new Set<string>();
 
+    // 空シフトの検出
+    const emptyNightDays: number[] = [];
+    const emptyDayDays: number[] = [];
+    scheduleRows.forEach((row) => {
+      if (!row.night_shift) emptyNightDays.push(row.day);
+      if (!row.day_shift && row.is_sunhol) emptyDayDays.push(row.day);
+    });
+    if (emptyNightDays.length > 0) {
+      messages.add(`当直が未定の日があります: ${emptyNightDays.map((d) => `${d}日`).join("、")}`);
+    }
+    if (emptyDayDays.length > 0) {
+      messages.add(`日直が未定の日（日曜・祝日）があります: ${emptyDayDays.map((d) => `${d}日`).join("、")}`);
+    }
+
+    // ハード制約違反の検出
     scheduleRows.forEach((row) => {
       (["day", "night"] as const).forEach((shiftType) => {
         const doctorId = getShiftDoctorIdFromRow(row, shiftType);

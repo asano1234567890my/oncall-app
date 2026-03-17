@@ -8,16 +8,22 @@ import { hardConstraintNumberInputs, hardConstraintToggleInputs } from "./shared
 type RulesConfigProps = {
   isOpen: boolean;
   hardConstraints: HardConstraints;
+  isSaving?: boolean;
+  saveMessage?: string;
   onClose: () => void;
   onReset: () => void;
+  onSave?: () => void;
   onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean) => void;
 };
 
 export default function RulesConfig({
   isOpen,
   hardConstraints,
+  isSaving = false,
+  saveMessage = "",
   onClose,
   onReset,
+  onSave,
   onHardConstraintChange,
 }: RulesConfigProps) {
   return (
@@ -29,7 +35,17 @@ export default function RulesConfig({
               <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
               <p className="mt-1 text-xs text-gray-500">数値は 0 で OFF、トグルは hard constraint として optimize に送信します。</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {onSave && (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaving}
+                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? "保存中..." : "保存"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onReset}
@@ -44,6 +60,9 @@ export default function RulesConfig({
               >
                 閉じる
               </button>
+              {saveMessage && (
+                <span className="text-xs font-bold text-emerald-700">{saveMessage}</span>
+              )}
             </div>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
