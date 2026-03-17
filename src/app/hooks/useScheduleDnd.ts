@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
-  FixedUnavailableWeekdayEntry,
   FixedUnavailableWeekdayMap,
   HardConstraints,
   HolidayLikeDayInfo,
@@ -9,10 +8,9 @@ import type {
   ScheduleRow,
   ShiftType,
   SwapSource,
-  UnavailableDateEntry,
   UnavailableDateMap,
 } from "../types/dashboard";
-import { matchesTargetShift } from "../utils/unavailableSettings";
+import { getShiftKey, getShiftDoctorIdFromRow, useScheduleConstraints } from "./useScheduleConstraints";
 
 type DragSourceType = "calendar" | "list" | null;
 type DraggingListMode = "doctor" | "erase" | null;
@@ -64,7 +62,6 @@ type DropFeedback = {
 
 const cloneSchedule = (rows: ScheduleRow[]) => rows.map((row) => ({ ...row }));
 const pad2 = (value: number) => String(value).padStart(2, "0");
-const weekdayLabelsPy = ["\u6708", "\u706b", "\u6c34", "\u6728", "\u91d1", "\u571f", "\u65e5"];
 
 export function useScheduleDnd({
   schedule,
@@ -98,66 +95,32 @@ export function useScheduleDnd({
   const touchDragRef = useRef<TouchDragState | null>(null);
   const touchDropTargetRef = useRef<TouchDropTarget>(null);
 
-  const getShiftKey = (day: number, shiftType: ShiftType) => `${day}_${shiftType}`;
-  const getWeekdayPy = (y: number, m: number, d: number) => (new Date(y, m - 1, d).getDay() + 6) % 7;
+  const {
+    getScheduleDoctorId,
+    getPlacementIgnoreShiftKeys,
+    getPlacementConstraintMessage,
+    formatConstraintForToast,
+    getSwapConstraintMessage,
+    validateScheduleViolations,
+    isHighlightedDoctorBlockedDay,
+  } = useScheduleConstraints({
+    schedule,
+    year,
+    month,
+    prevMonthLastDay,
+    hardConstraints,
+    isOverrideMode,
+    unavailableMap,
+    fixedUnavailableWeekdaysMap,
+    prevMonthWorkedDaysMap,
+    getDoctorName,
+    isHolidayLikeDay,
+    highlightedDoctorId,
+  });
+
   const getSelectedManualDoctorId = () =>
     selectedListSelection?.mode === "doctor" ? selectedListSelection.doctorId : null;
   const isEraseSelectionActive = selectedListSelection?.mode === "erase";
-
-  const getScheduleDoctorId = (day: number, shiftType: ShiftType) => {
-    const row = schedule.find((entry) => entry.day === day);
-    if (!row) return null;
-    return shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
-  };
-
-  const getShiftDoctorIdFromRow = (row: ScheduleRow, shiftType: ShiftType) =>
-    shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
-
-  const getPositiveConstraintValue = (value: number | null | undefined) => {
-    if (typeof value !== "number" || !Number.isFinite(value)) return null;
-    const rounded = Math.max(0, Math.round(value));
-    return rounded > 0 ? rounded : null;
-  };
-
-  const countDoctorAssignments = (
-    doctorId: string,
-    scheduleRows: ScheduleRow[],
-    predicate: (row: ScheduleRow) => boolean,
-    shiftTypes: ShiftType[],
-    ignoreShiftKeys: Set<string>
-  ) =>
-    scheduleRows.reduce((count, row) => {
-      if (!predicate(row)) return count;
-
-      let nextCount = count;
-      shiftTypes.forEach((candidateShiftType) => {
-        const shiftKey = getShiftKey(row.day, candidateShiftType);
-        if (ignoreShiftKeys.has(shiftKey)) return;
-        if (getShiftDoctorIdFromRow(row, candidateShiftType) === doctorId) nextCount += 1;
-      });
-      return nextCount;
-    }, 0);
-
-  const getSpacingConstraintDays = () => getPositiveConstraintValue(hardConstraints.interval_days);
-  const getMaxSaturdayNights = () => getPositiveConstraintValue(hardConstraints.max_saturday_nights);
-  const getMaxSunholDays = () => getPositiveConstraintValue(hardConstraints.max_sunhol_days);
-  const getMaxSunholWorks = () => getPositiveConstraintValue(hardConstraints.max_sunhol_works);
-  const getMaxWeekendHolidayWorks = () => getPositiveConstraintValue(hardConstraints.max_weekend_holiday_works);
-  const isSaturday = (day: number) => new Date(year, month - 1, day).getDay() === 6;
-
-  const getPlacementIgnoreShiftKeys = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType: ShiftType,
-    scheduleRows?: ScheduleRow[]
-  ) => {
-    if (!doctorId) return new Set<string>();
-
-    const row = (scheduleRows ?? schedule).find((entry) => entry.day === day);
-    if (!row) return new Set<string>();
-
-    return getShiftDoctorIdFromRow(row, shiftType) === doctorId ? new Set<string>([getShiftKey(day, shiftType)]) : new Set<string>();
-  };
 
   const isShiftLocked = (day: number, shiftType: ShiftType) => lockedShiftKeys.has(getShiftKey(day, shiftType));
   const isSwapSourceSelected = (day: number, shiftType: ShiftType) =>
@@ -173,99 +136,8 @@ export function useScheduleDnd({
     setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
   };
 
-  const matchesManualUnavailableEntry = (
-    entry: UnavailableDateEntry,
-    day: number,
-    shiftType: ShiftType
-  ) => {
-    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
-    return entry.date === ymd && matchesTargetShift(entry.target_shift, shiftType);
-  };
-
-  const matchesFixedUnavailableWeekdayEntry = (
-    entry: FixedUnavailableWeekdayEntry,
-    day: number,
-    shiftType: ShiftType
-  ) => {
-    const weekdayPy = getWeekdayPy(year, month, day);
-    const holidayInfo = isHolidayLikeDay(day);
-
-    if (!matchesTargetShift(entry.target_shift, shiftType)) return false;
-    if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
-    return entry.day_of_week === weekdayPy;
-  };
-
-  const getManualUnavailableEntry = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType: ShiftType
-  ): UnavailableDateEntry | null => {
-    if (!doctorId) return null;
-    return (unavailableMap[doctorId] || []).find((entry) => matchesManualUnavailableEntry(entry, day, shiftType)) ?? null;
-  };
-
-  const getFixedUnavailableEntry = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType: ShiftType
-  ): FixedUnavailableWeekdayEntry | null => {
-    if (!doctorId) return null;
-    return (
-      (fixedUnavailableWeekdaysMap[doctorId] || []).find((entry) => matchesFixedUnavailableWeekdayEntry(entry, day, shiftType)) ?? null
-    );
-  };
-
-  const hasAnyManualUnavailableEntry = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType?: ShiftType
-  ) => {
-    if (!doctorId) return false;
-    const ymd = `${year}-${pad2(month)}-${pad2(day)}`;
-    return (unavailableMap[doctorId] || []).some((entry) =>
-      shiftType ? matchesManualUnavailableEntry(entry, day, shiftType) : entry.date === ymd
-    );
-  };
-
-  const hasAnyFixedUnavailableEntry = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType?: ShiftType
-  ) => {
-    if (!doctorId) return false;
-    const weekdayPy = getWeekdayPy(year, month, day);
-    const holidayInfo = isHolidayLikeDay(day);
-    return (fixedUnavailableWeekdaysMap[doctorId] || []).some((entry) => {
-      if (shiftType && !matchesFixedUnavailableWeekdayEntry(entry, day, shiftType)) {
-        return false;
-      }
-      if (entry.day_of_week === 7) return holidayInfo.isHolidayLike && !holidayInfo.isSun;
-      return entry.day_of_week === weekdayPy;
-    });
-  };
-
-  const getConstraintScopeLabel = (targetShift: "all" | "day" | "night") => {
-    if (targetShift === "day") return "\u65e5\u76f4\u306e\u307f";
-    if (targetShift === "night") return "\u5f53\u76f4\u306e\u307f";
-    return "\u7d42\u65e5";
-  };
-
-  const getFixedWeekdayLabel = (dayOfWeek: number) => {
-    if (dayOfWeek === 7) return "\u795d\u65e5";
-    return `${weekdayLabelsPy[dayOfWeek] ?? "?"}\u66dc\u65e5`;
-  };
-
-  const isDoctorBlockedByManualConstraints = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType?: ShiftType
-  ) => hasAnyManualUnavailableEntry(doctorId, day, shiftType) || hasAnyFixedUnavailableEntry(doctorId, day, shiftType);
-
-  const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
-
   const parseDragPayload = (raw: string | null): DragPayload | null => {
     if (!raw) return null;
-
     try {
       const parsed = JSON.parse(raw) as Partial<DragPayload>;
       if (typeof parsed.day !== "number") return null;
@@ -276,254 +148,13 @@ export function useScheduleDnd({
     }
   };
 
-  const getPlacementConstraintMessage = (
-    doctorId: string | null | undefined,
-    day: number,
-    shiftType: ShiftType,
-    options?: {
-      scheduleRows?: ScheduleRow[];
-      ignoreShiftKeys?: Set<string>;
-      respectOverrideMode?: boolean;
-    }
-  ) => {
-    if (!doctorId) return null;
-
-    const scheduleRows = options?.scheduleRows ?? schedule;
-    const ignoreShiftKeys = options?.ignoreShiftKeys ?? new Set<string>();
-    const respectOverrideMode = options?.respectOverrideMode !== false;
-    const holidayInfo = isHolidayLikeDay(day);
-    const doctorName = getDoctorName(doctorId);
-    const spacingDays = getSpacingConstraintDays();
-    const maxSaturdayNights = getMaxSaturdayNights();
-    const maxSunholDays = getMaxSunholDays();
-    const maxSunholWorks = getMaxSunholWorks();
-    const maxWeekendHolidayWorks = getMaxWeekendHolidayWorks();
-    const preventSunholConsecutive = Boolean(hardConstraints.prevent_sunhol_consecutive);
-    const respectUnavailableDays = Boolean(hardConstraints.respect_unavailable_days);
-
-    if (shiftType === "day" && !holidayInfo.isHolidayLike) {
-      return "\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093";
-    }
-
-    if (respectOverrideMode && isOverrideMode) {
-      return null;
-    }
-
-    if (respectUnavailableDays) {
-      const manualUnavailableEntry = getManualUnavailableEntry(doctorId, day, shiftType);
-      if (manualUnavailableEntry) {
-        return `${doctorName}\u5148\u751f\u306f${month}\u6708${day}\u65e5\u306b${getConstraintScopeLabel(manualUnavailableEntry.target_shift)}\u306e\u4f11\u307f\u5e0c\u671b\u3067\u3059`;
-      }
-
-      const fixedUnavailableEntry = getFixedUnavailableEntry(doctorId, day, shiftType);
-      if (fixedUnavailableEntry) {
-        return `${doctorName}\u5148\u751f\u306f${getFixedWeekdayLabel(fixedUnavailableEntry.day_of_week)}\u306b${getConstraintScopeLabel(fixedUnavailableEntry.target_shift)}\u306e\u56fa\u5b9a\u4e0d\u53ef\u3067\u3059`;
-      }
-    }
-
-    if (spacingDays !== null) {
-      const prevMonthWorkedDays = prevMonthWorkedDaysMap[doctorId] || [];
-      const hasBlockedPrevMonthGap = prevMonthWorkedDays.some((workedDay) => {
-        const gapFromPrevMonth = day + (prevMonthLastDay - workedDay);
-        return gapFromPrevMonth <= spacingDays;
-      });
-      if (hasBlockedPrevMonthGap) {
-        return `${doctorName}\u5148\u751f\u306f\u52e4\u52d9\u9593\u9694\u30a8\u30e9\u30fc\uff08\u8a2d\u5b9a: ${spacingDays}\u65e5\uff09\u3067\u3059`;
-      }
-    }
-
-    const row = scheduleRows.find((entry) => entry.day === day);
-    const oppositeShiftType: ShiftType = shiftType === "day" ? "night" : "day";
-    const oppositeShiftKey = getShiftKey(day, oppositeShiftType);
-    const oppositeDoctorId = row && !ignoreShiftKeys.has(oppositeShiftKey) ? getShiftDoctorIdFromRow(row, oppositeShiftType) : null;
-    if (preventSunholConsecutive && oppositeDoctorId && oppositeDoctorId === doctorId) {
-      return "\u540c\u4e00\u65e5\u306e\u65e5\u76f4\u3068\u5f53\u76f4\u306b\u540c\u3058\u533b\u5e2b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093";
-    }
-
-    if (spacingDays !== null) {
-      for (const rowEntry of scheduleRows) {
-        if (rowEntry.day === day) continue;
-
-        for (const candidateShiftType of ["day", "night"] as const) {
-          const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
-          if (ignoreShiftKeys.has(shiftKey)) continue;
-
-          const assignedDoctorId = getShiftDoctorIdFromRow(rowEntry, candidateShiftType);
-          if (assignedDoctorId !== doctorId) continue;
-
-          if (Math.abs(rowEntry.day - day) <= spacingDays) {
-            return `${doctorName}\u5148\u751f\u306f\u52e4\u52d9\u9593\u9694\u30a8\u30e9\u30fc\uff08\u8a2d\u5b9a: ${spacingDays}\u65e5\uff09\u3067\u3059`;
-          }
-        }
-      }
-    }
-
-    if (maxSaturdayNights !== null && shiftType === "night" && isSaturday(day)) {
-      const saturdayNightCount = countDoctorAssignments(doctorId, scheduleRows, (rowEntry) => isSaturday(rowEntry.day), ["night"], ignoreShiftKeys) + 1;
-      if (saturdayNightCount > maxSaturdayNights) {
-        return `${doctorName}\u5148\u751f\u306f\u571f\u66dc\u5f53\u76f4\u306e\u4e0a\u9650\uff08${maxSaturdayNights}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
-      }
-    }
-
-    if (maxSunholDays !== null && shiftType === "day" && holidayInfo.isHolidayLike) {
-      const sunholDayCount =
-        countDoctorAssignments(
-          doctorId,
-          scheduleRows,
-          (rowEntry) => isHolidayLikeDay(rowEntry.day).isHolidayLike,
-          ["day"],
-          ignoreShiftKeys
-        ) + 1;
-      if (sunholDayCount > maxSunholDays) {
-        return `${doctorName}\u5148\u751f\u306f\u65e5\u795d\u65e5\u76f4\u306e\u4e0a\u9650\uff08${maxSunholDays}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
-      }
-    }
-
-    if (maxSunholWorks !== null && holidayInfo.isHolidayLike) {
-      const sunholWorkCount =
-        countDoctorAssignments(
-          doctorId,
-          scheduleRows,
-          (rowEntry) => isHolidayLikeDay(rowEntry.day).isHolidayLike,
-          ["day", "night"],
-          ignoreShiftKeys
-        ) + 1;
-      if (sunholWorkCount > maxSunholWorks) {
-        return `${doctorName}\u5148\u751f\u306f\u65e5\u795d\u52e4\u52d9\u306e\u4e0a\u9650\uff08${maxSunholWorks}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
-      }
-    }
-
-    if (maxWeekendHolidayWorks !== null && ((shiftType === "night" && isSaturday(day)) || holidayInfo.isHolidayLike)) {
-      const weekendHolidayWorkCount =
-        scheduleRows.reduce((count, rowEntry) => {
-          const rowHolidayLike = isHolidayLikeDay(rowEntry.day).isHolidayLike;
-          if (rowHolidayLike) {
-            let nextCount = count;
-            (["day", "night"] as const).forEach((candidateShiftType) => {
-              const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
-              if (ignoreShiftKeys.has(shiftKey)) return;
-              if (getShiftDoctorIdFromRow(rowEntry, candidateShiftType) === doctorId) nextCount += 1;
-            });
-            return nextCount;
-          }
-
-          if (isSaturday(rowEntry.day)) {
-            const shiftKey = getShiftKey(rowEntry.day, "night");
-            if (!ignoreShiftKeys.has(shiftKey) && getShiftDoctorIdFromRow(rowEntry, "night") === doctorId) {
-              return count + 1;
-            }
-          }
-
-          return count;
-        }, 0) + 1;
-
-      if (weekendHolidayWorkCount > maxWeekendHolidayWorks) {
-        return `${doctorName}\u5148\u751f\u306f\u571f\u65e5\u795d\u52e4\u52d9\u306e\u4e0a\u9650\uff08${maxWeekendHolidayWorks}\u56de\uff09\u3092\u8d85\u3048\u307e\u3059`;
-      }
-    }
-
-    return null;
-  };
-
-  const formatConstraintForToast = (doctorId: string, message: string) => {
-    const doctorName = getDoctorName(doctorId);
-    return message.startsWith(`${doctorName}\u5148\u751f`) ? message : `${doctorName}\u5148\u751f: ${message}`;
-  };
-
-  const getSwapConstraintMessage = (
-    sourceDoctorId: string | null | undefined,
-    fromDay: number,
-    fromType: ShiftType,
-    toDay: number,
-    toType: ShiftType,
-    options?: {
-      scheduleRows?: ScheduleRow[];
-    }
-  ) => {
-    if (!sourceDoctorId) return null;
-
-    const scheduleRows = options?.scheduleRows ?? schedule;
-    const simulatedRows = cloneSchedule(scheduleRows);
-    const fromRow = simulatedRows.find((row) => row.day === fromDay);
-    const toRow = simulatedRows.find((row) => row.day === toDay);
-    if (!fromRow || !toRow) {
-      return "対象日のシフトが見つかりません";
-    }
-
-    const fromField = fromType === "day" ? "day_shift" : "night_shift";
-    const toField = toType === "day" ? "day_shift" : "night_shift";
-    const targetDoctorId = getShiftDoctorIdFromRow(toRow, toType);
-
-    fromRow[fromField] = targetDoctorId;
-    toRow[toField] = sourceDoctorId;
-
-    const messages: string[] = [];
-    const sourceMessage = getPlacementConstraintMessage(sourceDoctorId, toDay, toType, {
-      scheduleRows: simulatedRows,
-      ignoreShiftKeys: new Set<string>([getShiftKey(toDay, toType)]),
-    });
-
-    if (sourceMessage) {
-      messages.push(formatConstraintForToast(sourceDoctorId, sourceMessage));
-    }
-
-    if (targetDoctorId && targetDoctorId !== sourceDoctorId) {
-      const targetMessage = getPlacementConstraintMessage(targetDoctorId, fromDay, fromType, {
-        scheduleRows: simulatedRows,
-        ignoreShiftKeys: new Set<string>([getShiftKey(fromDay, fromType)]),
-      });
-
-      if (targetMessage) {
-        messages.push(formatConstraintForToast(targetDoctorId, targetMessage));
-      }
-    }
-
-    if (messages.length === 0) return null;
-    return Array.from(new Set(messages)).join("\n");
-  };
-
-  const validateScheduleViolations = (scheduleRows: ScheduleRow[] = schedule) => {
-    const messages = new Set<string>();
-
-    // 空シフトの検出
-    const emptyNightDays: number[] = [];
-    const emptyDayDays: number[] = [];
-    scheduleRows.forEach((row) => {
-      if (!row.night_shift) emptyNightDays.push(row.day);
-      if (!row.day_shift && row.is_sunhol) emptyDayDays.push(row.day);
-    });
-    if (emptyNightDays.length > 0) {
-      messages.add(`当直が未定の日があります: ${emptyNightDays.map((d) => `${d}日`).join("、")}`);
-    }
-    if (emptyDayDays.length > 0) {
-      messages.add(`日直が未定の日（日曜・祝日）があります: ${emptyDayDays.map((d) => `${d}日`).join("、")}`);
-    }
-
-    // ハード制約違反の検出
-    scheduleRows.forEach((row) => {
-      (["day", "night"] as const).forEach((shiftType) => {
-        const doctorId = getShiftDoctorIdFromRow(row, shiftType);
-        if (!doctorId) return;
-
-        const constraintMessage = getPlacementConstraintMessage(doctorId, row.day, shiftType, {
-          scheduleRows,
-          ignoreShiftKeys: new Set<string>([getShiftKey(row.day, shiftType)]),
-          respectOverrideMode: false,
-        });
-
-        if (!constraintMessage) return;
-        messages.add(formatConstraintForToast(doctorId, constraintMessage));
-      });
-    });
-
-    return Array.from(messages);
-  };
+  // --- スケジュールミューテーション ---
 
   const buildAssignSchedule = (day: number, shiftType: ShiftType, doctorId: string): ScheduleMutationResult => {
     const next = cloneSchedule(schedule);
     const targetRow = next.find((row) => row.day === day);
     if (!targetRow) {
-      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
     const targetField = shiftType === "day" ? "day_shift" : "night_shift";
@@ -552,14 +183,14 @@ export function useScheduleDnd({
     }
 
     if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) {
-      return { nextSchedule: null, errorMessage: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u79fb\u52d5\u3067\u304d\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
     }
 
     const next = cloneSchedule(schedule);
     const fromRow = next.find((row) => row.day === fromDay);
     const toRow = next.find((row) => row.day === toDay);
     if (!fromRow || !toRow) {
-      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
     const fromField = fromType === "day" ? "day_shift" : "night_shift";
@@ -567,7 +198,7 @@ export function useScheduleDnd({
     const fromDoctorId = fromRow[fromField] ?? null;
     const toDoctorId = toRow[toField] ?? null;
     if (!fromDoctorId) {
-      return { nextSchedule: null, errorMessage: "\u5165\u308c\u66ff\u3048\u5143\u306b\u533b\u5e2b\u304c\u5165\u3063\u3066\u3044\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "入れ替え元に医師が入っていません" };
     }
 
     const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, fromType, toDay, toType, {
@@ -584,13 +215,13 @@ export function useScheduleDnd({
 
   const buildClearSchedule = (day: number, shiftType: ShiftType): ScheduleMutationResult => {
     if (isShiftLocked(day, shiftType)) {
-      return { nextSchedule: null, errorMessage: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u89e3\u9664\u3067\u304d\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "ロック済みの枠は解除できません" };
     }
 
     const next = cloneSchedule(schedule);
     const row = next.find((entry) => entry.day === day);
     if (!row) {
-      return { nextSchedule: null, errorMessage: "\u5bfe\u8c61\u65e5\u306e\u30b7\u30d5\u30c8\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093" };
+      return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
     const currentDoctorId = shiftType === "day" ? row.day_shift ?? null : row.night_shift ?? null;
@@ -603,6 +234,8 @@ export function useScheduleDnd({
 
     return { nextSchedule: next, errorMessage: null };
   };
+
+  // --- ドラッグ状態管理 ---
 
   const clearHoverState = () => {
     setInvalidHoverShiftKey(null);
@@ -669,11 +302,11 @@ export function useScheduleDnd({
     isHolidayLike: boolean
   ): DropFeedback => {
     if (locked) {
-      return { message: "\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093", dropEffect: "none" };
+      return { message: "ロック済みの枠には配置できません", dropEffect: "none" };
     }
 
     if (shiftType === "day" && !isHolidayLike) {
-      return { message: "\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093", dropEffect: "none" };
+      return { message: "平日の日直には配置できません", dropEffect: "none" };
     }
 
     if (source.sourceType === "list") {
@@ -690,6 +323,8 @@ export function useScheduleDnd({
     const message = getSwapConstraintMessage(source.doctorId, source.day, source.shiftType, day, shiftType);
     return { message, dropEffect: message ? "none" : "move" };
   };
+
+  // --- タッチドラッグ ---
 
   const beginTouchDrag = (source: ActiveDragSource, touch: TouchPoint) => {
     touchDragRef.current = {
@@ -725,7 +360,10 @@ export function useScheduleDnd({
     if (targetKind !== "shift") return null;
 
     const day = Number(container.dataset.day);
-    const shiftType = container.dataset.shiftType === "day" || container.dataset.shiftType === "night" ? container.dataset.shiftType : null;
+    const shiftType =
+      container.dataset.shiftType === "day" || container.dataset.shiftType === "night"
+        ? container.dataset.shiftType
+        : null;
     if (!Number.isFinite(day) || !shiftType) return null;
 
     return {
@@ -766,6 +404,8 @@ export function useScheduleDnd({
     setHoverErrorMessage(null);
   };
 
+  // --- 選択・スワップ操作 ---
+
   const selectManualDoctor = (doctorId: string) => {
     clearDragState();
     setSwapSource(null);
@@ -798,6 +438,8 @@ export function useScheduleDnd({
     setSelectedListSelection(null);
   };
 
+  // --- イベントハンドラ ---
+
   const handleDisabledDayDragOver = (event: DragEvent<HTMLDivElement>, day: number) => {
     const activeSource = getActiveDragSource();
     if (!activeSource) return;
@@ -805,7 +447,7 @@ export function useScheduleDnd({
     event.preventDefault();
     event.dataTransfer.dropEffect = "none";
     setInvalidHoverShiftKey(getShiftKey(day, "day"));
-    setHoverErrorMessage("\u5e73\u65e5\u306e\u65e5\u76f4\u306b\u306f\u914d\u7f6e\u3067\u304d\u307e\u305b\u3093");
+    setHoverErrorMessage("平日の日直には配置できません");
   };
 
   const handleDisabledDayDragLeave = (day: number) => {
@@ -935,13 +577,13 @@ export function useScheduleDnd({
 
     if (!swapSource) {
       if (locked) {
-        showToast("\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u307e\u305b\u3093");
+        showToast("ロック済みの枠は入れ替え元にできません");
         return;
       }
 
       const doctorId = getScheduleDoctorId(day, shiftType);
       if (!doctorId) {
-        showToast("\u5165\u308c\u66ff\u3048\u5143\u306b\u3059\u308b\u67a0\u3092\u5148\u306b\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044");
+        showToast("入れ替え元にする枠を先に選択してください");
         return;
       }
 
@@ -989,13 +631,13 @@ export function useScheduleDnd({
 
     if (!swapSource) {
       if (locked) {
-        showToast("\u30ed\u30c3\u30af\u6e08\u307f\u306e\u67a0\u306f\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u307e\u305b\u3093");
+        showToast("ロック済みの枠は入れ替え元にできません");
         return;
       }
 
       const doctorId = getScheduleDoctorId(day, shiftType);
       if (!doctorId) {
-        showToast("\u5165\u308c\u66ff\u3048\u5143\u306b\u3067\u304d\u308b\u533b\u5e2b\u5165\u308a\u67a0\u3092\u9078\u629e\u3057\u3066\u304f\u3060\u3055\u3044");
+        showToast("入れ替えできる医師入り枠を選択してください");
         return;
       }
 
@@ -1222,6 +864,8 @@ export function useScheduleDnd({
     }
   };
 
+  // --- ロック管理 ---
+
   const toggleShiftLock = (day: number, shiftType: ShiftType) => {
     const doctorId = getScheduleDoctorId(day, shiftType);
     if (!doctorId) return;
@@ -1237,12 +881,10 @@ export function useScheduleDnd({
 
   const handleLockAll = () => {
     const next = new Set<string>();
-
     schedule.forEach((row) => {
       if (row.day_shift) next.add(getShiftKey(row.day, "day"));
       if (row.night_shift) next.add(getShiftKey(row.day, "night"));
     });
-
     setLockedShiftKeys(next);
   };
 
@@ -1268,6 +910,8 @@ export function useScheduleDnd({
         };
       })
       .filter((item): item is LockedShiftPayload => item !== null);
+
+  // --- エフェクト ---
 
   useEffect(() => {
     setLockedShiftKeys(new Set());
@@ -1365,16 +1009,3 @@ export function useScheduleDnd({
     validateScheduleViolations,
   };
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
