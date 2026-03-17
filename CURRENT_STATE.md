@@ -33,17 +33,28 @@
 
 ---
 
-### 【次】Task2：V1.1新機能（出勤可能人数の可視化）
+### 【次】Task2：保存時の警告UX
+
+**目的：** 既存シフトの上書きやスコアへの影響を事前に伝え、意図しないデータ破壊を防ぐ。
 
 | # | 内容 | スコープ | 状態 |
 |---|------|---------|------|
-| 2-1 | `availability_service.py` 新設（日付ごとの出勤可能人数算出） | `backend/services/` | 未着手 |
-| 2-2 | APIレスポンスに `availability_summary` を追加 | `backend/routers/` | 未着手 |
-| 2-3 | フロントの日付セルに空き枠数バッジをレンダリング | `src/app/components/` | 未着手 |
+| 2-1 | 保存時に「その月に登録済みシフトがある場合」上書き確認ポップアップを表示 | `src/app/hooks/useScheduleApi.ts` | 未着手 |
+| 2-2 | 保存時に「スコア計算に影響が出る」旨の警告を表示 | `src/app/hooks/useScheduleApi.ts` | 未着手 |
 
 ---
 
-### 【その次】Task3：AI診断機能（制約競合の可視化）
+### 【その次】Task3：V1.1新機能（出勤可能人数の可視化）
+
+| # | 内容 | スコープ | 状態 |
+|---|------|---------|------|
+| 3-1 | `availability_service.py` 新設（日付ごとの出勤可能人数算出） | `backend/services/` | 未着手 |
+| 3-2 | APIレスポンスに `availability_summary` を追加 | `backend/routers/` | 未着手 |
+| 3-3 | フロントの日付セルに空き枠数バッジをレンダリング | `src/app/components/` | 未着手 |
+
+---
+
+### 【後々】Task4：AI診断機能（制約競合の可視化）
 
 **目的：** 「解なし」エラーを「A先生とB先生の希望がぶつかっています」という具体的なアドバイスに変える。
 
@@ -54,7 +65,7 @@
 
 ---
 
-### 【後回し】Task4：リファクタリングPhase2〜5
+### 【後回し】Task5：リファクタリングPhase2〜5
 
 - Phase2: 医師更新ロジックの重複排除（Admin/Public）
 - Phase3: `page.tsx`, `useScheduleDnd.ts` のHook分割
