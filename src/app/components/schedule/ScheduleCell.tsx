@@ -103,6 +103,7 @@ export default function ScheduleCell({
   const isManualHoliday = manualHolidaySetInMonth.has(ymd);
   const isHolidayLike = Boolean(row.is_sunhol ?? row.is_holiday) || isSun || isAutoHoliday || isManualHoliday;
   const isDayShiftEnabled = isHolidayLike;
+  const isCombined = isHolidayLike && row.day_shift != null && row.day_shift === row.night_shift;
   const dayLocked = isShiftLocked(row.day, "day");
   const nightLocked = isShiftLocked(row.day, "night");
   const dayShiftKey = `${row.day}_day`;
@@ -255,7 +256,14 @@ export default function ScheduleCell({
             className={getDoctorBadgeClass(doctorId, shiftType, locked)}
             title="クリックでハイライト / ドラッグで移動"
           >
-            {getDoctorName(doctorId)}
+            {isCombined && shiftType === "day" ? (
+              <span className="flex items-center gap-0.5">
+                <span className="rounded bg-purple-200 px-[2px] text-[7px] font-bold text-purple-800 sm:text-[8px]">日当直</span>
+                {getDoctorName(doctorId)}
+              </span>
+            ) : (
+              getDoctorName(doctorId)
+            )}
           </button>
         ) : (
           <span className="min-w-0 flex-1 text-[7px] text-gray-400 sm:text-[9px]">-</span>

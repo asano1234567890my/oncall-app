@@ -9,11 +9,12 @@ export type WeightChangeSummary = {
 };
 
 export const weightInputs = [
-  { key: "gap5", label: "5日間隔", min: 0, max: 200, step: 5, hint: "勤務間隔" },
-  { key: "soft_unavailable", label: "忌避日のソフト回避", min: 0, max: 200, step: 5, hint: "希望日の尊重" },
+  { key: "gap5", label: "間隔ルール+1日のペナルティ", min: 0, max: 200, step: 5, hint: "勤務間隔ルールの直上を抑制" },
+  { key: "soft_unavailable", label: "不可日の回避優先度", min: 0, max: 200, step: 5, hint: "不可日を守れない場合の回避強度" },
   { key: "sat_consec", label: "2か月連続土曜回避", min: 0, max: 200, step: 5, hint: "連続土曜抑制" },
+  { key: "sat_month_fairness", label: "同月の土曜回数平準化", min: 0, max: 200, step: 5, hint: "土曜回数の均等化" },
   { key: "weekend_hol_3rd", label: "土日祝合算3回目ペナルティ", min: 0, max: 200, step: 5, hint: "土日祝回数抑制" },
-  { key: "gap6", label: "6日間隔", min: 0, max: 200, step: 5, hint: "余裕を持つ" },
+  { key: "gap6", label: "間隔ルール+2日のペナルティ", min: 0, max: 200, step: 5, hint: "より余裕のある間隔を促進" },
   { key: "month_fairness", label: "同月のスコア平準化", min: 0, max: 200, step: 5, hint: "同月の偏り抑制" },
   { key: "target", label: "目標スコアへの近似度", min: 0, max: 200, step: 5, hint: "個別目標寄せ" },
   { key: "score_balance", label: "過去数か月のスコア平準化", min: 0, max: 200, step: 5, hint: "負担バランス" },
@@ -28,6 +29,74 @@ export const weightInputs = [
   step: number;
   hint: string;
 }>;
+
+export type WeightMeta = {
+  label: string;
+  hint: string;
+  inactive: boolean;
+  inactiveReason?: string;
+};
+
+export function getWeightMeta(
+  key: keyof ObjectiveWeights,
+  base: { label: string; hint: string },
+  hardConstraints: HardConstraints
+): WeightMeta {
+  const intervalDays = hardConstraints.interval_days ?? 4;
+  const base_ = intervalDays > 0 ? intervalDays : 4;
+
+  switch (key) {
+    case "gap5":
+      return {
+        label: `勤務間隔ルール+1日（${base_ + 1}日間隔）のペナルティ`,
+        hint: "ハード制約の間隔直上をソフト抑制",
+        inactive: false,
+      };
+    case "gap6":
+      return {
+        label: `勤務間隔ルール+2日（${base_ + 2}日間隔）のペナルティ`,
+        hint: "より余裕のある間隔を促進",
+        inactive: false,
+      };
+    case "soft_unavailable": {
+      const inactive = hardConstraints.respect_unavailable_days !== false;
+      return {
+        label: base.label,
+        hint: base.hint,
+        inactive,
+        inactiveReason: inactive
+          ? "「不可日を絶対守る」がONのため、ハード制約として強制されています"
+          : undefined,
+      };
+    }
+    case "weekend_hol_3rd": {
+      const cap = hardConstraints.max_weekend_holiday_works;
+      const inactive = typeof cap === "number" && cap > 0 && cap <= 2;
+      return {
+        label: base.label,
+        hint: base.hint,
+        inactive,
+        inactiveReason: inactive
+          ? `土日祝合算上限が${cap}回（ハード制約）のため、3回目に到達できません`
+          : undefined,
+      };
+    }
+    case "sat_month_fairness": {
+      const cap = hardConstraints.max_saturday_nights;
+      const inactive = typeof cap === "number" && cap === 1;
+      return {
+        label: base.label,
+        hint: base.hint,
+        inactive,
+        inactiveReason: inactive
+          ? "土曜夜間上限が1回のため、月内ギャップは常に1（定数）で最適化に影響しません"
+          : undefined,
+      };
+    }
+    default:
+      return { label: base.label, hint: base.hint, inactive: false };
+  }
+}
 
 export const hardConstraintNumberInputs = [
   { key: "interval_days", label: "勤務間隔ルール", min: 0, max: 10, step: 1, unit: "日", hint: "0でOFF / 既定4" },
@@ -79,14 +148,9 @@ export const hardConstraintNumberInputs = [
 
 export const hardConstraintToggleInputs = [
   {
-    key: "prevent_sunhol_consecutive",
-    label: "日祝の昼夜連続勤務を禁止",
-    hint: "ON で日祝の日直と当直の連続勤務をハード制約として禁止します。",
-  },
-  {
     key: "respect_unavailable_days",
-    label: "医師の休み希望を絶対守る",
-    hint: "ON で不可日・不可曜日を厳守し、OFF で optimizer 側の緩和余地を残します。",
+    label: "不可日を絶対守る",
+    hint: "ON で不可日・不可曜日をハード制約として厳守します。OFF にすると「不可日の回避優先度」の重みに応じてソフト回避になります。",
   },
 ] as const satisfies ReadonlyArray<{
   key: keyof HardConstraints;

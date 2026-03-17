@@ -225,6 +225,7 @@ export function useScheduleApi({
     max_sunhol_works: sanitizeConstraintValue(hardConstraints.max_sunhol_works),
     prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
     respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
+    holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
   });
 
   const formatPreviousMonthShiftsForOptimize = () => {
@@ -262,6 +263,7 @@ export function useScheduleApi({
       commitSchedule(clearedSchedule);
       setScores({});
       setSaveMessage("画面上のシフトをクリアしました（※まだ保存されていません）");
+      setTimeout(() => setSaveMessage(""), 3000);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "画面上のシフトクリアに失敗しました");
     } finally {
@@ -389,6 +391,7 @@ export function useScheduleApi({
       }
 
       setSaveMessage(getResponseMessage(payload, "保存しました"));
+      setTimeout(() => setSaveMessage(""), 3000);
       markScheduleClean(schedule);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "保存に失敗しました");

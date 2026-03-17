@@ -68,8 +68,10 @@ export function useOptimizerConfig({
       });
       if (!res.ok) throw new Error("保存に失敗しました");
       setOptimizerSaveMessage("保存しました");
+      setTimeout(() => setOptimizerSaveMessage(""), 3000);
     } catch {
       setOptimizerSaveMessage("保存に失敗しました");
+      setTimeout(() => setOptimizerSaveMessage(""), 4000);
     } finally {
       setIsSavingOptimizerConfig(false);
     }

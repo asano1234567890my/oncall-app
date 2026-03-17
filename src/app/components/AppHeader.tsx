@@ -6,23 +6,23 @@ import { usePathname, useRouter } from "next/navigation";
 type Crumb = { href: string; label: string };
 
 function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === "/") return [{ href: "/", label: "created by yoneyama" }];
+  if (pathname === "/") return [{ href: "/", label: "ダッシュボード" }];
 
   if (pathname.startsWith("/admin/doctors")) {
     return [
-      { href: "/", label: "当直表作成" },
+      { href: "/", label: "丸投げ当直表" },
       { href: "/admin/doctors", label: "医師管理" },
     ];
   }
 
   if (pathname.startsWith("/view")) {
     return [
-      { href: "/", label: "当直表作成" },
+      { href: "/", label: "丸投げ当直表" },
       { href: "/view", label: "当直表を見る" },
     ];
   }
 
-  return [{ href: "/", label: "当直表作成" }];
+  return [{ href: "/", label: "丸投げ当直表" }];
 }
 
 export default function AppHeader() {
@@ -41,7 +41,7 @@ export default function AppHeader() {
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="font-extrabold text-gray-800 whitespace-nowrap">
-              🏥 oncall-app 当直表作成 ver 1.0
+              🏥 丸投げ当直表 v1.1
             </div>
 
             <button
@@ -70,7 +70,7 @@ export default function AppHeader() {
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="font-extrabold text-gray-800 whitespace-nowrap">
-                🏥 oncall-app 当直表作成 ver 1.0
+                🏥 丸投げ当直表 v1.1
               </div>
 
               <nav className="hidden sm:flex items-center gap-2 text-xs text-gray-500 min-w-0">
@@ -106,7 +106,7 @@ export default function AppHeader() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  当直表作成
+                  丸投げ当直表
                 </Link>
                 <Link
                   href="/admin/doctors"

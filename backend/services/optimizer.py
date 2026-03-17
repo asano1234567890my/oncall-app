@@ -14,6 +14,7 @@ import random
 class ObjectiveWeights:
     # Objective weights. Larger values penalize the corresponding violations more strongly.
     month_fairness: int = 100
+    sat_month_fairness: int = 100
     past_sat_gap: int = 10
     past_sunhol_gap: int = 5
     gap5: int = 100
@@ -35,6 +36,7 @@ class OnCallOptimizer:
     W_SAT_NIGHT = 15      # 1.5
     W_SUNHOL_DAY = 5      # 0.5
     W_SUNHOL_NIGHT = 10   # 1.0
+    W_DAY_NIGHT = 15      # 1.5 (combined 日当直 on sun/holiday)
 
     def __init__(
         self,
@@ -111,6 +113,7 @@ class OnCallOptimizer:
             past_sunhol_gap=int(ow.get("past_sunhol_gap", 5)),
             gap5=int(ow.get("gap5", 100)),
             gap6=int(ow.get("gap6", 50)),
+            sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
             sat_consec=int(ow.get("sat_consec", 80)),
             score_balance=int(ow.get("score_balance", 30)),
             target=int(ow.get("target", 10)),
@@ -412,7 +415,9 @@ class OnCallOptimizer:
     def build_model(self) -> None:
         doctors = range(self.num_doctors)
         days = range(1, self.num_days + 1)
-        prevent_sunhol_consecutive = not self._is_explicitly_disabled(
+        holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
+        combined_mode = holiday_shift_mode == "combined"
+        prevent_sunhol_consecutive = not combined_mode and not self._is_explicitly_disabled(
             self.hard_constraints.get("prevent_sunhol_consecutive", True)
         )
         respect_unavailable_days = not self._is_explicitly_disabled(
@@ -480,7 +485,7 @@ class OnCallOptimizer:
         # 2) slot fulfillment
         for day in days:
             self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
-            if self.is_sunday_or_holiday(day):
+            if self.is_sunday_or_holiday(day) and not combined_mode:
                 self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
             else:
                 for d in doctors:
@@ -518,22 +523,57 @@ class OnCallOptimizer:
             if shift == "night":
                 self.model.Add(self.night_shifts[(d, day)] == 1)
             else:
-                self.model.Add(self.day_shifts[(d, day)] == 1)
+                # In combined mode, "day" locks on sun/holiday are treated as "night" (combined)
+                if combined_mode and self.is_sunday_or_holiday(day):
+                    self.model.Add(self.night_shifts[(d, day)] == 1)
+                else:
+                    self.model.Add(self.day_shifts[(d, day)] == 1)
 
         # === apply unavailable constraints ===
         soft_unavail_penalties = []
 
         # 4) hard/soft: apply date-based unavailable constraints
-        if respect_unavailable_days:
-            for d, items in self.unavailable.items():
-                for item in items:
-                    normalized = self._normalize_unavailable_entry(item)
-                    if normalized is None:
-                        continue
+        # When respect_unavailable_days=False, all entries become soft penalties
+        # (the soft_unavailable weight then controls how strongly they are respected)
+        for d, items in self.unavailable.items():
+            for item in items:
+                normalized = self._normalize_unavailable_entry(item)
+                if normalized is None:
+                    continue
 
-                    day = normalized["date"]
-                    shift_type = normalized["target_shift"]
-                    is_soft = normalized["is_soft_penalty"]
+                day = normalized["date"]
+                shift_type = normalized["target_shift"]
+                # Force soft when global respect flag is off
+                is_soft = normalized["is_soft_penalty"] or not respect_unavailable_days
+
+                vars_to_constrain = []
+                if shift_type in ["day", "all"]:
+                    vars_to_constrain.append(self.day_shifts[(d, day)])
+                if shift_type in ["night", "all"]:
+                    vars_to_constrain.append(self.night_shifts[(d, day)])
+
+                for var in vars_to_constrain:
+                    if is_soft:
+                        p_var = self.model.NewBoolVar(f"soft_unavail_d{d}_day{day}_{shift_type}")
+                        self.model.Add(p_var == var)
+                        soft_unavail_penalties.append(p_var)
+                    else:
+                        self.model.Add(var == 0)
+
+        # 5) fixed unavailable weekdays
+        for d, items in self.fixed_unavailable_weekdays.items():
+            for item in items:
+                normalized = self._normalize_fixed_weekday_entry(item)
+                if normalized is None:
+                    continue
+
+                target_dow = normalized["day_of_week"]
+                shift_type = normalized["target_shift"]
+                is_soft = normalized["is_soft_penalty"] or not respect_unavailable_days
+
+                for day in days:
+                    if not self._matches_fixed_unavailable_weekday(day, target_dow):
+                        continue
 
                     vars_to_constrain = []
                     if shift_type in ["day", "all"]:
@@ -543,40 +583,11 @@ class OnCallOptimizer:
 
                     for var in vars_to_constrain:
                         if is_soft:
-                            p_var = self.model.NewBoolVar(f"soft_unavail_d{d}_day{day}_{shift_type}")
+                            p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
                             self.model.Add(p_var == var)
                             soft_unavail_penalties.append(p_var)
                         else:
                             self.model.Add(var == 0)
-
-            # 5) fixed unavailable weekdays
-            for d, items in self.fixed_unavailable_weekdays.items():
-                for item in items:
-                    normalized = self._normalize_fixed_weekday_entry(item)
-                    if normalized is None:
-                        continue
-
-                    target_dow = normalized["day_of_week"]
-                    shift_type = normalized["target_shift"]
-                    is_soft = normalized["is_soft_penalty"]
-
-                    for day in days:
-                        if not self._matches_fixed_unavailable_weekday(day, target_dow):
-                            continue
-
-                        vars_to_constrain = []
-                        if shift_type in ["day", "all"]:
-                            vars_to_constrain.append(self.day_shifts[(d, day)])
-                        if shift_type in ["night", "all"]:
-                            vars_to_constrain.append(self.night_shifts[(d, day)])
-
-                        for var in vars_to_constrain:
-                            if is_soft:
-                                p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
-                                self.model.Add(p_var == var)
-                                soft_unavail_penalties.append(p_var)
-                            else:
-                                self.model.Add(var == 0)
 
         # 7) hard: spacing rule
         if spacing_days is not None:
@@ -629,8 +640,11 @@ class OnCallOptimizer:
             score_expr = 0
             for day in days:
                 if self.is_sunday_or_holiday(day):
-                    score_expr += self.day_shifts[(d, day)] * self.W_SUNHOL_DAY
-                    score_expr += self.night_shifts[(d, day)] * self.W_SUNHOL_NIGHT
+                    if combined_mode:
+                        score_expr += self.night_shifts[(d, day)] * self.W_DAY_NIGHT
+                    else:
+                        score_expr += self.day_shifts[(d, day)] * self.W_SUNHOL_DAY
+                        score_expr += self.night_shifts[(d, day)] * self.W_SUNHOL_NIGHT
                 elif self.is_saturday(day):
                     score_expr += self.night_shifts[(d, day)] * self.W_SAT_NIGHT
                 else:
@@ -650,17 +664,24 @@ class OnCallOptimizer:
 
                 # --- soft constraints ---
 
+        # gap_near / gap_far: penalize shifts that are just above the hard spacing floor
+        # e.g. spacing_days=4 → penalize 5-day gap (just passing) and 6-day gap
+        # If spacing_days is None (disabled), fall back to 5/6
+        _base = spacing_days if spacing_days is not None else 4
+        gap_near = _base + 1
+        gap_far  = _base + 2
+
         gap5_vars = []
         gap6_vars = []
         for d in doctors:
             for day in days:
-                if day + 5 <= self.num_days:
+                if day + gap_near <= self.num_days:
                     gap5_bool = self.model.NewBoolVar(f"gap5_d{d}_day{day}")
-                    self.model.Add(self.work[(d, day)] + self.work[(d, day + 5)] - 1 <= gap5_bool)
+                    self.model.Add(self.work[(d, day)] + self.work[(d, day + gap_near)] - 1 <= gap5_bool)
                     gap5_vars.append(gap5_bool)
-                if day + 6 <= self.num_days:
+                if day + gap_far <= self.num_days:
                     gap6_bool = self.model.NewBoolVar(f"gap6_d{d}_day{day}")
-                    self.model.Add(self.work[(d, day)] + self.work[(d, day + 6)] - 1 <= gap6_bool)
+                    self.model.Add(self.work[(d, day)] + self.work[(d, day + gap_far)] - 1 <= gap6_bool)
                     gap6_vars.append(gap6_bool)
 
         gap5_sum = self.model.NewIntVar(0, 1000, "gap5_sum")
@@ -677,6 +698,21 @@ class OnCallOptimizer:
 
         sat_consec_sum = self.model.NewIntVar(0, 1000, "sat_consec_sum")
         self.model.Add(sat_consec_sum == sum(sat_consec_vars))
+
+        # Soft penalty: reaching the saturday-night hard ceiling (Nth occurrence)
+        # Reuses sat_consec weight to discourage reaching the limit when alternatives exist
+        sat_nth_vars = []
+        if max_saturday_nights is not None and max_saturday_nights > 0:
+            for d in doctors:
+                sat_count_soft = self.model.NewIntVar(0, 10, f"sat_nth_count_d{d}")
+                self.model.Add(sat_count_soft == sum(self.night_shifts[(d, day)] for day in saturdays))
+                is_at_sat_limit = self.model.NewBoolVar(f"sat_at_limit_d{d}")
+                self.model.Add(sat_count_soft >= max_saturday_nights).OnlyEnforceIf(is_at_sat_limit)
+                self.model.Add(sat_count_soft <= max_saturday_nights - 1).OnlyEnforceIf(is_at_sat_limit.Not())
+                sat_nth_vars.append(is_at_sat_limit)
+
+        sat_nth_sum = self.model.NewIntVar(0, 1000, "sat_nth_sum")
+        self.model.Add(sat_nth_sum == sum(sat_nth_vars))
 
         target_penalties = []
         for d in doctors:
@@ -698,15 +734,26 @@ class OnCallOptimizer:
         fairness = self.model.NewIntVar(0, 2000, "fairness")
         self.model.Add(fairness == max_score - min_score)
 
+        sat_month_counts: List[cp_model.IntVar] = []
         sat_totals: List[cp_model.IntVar] = []
         for d in doctors:
             sat_count = self.model.NewIntVar(0, 10, f"sat_count_d{d}")
             self.model.Add(sat_count == sum(self.night_shifts[(d, day)] for day in saturdays))
+            sat_month_counts.append(sat_count)
             base = self._get_past(self.past_sat_counts, d)
             total = self.model.NewIntVar(0, 999, f"sat_total_d{d}")
             self.model.Add(total == sat_count + base)
             sat_totals.append(total)
 
+        # Current-month saturday gap (fairness within this month)
+        sat_month_max = self.model.NewIntVar(0, 10, "sat_month_max")
+        sat_month_min = self.model.NewIntVar(0, 10, "sat_month_min")
+        self.model.AddMaxEquality(sat_month_max, sat_month_counts)
+        self.model.AddMinEquality(sat_month_min, sat_month_counts)
+        sat_month_gap = self.model.NewIntVar(0, 10, "sat_month_gap")
+        self.model.Add(sat_month_gap == sat_month_max - sat_month_min)
+
+        # Cumulative (past + current) saturday gap
         sat_max = self.model.NewIntVar(0, 999, "sat_max")
         sat_min = self.model.NewIntVar(0, 999, "sat_min")
         self.model.AddMaxEquality(sat_max, sat_totals)
@@ -789,12 +836,13 @@ class OnCallOptimizer:
         w = self.objective_weights
         self.model.Minimize(
             w.month_fairness * fairness
+            + w.sat_month_fairness * sat_month_gap
             + w.past_sat_gap * sat_gap
             + w.past_sunhol_gap * sunhol_gap
             + w.sunhol_fairness * sunhol_month_gap
             + w.gap5 * gap5_sum
             + w.gap6 * gap6_sum
-            + w.sat_consec * sat_consec_sum
+            + w.sat_consec * (sat_consec_sum + sat_nth_sum)
             + w.score_balance * score_balance_gap
             + w.target * target_sum
             + w.sunhol_3rd * sunhol_3rd_sum
@@ -805,6 +853,9 @@ class OnCallOptimizer:
         self.min_score = min_score
 
     def solve(self, time_limit_seconds: float = 10.0, random_seed: Optional[int] = None) -> Dict:
+        holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
+        combined_mode = holiday_shift_mode == "combined"
+
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(time_limit_seconds)
         seed = int(random_seed) if random_seed is not None else random.SystemRandom().randint(1, 2**31 - 1)
@@ -827,9 +878,13 @@ class OnCallOptimizer:
                 )
 
                 if self.is_sunday_or_holiday(day):
-                    day_data["day_shift"] = next(
-                        (d for d in range(self.num_doctors) if solver.Value(self.day_shifts[(d, day)])), None
-                    )
+                    if combined_mode:
+                        # Combined mode: same doctor handles both day and night (日当直)
+                        day_data["day_shift"] = day_data["night_shift"]
+                    else:
+                        day_data["day_shift"] = next(
+                            (d for d in range(self.num_doctors) if solver.Value(self.day_shifts[(d, day)])), None
+                        )
                 schedule.append(day_data)
 
             scores = {d: solver.Value(self.doctor_scores[d]) / 10.0 for d in range(self.num_doctors)}

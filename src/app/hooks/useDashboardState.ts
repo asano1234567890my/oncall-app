@@ -205,11 +205,14 @@ export default function useDashboardState() {
     });
   };
 
-  const handleHardConstraintChange = (key: keyof HardConstraints, value: number | boolean) => {
+  const handleHardConstraintChange = (key: keyof HardConstraints, value: number | boolean | string) => {
     setHardConstraints((prev) => {
       const currentValue = prev[key];
       if (typeof currentValue === "boolean") {
         return { ...prev, [key]: Boolean(value) };
+      }
+      if (typeof currentValue === "string" || typeof value === "string") {
+        return { ...prev, [key]: value };
       }
 
       const numericValue = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;

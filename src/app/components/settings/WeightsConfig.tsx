@@ -1,13 +1,14 @@
 "use client";
 
 import StepperNumberInput from "../inputs/StepperNumberInput";
-import type { ObjectiveWeights } from "../../types/dashboard";
+import type { HardConstraints, ObjectiveWeights } from "../../types/dashboard";
 import SettingsModalPortal from "./SettingsModalPortal";
-import { weightInputs } from "./shared";
+import { getWeightMeta, weightInputs } from "./shared";
 
 type WeightsConfigProps = {
   isOpen: boolean;
   objectiveWeights: ObjectiveWeights;
+  hardConstraints: HardConstraints;
   isSaving?: boolean;
   saveMessage?: string;
   onClose: () => void;
@@ -19,6 +20,7 @@ type WeightsConfigProps = {
 export default function WeightsConfig({
   isOpen,
   objectiveWeights,
+  hardConstraints,
   isSaving = false,
   saveMessage = "",
   onClose,
@@ -65,44 +67,83 @@ export default function WeightsConfig({
               <div className="mt-2 text-xs font-bold text-emerald-700 sm:mt-0">{saveMessage}</div>
             )}
           </div>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
-            {weightInputs.map((weight) => (
-              <div key={weight.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-                <div className="mb-3 space-y-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-bold text-gray-800">{weight.label}</div>
-                    <div className="text-[11px] text-gray-500">{weight.hint}</div>
-                  </div>
-                  <div className="flex justify-center">
-                    <StepperNumberInput
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+            <div className="space-y-3">
+              {weightInputs
+                .map((weight) => ({ weight, meta: getWeightMeta(weight.key, weight, hardConstraints) }))
+                .filter(({ meta }) => !meta.inactive)
+                .map(({ weight, meta }) => (
+                  <div key={weight.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                    <div className="mb-3 space-y-1">
+                      <div className="text-sm font-bold text-gray-800">{meta.label}</div>
+                      <div className="text-[11px] text-gray-500">{meta.hint}</div>
+                    </div>
+                    <div className="mb-3 flex justify-center">
+                      <StepperNumberInput
+                        value={objectiveWeights[weight.key]}
+                        onCommit={(value) => onWeightChange(weight.key, value)}
+                        fallbackValue={objectiveWeights[weight.key]}
+                        min={weight.min}
+                        max={weight.max}
+                        step={weight.step}
+                        inputMode="numeric"
+                        className="w-full max-w-xl"
+                        inputClassName="px-3 text-base font-bold"
+                        buttonClassName="h-10 w-10 text-base"
+                      />
+                    </div>
+                    <input
+                      type="range"
                       value={objectiveWeights[weight.key]}
-                      onCommit={(value) => onWeightChange(weight.key, value)}
-                      fallbackValue={objectiveWeights[weight.key]}
+                      onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
                       min={weight.min}
                       max={weight.max}
                       step={weight.step}
-                      inputMode="numeric"
-                      className="w-full max-w-xl"
-                      inputClassName="px-3 text-base font-bold"
-                      buttonClassName="h-10 w-10 text-base"
+                      className="w-full accent-blue-600"
                     />
+                    <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                      <span>{weight.min}</span>
+                      <span>{weight.max}</span>
+                    </div>
                   </div>
+                ))}
+            </div>
+
+            {weightInputs.some(
+              (w) => getWeightMeta(w.key, w, hardConstraints).inactive
+            ) && (
+              <div className="mt-4">
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                  現在のハード制約により無効
                 </div>
-                <input
-                  type="range"
-                  value={objectiveWeights[weight.key]}
-                  onChange={(event) => onWeightChange(weight.key, Number(event.target.value))}
-                  min={weight.min}
-                  max={weight.max}
-                  step={weight.step}
-                  className="w-full accent-blue-600"
-                />
-                <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-                  <span>{weight.min}</span>
-                  <span>{weight.max}</span>
+                <div className="space-y-1">
+                  {weightInputs
+                    .map((weight) => ({ weight, meta: getWeightMeta(weight.key, weight, hardConstraints) }))
+                    .filter(({ meta }) => meta.inactive)
+                    .map(({ weight, meta }) => (
+                      <div
+                        key={weight.key}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 bg-gray-50/50 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-gray-400">{meta.label}</span>
+                            <span className="rounded-full bg-gray-200 px-1.5 py-0.5 text-[9px] font-bold text-gray-400">
+                              無効
+                            </span>
+                          </div>
+                          {meta.inactiveReason && (
+                            <div className="mt-0.5 text-[10px] text-gray-400">{meta.inactiveReason}</div>
+                          )}
+                        </div>
+                        <span className="shrink-0 text-xs font-bold tabular-nums text-gray-400">
+                          {objectiveWeights[weight.key]}
+                        </span>
+                      </div>
+                    ))}
                 </div>
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

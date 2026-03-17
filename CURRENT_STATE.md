@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**Task3（マルチテナント）フロント完了・マイグレーション実行 → 本番デプロイ待ち**
+**V1.1 — 日当直モード + 3バグ修正 + 用語統一 完了。次: テスト・動作確認・本番デプロイ**
 
 ---
 
@@ -174,6 +174,9 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-18 | V1.1バグ修正3件: gap重み動的化・土曜上限ソフトペナルティ・unavailableゲート分離（respect=OFF時にソフト化） |
+| 2026-03-18 | 用語統一: 「忌避日」→「不可日」、`soft_unavailable`ラベル/`respect_unavailable_days`ラベル更新 |
+| 2026-03-18 | 日当直モード実装（`holiday_shift_mode: "combined"\|"split"`）— optimizer/スキーマ/型/UI/表示すべて対応 |
 | 2026-03-17 | Task3完了（マルチテナント認証・JWT・hospital_id分離・フロント認証ガード・全APIにBearer付与） |
 | 2026-03-17 | Task2.6フロント完了（2.6-1〜4: useScheduleConstraints / useNavigationGuard / useDoctorSettings の分離） |
 | 2026-03-17 | Task2.6を新設（巨大ファイル分割リファクタリング・Task3前に実施予定） |

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "oncall-app",
-  description: "当直表作成アプリケーション",
+  title: "丸投げ当直表",
+  description: "医師当直スケジュール自動生成サービス",
 };
 
 export default function RootLayout({

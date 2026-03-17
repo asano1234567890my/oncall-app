@@ -254,6 +254,7 @@ export function useDoctorSettings({
       await Promise.all(tasks);
       const successMessage = "全員の休み希望・スコア設定を保存しました";
       setSaveMessage(successMessage);
+      setTimeout(() => setSaveMessage(""), 3000);
       toast.success(successMessage);
       // fetchDoctors内でcommitted refsも更新される
       await fetchDoctors();

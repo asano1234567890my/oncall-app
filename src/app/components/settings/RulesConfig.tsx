@@ -13,7 +13,7 @@ type RulesConfigProps = {
   onClose: () => void;
   onReset: () => void;
   onSave?: () => void;
-  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean) => void;
+  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
 };
 
 export default function RulesConfig({
@@ -33,7 +33,7 @@ export default function RulesConfig({
           <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
             <div>
               <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
-              <p className="mt-1 text-xs text-gray-500">数値は 0 で OFF、トグルは hard constraint として optimize に送信します。</p>
+              <p className="mt-1 text-xs text-gray-500">数値を 0 にすると制限なし。スケジュール生成時に厳守されます。</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {onSave && (
@@ -67,7 +67,9 @@ export default function RulesConfig({
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {hardConstraintNumberInputs.map((constraint) => {
+              {hardConstraintNumberInputs
+                .filter((c) => !(hardConstraints.holiday_shift_mode === "combined" && c.key === "max_sunhol_days"))
+                .map((constraint) => {
                 const value = typeof hardConstraints[constraint.key] === "number" ? hardConstraints[constraint.key] : 0;
                 return (
                   <label key={constraint.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
@@ -115,10 +117,45 @@ export default function RulesConfig({
                   </div>
                 );
               })}
+
+              {/* 日当直モード */}
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-gray-800">日祝のシフト割り当てモード</div>
+                  <div className="mt-1 text-[11px] text-gray-500">
+                    「別々」= 日直と当直を別の医師が担当 /「日当直」= 同一人物が日直＋当直を兼務（スコア1.5・日祝勤務は1回カウント）
+                  </div>
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => onHardConstraintChange("holiday_shift_mode", "split")}
+                    className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
+                      hardConstraints.holiday_shift_mode !== "combined"
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-gray-200 bg-gray-50 text-gray-500"
+                    }`}
+                  >
+                    別々
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onHardConstraintChange("holiday_shift_mode", "combined")}
+                    className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
+                      hardConstraints.holiday_shift_mode === "combined"
+                        ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                        : "border-gray-200 bg-gray-50 text-gray-500"
+                    }`}
+                  >
+                    日当直
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </SettingsModalPortal>
+
   );
 }

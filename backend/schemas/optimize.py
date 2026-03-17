@@ -59,6 +59,7 @@ class HardConstraints(BaseModel):
     respect_unavailable_days: bool = Field(default=True)
     strict_weekend_hol_max: bool = Field(default=False)
     max_weekend_holiday_works: Optional[int] = Field(default=None, alias="weekend_hol_max_count")
+    holiday_shift_mode: str = Field(default="split")  # "split" or "combined"
 
 
 class OptimizeRequest(BaseModel):

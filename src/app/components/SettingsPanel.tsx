@@ -71,7 +71,7 @@ type GenerationSettingsPanelProps = {
   onTogglePreviousMonthShifts: () => void;
   onClosePreviousMonthShifts: () => void;
   onWeightChange: (key: keyof ObjectiveWeights, value: number) => void;
-  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean) => void;
+  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
   onYearChange: (value: number) => void;
   onMonthChange: (value: number) => void;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
@@ -249,13 +249,14 @@ export function GenerationSettingsPanel({
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-blue-900">制約設定と休日設定</h2>
-          <div className="mt-1 space-y-1 text-sm text-blue-700">
-            <p>生成条件の制約の調整ができます。</p>
-            <p>祝日、各医師の個別希望、固定不可曜日の設定を確認できます。</p>
-            <p>スコア：日直 0.5、当直（日祝+平日） 1.0、土曜日　1.5</p>
+          <div className="mt-1 text-sm text-blue-700">
+            <p>生成条件の調整、個別の休み設定が確認できます。</p>
+            <p className="mt-0.5 text-xs text-blue-500">スコア：日直 0.5　当直 1.0　土曜/日当直 1.5</p>
           </div>
         </div>
-        <div className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{format(displayMonth, "yyyy年M月")}</div>
+        <div className="shrink-0 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">
+          {format(displayMonth, "yyyy年M月")}
+        </div>
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
@@ -337,6 +338,7 @@ export function GenerationSettingsPanel({
       <WeightsConfig
         isOpen={isWeightsOpen}
         objectiveWeights={objectiveWeights}
+        hardConstraints={hardConstraints}
         isSaving={isSavingOptimizerConfig}
         saveMessage={optimizerSaveMessage}
         onClose={onCloseWeights}

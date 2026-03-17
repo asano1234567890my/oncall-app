@@ -69,6 +69,7 @@ export type HardConstraints = {
   max_sunhol_works: number;
   prevent_sunhol_consecutive: boolean;
   respect_unavailable_days: boolean;
+  holiday_shift_mode: "combined" | "split";
 };
 
 export type SwapSource = {
@@ -101,6 +102,7 @@ export type ObjectiveWeights = {
   gap5: number;
   soft_unavailable: number;
   sat_consec: number;
+  sat_month_fairness: number;
   weekend_hol_3rd: number;
   gap6: number;
   month_fairness: number;
@@ -119,12 +121,14 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   max_sunhol_works: 3,
   prevent_sunhol_consecutive: true,
   respect_unavailable_days: true,
+  holiday_shift_mode: "split",
 };
 
 export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   gap5: 100,
   soft_unavailable: 100,
   sat_consec: 80,
+  sat_month_fairness: 100,
   weekend_hol_3rd: 80,
   gap6: 50,
   month_fairness: 50,
