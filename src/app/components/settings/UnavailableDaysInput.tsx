@@ -197,7 +197,7 @@ export default function UnavailableDaysInput({
             disabled={!selectedDoctorId}
             className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
           >
-            対象月を一括トグル
+            全リセット/全選択
           </button>
         </div>
 

@@ -242,8 +242,12 @@ export function GenerationSettingsPanel({
 
       <div className="mb-5 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-blue-900">生成条件と休日設定</h2>
-          <p className="mt-1 text-sm text-blue-700">対象月と不可条件を整えてから未固定枠を再生成します。</p>
+          <h2 className="text-xl font-bold text-blue-900">制約設定と休日設定</h2>
+          <div className="mt-1 space-y-1 text-sm text-blue-700">
+            <p>生成条件の制約の調整ができます。</p>
+            <p>祝日、各医師の個別希望、固定不可曜日の設定を確認できます。</p>
+            <p>スコア：日直 0.5、当直（日祝+平日） 1.0、土曜日　1.5</p>
+          </div>
         </div>
         <div className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-bold text-blue-700">{format(displayMonth, "yyyy年M月")}</div>
       </div>
@@ -252,7 +256,7 @@ export function GenerationSettingsPanel({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-sm font-bold text-gray-800">最適化サマリー</div>
-            <div className="text-xs text-gray-500">スコア帯、重み、ハード制約の状態をここで確認できます。</div>
+            <div className="text-xs text-gray-500">全体のスコア範囲、重み(ソフト制約)、ハード制約の状態をここで確認・調整できます。</div>
           </div>
           {weightChanges.isDefault ? (
             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">既定値</span>
