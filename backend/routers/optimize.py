@@ -1,9 +1,12 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from schemas.optimize import OptimizeRequest, OptimizeResponse
@@ -66,12 +69,15 @@ def _normalize_fixed_weekday_item(item: Any) -> Optional[Dict[str, Any]]:
 
 
 @router.post("/", response_model=OptimizeResponse)
-async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get_db)):
+async def generate_schedule(
+    req: OptimizeRequest,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     try:
-        # Optimize targets active doctors only. Frontend sends num_doctors for the active set.
         result = await db.execute(
             select(Doctor)
-            .where(Doctor.is_active.is_(True))
+            .where(Doctor.hospital_id == hospital_id, Doctor.is_active.is_(True))
             .order_by(Doctor.id)
         )
         doctors = result.scalars().all()
@@ -106,6 +112,7 @@ async def generate_schedule(req: OptimizeRequest, db: AsyncSession = Depends(get
 
         historical_past_total_scores = await build_past_total_scores(
             db,
+            hospital_id=hospital_id,
             doctor_ids=[doctor.id for doctor in doctors],
             target_year=req.year,
             target_month=req.month,

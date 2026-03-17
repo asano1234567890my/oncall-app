@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from models.unavailable_day import UnavailableDay
@@ -35,10 +36,14 @@ def _serialize_unavailable_day(unavailable_day: UnavailableDay) -> dict[str, obj
 
 
 @router.get("/")
-async def get_doctors(db: AsyncSession = Depends(get_db)):
+async def get_doctors(
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
+        .where(Doctor.hospital_id == hospital_id)
         .order_by(Doctor.name)
     )
     doctors = result.scalars().all()
@@ -55,51 +60,50 @@ async def get_doctors(db: AsyncSession = Depends(get_db)):
             "access_token": doctor.access_token,
             "is_locked": doctor.is_locked,
             "unavailable_days": [
-                _serialize_unavailable_day(unavailable_day)
-                for unavailable_day in (doctor.unavailable_days or [])
+                _serialize_unavailable_day(d) for d in (doctor.unavailable_days or [])
             ],
         }
         for doctor in doctors
     ]
 
 
-
 @router.patch("/bulk-lock")
 @router.post("/bulk-lock")
 async def bulk_lock_doctors(
-    payload: DoctorBulkLockUpdate, db: AsyncSession = Depends(get_db)
+    payload: DoctorBulkLockUpdate,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
 ):
     try:
-        updated_count = await bulk_set_doctor_lock_state(db, is_locked=payload.is_locked)
+        updated_count = await bulk_set_doctor_lock_state(db, hospital_id=hospital_id, is_locked=payload.is_locked)
     except ValueError as exc:
         await db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SQLAlchemyError as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to update doctor lock state",
-        ) from exc
+        raise HTTPException(status_code=500, detail="Failed to update doctor lock state") from exc
     except Exception as exc:
         await db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail="Unexpected error while updating doctor lock state",
-        ) from exc
+        raise HTTPException(status_code=500, detail="Unexpected error while updating doctor lock state") from exc
 
     return {
-        "message": "\u533b\u5e2b\u306e\u4e00\u62ec\u30ed\u30c3\u30af\u72b6\u614b\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f",
+        "message": "医師の一括ロック状態を更新しました",
         "updated_count": updated_count,
         "is_locked": payload.is_locked,
     }
-@router.get("/{doctor_id}")
-async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
-    doctor_uuid = uuid.UUID(doctor_id)
 
+
+@router.get("/{doctor_id}")
+async def get_doctor(
+    doctor_id: str,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    doctor_uuid = uuid.UUID(doctor_id)
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
-        .where(Doctor.id == doctor_uuid)
+        .where(Doctor.id == doctor_uuid, Doctor.hospital_id == hospital_id)
     )
     doctor = result.scalar_one_or_none()
     if doctor is None:
@@ -116,16 +120,20 @@ async def get_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
         "access_token": doctor.access_token,
         "is_locked": doctor.is_locked,
         "unavailable_days": [
-            _serialize_unavailable_day(unavailable_day)
-            for unavailable_day in (doctor.unavailable_days or [])
+            _serialize_unavailable_day(d) for d in (doctor.unavailable_days or [])
         ],
     }
 
 
 @router.post("/")
-async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
+async def create_doctor(
+    doc: DoctorCreate,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     try:
         new_doc = Doctor(
+            hospital_id=hospital_id,
             name=doc.name,
             experience_years=doc.experience_years,
             is_active=doc.is_active,
@@ -134,17 +142,14 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
             target_score=doc.target_score,
         )
         db.add(new_doc)
-
         await db.commit()
         await db.refresh(new_doc)
-
         return {
-            "message": "\u533b\u5e2b\u3092\u767b\u9332\u3057\u307e\u3057\u305f",
+            "message": "医師を登録しました",
             "id": str(new_doc.id),
             "access_token": new_doc.access_token,
             "is_locked": new_doc.is_locked,
         }
-
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -152,17 +157,17 @@ async def create_doctor(doc: DoctorCreate, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{doctor_id}")
 async def update_doctor(
-    doctor_id: str, doc: DoctorUpdate, db: AsyncSession = Depends(get_db)
+    doctor_id: str,
+    doc: DoctorUpdate,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
 ):
     doctor_uuid = uuid.UUID(doctor_id)
 
-    print(
-        f"DEBUG PUT: doctor_id={doctor_id}, "
-        f"payload={doc.model_dump(exclude_unset=True)}"
-    )
-
     try:
-        result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
+        result = await db.execute(
+            select(Doctor).where(Doctor.id == doctor_uuid, Doctor.hospital_id == hospital_id)
+        )
         doctor = result.scalar_one_or_none()
         if doctor is None:
             raise HTTPException(status_code=404, detail="Doctor not found")
@@ -212,10 +217,7 @@ async def update_doctor(
         fixed_weekday_entries: list[FixedWeekdayEntry] | None = None
         if has_fixed_weekdays:
             fixed_weekday_entries = [
-                FixedWeekdayEntry(
-                    weekday=item.weekday,
-                    target_shift=item.target_shift,
-                )
+                FixedWeekdayEntry(weekday=item.weekday, target_shift=item.target_shift)
                 for item in (doc.fixed_weekdays or [])
             ]
 
@@ -246,7 +248,7 @@ async def update_doctor(
             raise HTTPException(status_code=404, detail="Doctor not found")
 
         return {
-            "message": "\u533b\u5e2b\u60c5\u5831\u3092\u66f4\u65b0\u3057\u307e\u3057\u305f",
+            "message": "医師情報を更新しました",
             "doctor": {
                 "id": str(doctor.id),
                 "name": doctor.name,
@@ -258,8 +260,7 @@ async def update_doctor(
                 "access_token": doctor.access_token,
                 "is_locked": doctor.is_locked,
                 "unavailable_days": [
-                    _serialize_unavailable_day(unavailable_day)
-                    for unavailable_day in (doctor.unavailable_days or [])
+                    _serialize_unavailable_day(d) for d in (doctor.unavailable_days or [])
                 ],
             },
         }
@@ -273,23 +274,35 @@ async def update_doctor(
 
 
 @router.delete("/{doctor_id}")
-async def delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
+async def delete_doctor(
+    doctor_id: str,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     doctor_uuid = uuid.UUID(doctor_id)
-    result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
+    result = await db.execute(
+        select(Doctor).where(Doctor.id == doctor_uuid, Doctor.hospital_id == hospital_id)
+    )
     doctor = result.scalar_one_or_none()
     if doctor is not None:
         doctor.is_active = False
     await db.commit()
-    return {"message": "\u524a\u9664\u3057\u307e\u3057\u305f"}
+    return {"message": "削除しました"}
+
 
 @router.delete("/{doctor_id}/hard")
-async def hard_delete_doctor(doctor_id: str, db: AsyncSession = Depends(get_db)):
+async def hard_delete_doctor(
+    doctor_id: str,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     doctor_uuid = uuid.UUID(doctor_id)
-    result = await db.execute(select(Doctor).where(Doctor.id == doctor_uuid))
+    result = await db.execute(
+        select(Doctor).where(Doctor.id == doctor_uuid, Doctor.hospital_id == hospital_id)
+    )
     doctor = result.scalar_one_or_none()
     if doctor is None:
         raise HTTPException(status_code=404, detail="Doctor not found")
-
     await db.delete(doctor)
     await db.commit()
-    return {"message": "\u7269\u7406\u524a\u9664\u3057\u307e\u3057\u305f"}
+    return {"message": "物理削除しました"}

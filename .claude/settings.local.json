@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"C:/Program Files/PostgreSQL/18/bin/createdb\" -U postgres oncall_dev)",
+      "Bash(xargs git:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git merge:*)",
+      "Bash(wc -l src/app/components/ScheduleBoard.tsx src/app/components/settings/*.tsx src/app/hooks/*.ts backend/services/*.py)"
+    ]
+  }
+}

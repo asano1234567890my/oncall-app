@@ -5,11 +5,12 @@ import os
 import sys
 from logging.config import fileConfig
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 config = context.config
 
@@ -27,19 +28,28 @@ sys.path.insert(0, str(BACKEND_DIR))
 # ------------------------------------------------------------
 # backend/.env から DATABASE_URL を読む
 # ------------------------------------------------------------
-def _normalize_asyncpg_url(url: str) -> str:
+def _normalize_asyncpg_url(url: str) -> tuple[str, bool]:
+    """URLを asyncpg 対応形式に変換し、SSL必要かどうかも返す。"""
     if url.startswith("postgres://"):
-        return "postgresql+asyncpg://" + url[len("postgres://") :]
-    if url.startswith("postgresql://"):
-        return "postgresql+asyncpg://" + url[len("postgresql://") :]
-    return url
+        url = "postgresql+asyncpg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+
+    # asyncpg が解釈できないパラメータを除去し、SSL要否を検出する
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query, keep_blank_values=True)
+    ssl_needed = params.pop("sslmode", [""])[0] in ("require", "verify-ca", "verify-full")
+    params.pop("channel_binding", None)
+    new_query = urlencode({k: v[0] for k, v in params.items()})
+    return urlunparse(parsed._replace(query=new_query)), ssl_needed
 
 
-def load_database_url() -> str:
+def load_database_url() -> tuple[str, bool]:
     # 1) まず環境変数を優先
     url = os.getenv("DATABASE_URL")
     if url:
-        return _normalize_asyncpg_url(url)
+        normalized, ssl = _normalize_asyncpg_url(url)
+        return normalized, ssl
 
     # 2) backend/.env を読む
     try:
@@ -63,7 +73,7 @@ def load_database_url() -> str:
     return _normalize_asyncpg_url(url)
 
 
-database_url = load_database_url()
+database_url, _ssl_required = load_database_url()
 config.set_main_option("sqlalchemy.url", database_url)
 
 # ------------------------------------------------------------
@@ -73,9 +83,10 @@ config.set_main_option("sqlalchemy.url", database_url)
 from core.db import Base  # noqa: E402
 
 # テーブル定義を確実に登録するため、モデルを明示 import
+import models.hospital  # noqa: F401,E402
 import models.doctor  # noqa: F401,E402
 import models.shift  # noqa: F401,E402
-import models.weight_preset  # noqa: F401,E402 
+import models.weight_preset  # noqa: F401,E402
 
 target_metadata = Base.metadata
 
@@ -106,11 +117,12 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    connectable: AsyncEngine = async_engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
+    connect_args: dict = {"ssl": True} if _ssl_required else {}
+    connectable: AsyncEngine = create_async_engine(
+        database_url,
         poolclass=pool.NullPool,
         future=True,
+        connect_args=connect_args,
     )
 
     async with connectable.connect() as async_conn:

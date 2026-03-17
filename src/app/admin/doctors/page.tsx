@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
+import { getAuthHeaders } from "../../hooks/useAuth";
 
 type Doctor = {
   id: string;
@@ -66,7 +67,7 @@ export default function DoctorManagerPage() {
 
   const fetchDoctors = async () => {
     const apiUrl = getApiBase();
-    const response = await fetch(`${apiUrl}/api/doctors`);
+    const response = await fetch(`${apiUrl}/api/doctors`, { headers: getAuthHeaders() });
     if (!response.ok) {
       throw new Error(await readResponseMessage(response, "Failed to fetch doctors"));
     }
@@ -93,7 +94,7 @@ export default function DoctorManagerPage() {
     const apiUrl = getApiBase();
     const response = await fetch(`${apiUrl}/api/doctors`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ name: trimmedName }),
     });
 
@@ -113,7 +114,7 @@ export default function DoctorManagerPage() {
     const apiUrl = getApiBase();
     const response = await fetch(`${apiUrl}/api/doctors/${doctorId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ name: trimmedName }),
     });
 
@@ -131,7 +132,7 @@ export default function DoctorManagerPage() {
     if (!window.confirm("\u3053\u306e\u533b\u5e2b\u3092\u30a2\u30fc\u30ab\u30a4\u30d6\u3057\u3066\u4e00\u89a7\u304b\u3089\u975e\u8868\u793a\u306b\u3057\u307e\u3059\u304b\uff1f")) return;
 
     const apiUrl = getApiBase();
-    const response = await fetch(`${apiUrl}/api/doctors/${doctorId}`, { method: "DELETE" });
+    const response = await fetch(`${apiUrl}/api/doctors/${doctorId}`, { method: "DELETE", headers: getAuthHeaders() });
     if (!response.ok) {
       toast.error(await readResponseMessage(response, "\u30a2\u30fc\u30ab\u30a4\u30d6\u306b\u5931\u6557\u3057\u307e\u3057\u305f"));
       return;
@@ -147,7 +148,7 @@ export default function DoctorManagerPage() {
     try {
       const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ is_active: true }),
       });
 
@@ -186,7 +187,7 @@ export default function DoctorManagerPage() {
     try {
       const response = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ is_locked: !Boolean(doctor.is_locked) }),
       });
 
@@ -218,7 +219,7 @@ export default function DoctorManagerPage() {
     try {
       const response = await fetch(`${apiUrl}/api/doctors/bulk-lock`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ is_locked: isLocked }),
       });
 
@@ -228,7 +229,7 @@ export default function DoctorManagerPage() {
             activeDoctors.map(async (doctor) => {
               const fallbackResponse = await fetch(`${apiUrl}/api/doctors/${doctor.id}`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                 body: JSON.stringify({ is_locked: isLocked }),
               });
 

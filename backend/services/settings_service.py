@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from typing import Any, Dict, Iterable, Optional
 
@@ -29,9 +30,12 @@ def _normalize_holiday_values(values: Iterable[Any]) -> list[str]:
     return sorted(normalized)
 
 
-async def get_custom_holidays(db: AsyncSession, year: int) -> Dict[str, Any]:
+async def get_custom_holidays(db: AsyncSession, hospital_id: uuid.UUID, year: int) -> Dict[str, Any]:
     key = _key_for_year(year)
-    stmt = select(SystemSetting).where(SystemSetting.key == key)
+    stmt = select(SystemSetting).where(
+        SystemSetting.hospital_id == hospital_id,
+        SystemSetting.key == key,
+    )
     res = await db.execute(stmt)
     row: Optional[SystemSetting] = res.scalar_one_or_none()
 
@@ -51,8 +55,11 @@ def _default_optimizer_config() -> Dict[str, Any]:
     return {"score_min": 0.5, "score_max": 4.5, "objective_weights": {}, "hard_constraints": {}}
 
 
-async def get_optimizer_config(db: AsyncSession) -> Dict[str, Any]:
-    stmt = select(SystemSetting).where(SystemSetting.key == OPTIMIZER_CONFIG_KEY)
+async def get_optimizer_config(db: AsyncSession, hospital_id: uuid.UUID) -> Dict[str, Any]:
+    stmt = select(SystemSetting).where(
+        SystemSetting.hospital_id == hospital_id,
+        SystemSetting.key == OPTIMIZER_CONFIG_KEY,
+    )
     res = await db.execute(stmt)
     row: Optional[SystemSetting] = res.scalar_one_or_none()
     if row is None or row.value is None:
@@ -62,37 +69,37 @@ async def get_optimizer_config(db: AsyncSession) -> Dict[str, Any]:
     return result
 
 
-async def upsert_optimizer_config(db: AsyncSession, value: Dict[str, Any]) -> None:
+async def upsert_optimizer_config(db: AsyncSession, hospital_id: uuid.UUID, value: Dict[str, Any]) -> None:
     stmt = insert(SystemSetting).values(
+        hospital_id=hospital_id,
         key=OPTIMIZER_CONFIG_KEY,
         value=value,
         description="Optimizer configuration (score ranges, weights, hard constraints)",
     ).on_conflict_do_update(
-        index_elements=[SystemSetting.key],
+        constraint="uq_system_settings_hospital_key",
         set_={"value": value, "description": "Optimizer configuration (score ranges, weights, hard constraints)"},
     )
     await db.execute(stmt)
     await db.commit()
 
 
-async def upsert_custom_holidays(db: AsyncSession, year: int, value: Dict[str, Any]) -> None:
+async def upsert_custom_holidays(
+    db: AsyncSession, hospital_id: uuid.UUID, year: int, value: Dict[str, Any]
+) -> None:
     key = _key_for_year(year)
 
     payload = {
-        "manual_holidays": _normalize_holiday_values(
-            value.get("manual_holidays", [])
-        ),
-        "ignored_holidays": _normalize_holiday_values(
-            value.get("ignored_holidays", [])
-        ),
+        "manual_holidays": _normalize_holiday_values(value.get("manual_holidays", [])),
+        "ignored_holidays": _normalize_holiday_values(value.get("ignored_holidays", [])),
     }
 
     stmt = insert(SystemSetting).values(
+        hospital_id=hospital_id,
         key=key,
         value=payload,
         description="Custom holidays settings (manual_holidays / ignored_holidays)",
     ).on_conflict_do_update(
-        index_elements=[SystemSetting.key],
+        constraint="uq_system_settings_hospital_key",
         set_={
             "value": payload,
             "description": "Custom holidays settings (manual_holidays / ignored_holidays)",

@@ -4,11 +4,14 @@ import datetime
 from typing import List, Optional
 from uuid import UUID
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from models.shift import ShiftAssignment
@@ -58,6 +61,7 @@ def _normalize_shift_type(raw_shift_type: str) -> str:
 @router.post("/save")
 async def save_schedule(
     req: SaveScheduleRequest,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -70,7 +74,10 @@ async def save_schedule(
 
         if assigned_doctor_ids:
             result = await db.execute(
-                select(Doctor.id).where(Doctor.id.in_(assigned_doctor_ids))
+                select(Doctor.id).where(
+                    Doctor.id.in_(assigned_doctor_ids),
+                    Doctor.hospital_id == hospital_id,
+                )
             )
             existing_doctor_ids = set(result.scalars().all())
             missing_doctor_ids = assigned_doctor_ids - existing_doctor_ids
@@ -85,10 +92,18 @@ async def save_schedule(
 
         start_date, end_date = _month_bounds(req.year, req.month)
 
+        # hospital_id経由でフィルタ（shift_assignmentsはdoctorに紐づく）
+        hospital_doctor_ids = (
+            await db.execute(
+                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
+            )
+        ).scalars().all()
+
         await db.execute(
             delete(ShiftAssignment).where(
                 ShiftAssignment.date >= start_date,
                 ShiftAssignment.date < end_date,
+                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
             )
         )
 
@@ -135,6 +150,7 @@ async def save_schedule(
 async def get_schedule_range(
     start_date: datetime.date,
     end_date: datetime.date,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
     db: AsyncSession = Depends(get_db),
 ):
     if start_date > end_date:
@@ -144,11 +160,18 @@ async def get_schedule_range(
         )
 
     try:
+        hospital_doctor_ids = (
+            await db.execute(
+                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
+            )
+        ).scalars().all()
+
         result = await db.execute(
             select(ShiftAssignment)
             .where(
                 ShiftAssignment.date >= start_date,
                 ShiftAssignment.date <= end_date,
+                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
             )
             .order_by(
                 ShiftAssignment.date,
@@ -174,14 +197,25 @@ async def get_schedule_range(
 
 
 @router.delete("/{year}/{month}")
-async def delete_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
+async def delete_schedule(
+    year: int,
+    month: int,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     """管理者用：指定月のシフトをDBから完全削除する。フロントエンドには非公開。"""
     try:
         start_date, end_date = _month_bounds(year, month)
+        hospital_doctor_ids = (
+            await db.execute(
+                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
+            )
+        ).scalars().all()
         await db.execute(
             delete(ShiftAssignment).where(
                 ShiftAssignment.date >= start_date,
                 ShiftAssignment.date < end_date,
+                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
             )
         )
         await db.commit()
@@ -192,17 +226,28 @@ async def delete_schedule(year: int, month: int, db: AsyncSession = Depends(get_
 
 
 @router.get("/{year}/{month}")
-async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
+async def get_schedule(
+    year: int,
+    month: int,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
     try:
         import calendar as _calendar
 
         start_date, end_date = _month_bounds(year, month)
+        hospital_doctor_ids = (
+            await db.execute(
+                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
+            )
+        ).scalars().all()
 
         result = await db.execute(
             select(ShiftAssignment)
             .where(
                 ShiftAssignment.date >= start_date,
                 ShiftAssignment.date < end_date,
+                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
             )
             .order_by(ShiftAssignment.date)
         )

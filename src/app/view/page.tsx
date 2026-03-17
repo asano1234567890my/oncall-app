@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { domToPng } from "modern-screenshot";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
 import { useHolidays } from "../hooks/useHolidays";
+import { getAuthHeaders } from "../hooks/useAuth";
 import { getDefaultTargetMonth } from "../utils/dateUtils";
 
 type ScheduleRow = {
@@ -109,7 +110,7 @@ export default function ViewSchedulePage() {
 
     const fetchDoctors = async () => {
       try {
-        const response = await fetch(`${API_BASE}/api/doctors/`, { cache: "no-store" });
+        const response = await fetch(`${API_BASE}/api/doctors/`, { cache: "no-store", headers: getAuthHeaders() });
         if (!response.ok) return;
 
         const data: Doctor[] = await response.json();
@@ -138,7 +139,7 @@ export default function ViewSchedulePage() {
       setError("");
 
       try {
-        const response = await fetch(`${API_BASE}/api/schedule/${year}/${month}`, { cache: "no-store" });
+        const response = await fetch(`${API_BASE}/api/schedule/${year}/${month}`, { cache: "no-store", headers: getAuthHeaders() });
         if (!response.ok) {
           throw new Error("failed_to_fetch_schedule");
         }

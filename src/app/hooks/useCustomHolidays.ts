@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getAuthHeaders } from "./useAuth";
 
 export type CustomHolidaysResponse = {
   year: number;
@@ -63,7 +64,7 @@ async function fetchCustomHolidays(year: number): Promise<LoadState> {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     const res = await fetch(`${apiUrl}/api/settings/custom_holidays?year=${year}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...getAuthHeaders() },
     });
 
     if (!res.ok) {
@@ -97,7 +98,7 @@ async function persistCustomHolidays(body: CustomHolidaysPostBody): Promise<Cust
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
   const res = await fetch(`${apiUrl}/api/settings/custom_holidays`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json", ...getAuthHeaders() },
     body: JSON.stringify(body),
   });
 

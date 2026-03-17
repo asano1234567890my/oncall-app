@@ -17,8 +17,8 @@ class Settings(BaseModel):
         "http://127.0.0.1:3000",
     ]
 
-    # 👇 直貼りではなく、.env（環境変数）から安全に読み込む形に戻す！
     database_url: str = os.getenv("DATABASE_URL", "")
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
 
 @lru_cache
 def get_settings() -> Settings:
