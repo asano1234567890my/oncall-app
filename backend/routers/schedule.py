@@ -175,6 +175,7 @@ async def get_schedule_range(
 
 @router.delete("/{year}/{month}")
 async def delete_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
+    """管理者用：指定月のシフトをDBから完全削除する。フロントエンドには非公開。"""
     try:
         start_date, end_date = _month_bounds(year, month)
         await db.execute(
