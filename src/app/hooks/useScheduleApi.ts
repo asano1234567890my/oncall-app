@@ -375,18 +375,28 @@ export function useScheduleApi({
   };
 
   const handleDeleteMonthSchedule = async () => {
-    if (!confirm(`${year}年${month}月の未固定シフトを画面上でクリアします。よろしいですか？`)) return;
+    if (!confirm(`${year}年${month}月のシフトをDBから削除します。よろしいですか？`)) return;
 
     setIsDeletingMonthSchedule(true);
     setError("");
 
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, {
+        method: "DELETE",
+      });
+
+      const payload = await readOptionalJson<MessageResponse>(res);
+      if (!res.ok) {
+        throw new Error(getResponseMessage(payload, "削除に失敗しました"));
+      }
+
       const clearedSchedule = clearUnlockedSchedule(schedule);
       commitSchedule(clearedSchedule);
       setScores({});
-      setSaveMessage("画面上のシフトをクリアしました（※まだ保存されていません）");
+      setSaveMessage(getResponseMessage(payload, "シフトを削除しました"));
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "画面上のシフトクリアに失敗しました");
+      setError(err instanceof Error ? err.message : "削除に失敗しました");
     } finally {
       setIsDeletingMonthSchedule(false);
     }

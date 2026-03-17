@@ -111,60 +111,7 @@ export default function DashboardPage() {
     prevMonthTailDays,
   } = useDashboardState();
 
-  const manualHolidayStorageKey = (y: number, m: number) => `oncall.holidays.manual.${y}-${pad2(m)}`;
-  const overrideHolidayStorageKey = (y: number) => `oncall.holidays.override.${y}`;
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const raw = window.localStorage.getItem(manualHolidayStorageKey(year, month));
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          setHolidays(parsed.map((value) => Number(value)).filter((value) => Number.isFinite(value)));
-        }
-      } else {
-        setHolidays([]);
-      }
-    } catch {
-      // no-op
-    }
-
-    try {
-      const raw = window.localStorage.getItem(overrideHolidayStorageKey(year));
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          const prefix = `${year}-`;
-          setHolidayWorkdayOverrides(new Set(parsed.map(String).filter((value) => value.startsWith(prefix))));
-        }
-      } else {
-        setHolidayWorkdayOverrides(new Set());
-      }
-    } catch {
-      // no-op
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, month]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(manualHolidayStorageKey(year, month), JSON.stringify(holidays));
-    } catch {
-      // no-op
-    }
-  }, [holidays, year, month]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(overrideHolidayStorageKey(year), JSON.stringify(Array.from(holidayWorkdayOverrides)));
-    } catch {
-      // no-op
-    }
-  }, [holidayWorkdayOverrides, year]);
   const markScheduleClean = (rows: ScheduleRow[] = latestScheduleRef.current) => {
     savedScheduleSignatureRef.current = getScheduleSignature(rows);
     dirtyRef.current = false;

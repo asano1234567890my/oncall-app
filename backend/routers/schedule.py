@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from core.db import get_db
 from models.doctor import Doctor
@@ -174,6 +173,23 @@ async def get_schedule_range(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/{year}/{month}")
+async def delete_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
+    try:
+        start_date, end_date = _month_bounds(year, month)
+        await db.execute(
+            delete(ShiftAssignment).where(
+                ShiftAssignment.date >= start_date,
+                ShiftAssignment.date < end_date,
+            )
+        )
+        await db.commit()
+        return {"success": True, "message": f"{year}年{month}月のシフトを削除しました"}
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{year}/{month}")
 async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)):
     try:
@@ -181,7 +197,6 @@ async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)
 
         result = await db.execute(
             select(ShiftAssignment)
-            .options(selectinload(ShiftAssignment.doctor))
             .where(
                 ShiftAssignment.date >= start_date,
                 ShiftAssignment.date < end_date,
@@ -201,9 +216,9 @@ async def get_schedule(year: int, month: int, db: AsyncSession = Depends(get_db)
                 }
 
             if _normalize_shift_type(assignment.shift_type) == "day":
-                formatted_data[day]["day_shift"] = assignment.doctor.name
+                formatted_data[day]["day_shift"] = str(assignment.doctor_id)
             else:
-                formatted_data[day]["night_shift"] = assignment.doctor.name
+                formatted_data[day]["night_shift"] = str(assignment.doctor_id)
 
         return sorted(formatted_data.values(), key=lambda item: item["day"])
 
