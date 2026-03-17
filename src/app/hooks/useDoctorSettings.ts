@@ -2,6 +2,7 @@
 import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { toast } from "react-hot-toast";
 import type { Doctor, FixedUnavailableWeekdayMap, UnavailableDateMap } from "../types/dashboard";
+import { getAuthHeaders } from "./useAuth";
 import {
   filterUnavailableDateEntriesByMonth,
   normalizeFixedUnavailableWeekdayEntries,
@@ -173,7 +174,7 @@ export function useDoctorSettings({
   const fetchDoctors = async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/doctors/`);
+      const res = await fetch(`${apiUrl}/api/doctors/`, { headers: getAuthHeaders() });
 
       if (!res.ok) return;
 
@@ -238,7 +239,7 @@ export function useDoctorSettings({
 
         return fetch(`${apiUrl}/api/doctors/${doc.id}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify(payload),
         }).then(async (res) => {
           const responsePayload = await readOptionalJson<MessageResponse>(res);

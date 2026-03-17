@@ -7,6 +7,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import uuid as _uuid
+
 from models.shift import ShiftAssignment
 from services.holiday_service import get_jp_holidays_for_year
 from services.settings_service import get_custom_holidays
@@ -41,6 +43,7 @@ def _parse_custom_dates(
 async def build_holiday_dates(
     db: AsyncSession,
     *,
+    hospital_id: _uuid.UUID,
     start_date: date,
     end_date: date,
 ) -> set[date]:
@@ -52,7 +55,7 @@ async def build_holiday_dates(
             if start_date <= item.date < end_date
         )
 
-        custom = await get_custom_holidays(db, year)
+        custom = await get_custom_holidays(db, hospital_id, year)
         manual = _parse_custom_dates(
             custom.get("manual_holidays", []),
             start_date=start_date,
@@ -115,6 +118,7 @@ def apply_history_score_baseline(
 async def build_past_total_scores(
     db: AsyncSession,
     *,
+    hospital_id: _uuid.UUID,
     doctor_ids: Iterable[UUID],
     target_year: int,
     target_month: int,
@@ -130,6 +134,7 @@ async def build_past_total_scores(
 
     holiday_dates = await build_holiday_dates(
         db,
+        hospital_id=hospital_id,
         start_date=history_start,
         end_date=target_month_start,
     )

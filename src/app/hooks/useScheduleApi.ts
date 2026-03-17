@@ -15,6 +15,7 @@ import {
   normalizeUnavailableDateEntries,
 } from "../utils/unavailableSettings";
 import { useDoctorSettings } from "./useDoctorSettings";
+import { getAuthHeaders } from "./useAuth";
 
 type UseScheduleApiParams = {
   year: number;
@@ -304,7 +305,7 @@ export function useScheduleApi({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/optimize/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           year,
           month,
@@ -354,7 +355,7 @@ export function useScheduleApi({
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
       // 既存データの確認（2-1 + 2-2）
-      const checkRes = await fetch(`${apiUrl}/api/schedule/${year}/${month}`);
+      const checkRes = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { headers: getAuthHeaders() });
       if (checkRes.ok) {
         const existing: unknown = await checkRes.json();
         if (Array.isArray(existing) && existing.length > 0) {
@@ -368,7 +369,7 @@ export function useScheduleApi({
       setIsSaving(true);
       const res = await fetch(`${apiUrl}/api/schedule/save`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({
           year,
           month,

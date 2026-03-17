@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1開発中 — Task2/2.5/2.6フロント完了・Task2.6-5（backend）またはTask3へ**
+**Task3（マルチテナント）フロント完了・マイグレーション実行 → 本番デプロイ待ち**
 
 ---
 
@@ -91,20 +91,35 @@
 
 ---
 
-### 【その次】Task3：仮保存機能
+### 【完了】Task3：マルチテナント認証（病院ごとのデータ分離）
 
-**目的：** 作業中シフトを下書きとしてDBに保存し、別デバイス・別日でも続きから作業できるようにする。
-
-**DB設計：** `draft_schedules` テーブルを新設（確定データの `shift_assignments` とは完全分離）
+**目的：** 複数病院が同一サーバーを安全に使えるよう、JWT認証＋hospital_id行レベル分離を導入する。
 
 | # | 内容 | スコープ | 状態 |
 |---|------|---------|------|
-| 3-1 | `draft_schedules` テーブル作成・マイグレーション | `backend/models/`, `alembic/` | 未着手 |
-| 3-2 | `POST /api/schedule/draft` `GET /api/schedule/draft/{year}/{month}` を実装 | `backend/routers/` | 未着手 |
-| 3-3 | D&Dビューに「仮保存」ボタンと「仮保存を読み込む」ボタンを追加 | `src/app/components/` | 未着手 |
-| 3-4 | 確定済みシフトをD&Dビューに読み込んで再編集（管理者のみ・警告必須） | `src/app/hooks/useScheduleApi.ts` | 未着手 |
+| 3-1 | `hospitals` テーブル新設・Alembicマイグレーション | `backend/models/hospital.py`, `migrations/` | ✅ 完了 |
+| 3-2 | JWT認証（python-jose HS256）`/api/auth/login` `/api/auth/register` | `backend/core/auth.py`, `backend/services/auth_service.py`, `backend/routers/auth.py` | ✅ 完了 |
+| 3-3 | 全APIエンドポイントに `hospital_id = Depends(get_current_hospital)` を追加 | `backend/routers/doctor.py`, `schedule.py`, `optimize.py`, `settings.py` | ✅ 完了 |
+| 3-4 | `useAuth.ts` 新設（JWT localStorage管理）・`login/page.tsx` 新設 | `src/app/hooks/useAuth.ts`, `src/app/login/page.tsx` | ✅ 完了 |
+| 3-5 | `page.tsx` に認証ガード（未認証→/loginリダイレクト）・ログアウトボタン追加 | `src/app/page.tsx` | ✅ 完了 |
+| 3-6 | 全APIフックに `getAuthHeaders()` (Authorization: Bearer) を追加 | `useScheduleApi.ts`, `useDoctorSettings.ts`, `useOptimizerConfig.ts`, `useCustomHolidays.ts` | ✅ 完了 |
 
-> ⚠️ 3-4は過去スコア計算に影響するため、管理者権限チェックと強い警告を必須とする
+**次にやること：**
+1. Neon devブランチのURL取得 → `.env` の `DATABASE_URL` に設定
+2. `alembic upgrade head` でマイグレーション実行
+3. `.env` に `JWT_SECRET_KEY` を追加（強力なランダム文字列）
+4. バックエンド再起動・動作確認
+5. 本番NeonブランチにもマイグレーションをapplyしてEbina Hospitalのデータを確認
+
+### 【後で】Task4（旧Task3）：仮保存機能
+
+**目的：** 作業中シフトを下書きとしてDBに保存し、別デバイス・別日でも続きから作業できるようにする。
+
+| # | 内容 | 状態 |
+|---|------|------|
+| 4-1 | `draft_schedules` テーブル作成・マイグレーション | 未着手 |
+| 4-2 | `POST/GET /api/schedule/draft` API | 未着手 |
+| 4-3 | 「仮保存」「仮保存を読み込む」ボタン | 未着手 |
 
 ---
 
@@ -159,6 +174,7 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-17 | Task3完了（マルチテナント認証・JWT・hospital_id分離・フロント認証ガード・全APIにBearer付与） |
 | 2026-03-17 | Task2.6フロント完了（2.6-1〜4: useScheduleConstraints / useNavigationGuard / useDoctorSettings の分離） |
 | 2026-03-17 | Task2.6を新設（巨大ファイル分割リファクタリング・Task3前に実施予定） |
 | 2026-03-17 | Task2.5完了（optimizer config DB永続化・スコア/重み/ルール保存ボタン追加） |
@@ -174,5 +190,8 @@
 - フロント: `npm run dev` → `http://localhost:3000`
 - バックエンド: `cd backend && uvicorn main:app --reload` → `http://localhost:8000`
 - 本番DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
-- 開発DB: ローカルPostgreSQL / `DATABASE_URL_DEV` に設定済み（両PC）
-- マイグレーション: `$env:DATABASE_URL="postgresql+asyncpg://postgres:pw@localhost/oncall_dev"; backend/.venv/Scripts/alembic upgrade head`
+- 開発DB: Neon devブランチ（取得後 `.env` の `DATABASE_URL` に設定）
+- マイグレーション: `$env:DATABASE_URL="<dev_branch_url>"; alembic upgrade head`
+- 認証: JWT HS256 / 24h有効 / `JWT_SECRET_KEY` を `.env` に設定必須
+- パスワードハッシュ: `bcrypt` 直接使用（passlib 非対応のため）
+- 既存Ebina HospitalデータはID `a0000000-0000-4000-8000-000000000001`、初期PW: `EbinaHospital2024!`

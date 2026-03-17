@@ -2,17 +2,23 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from core.config import get_settings
-from routers import health, optimize, schedule, doctor, public_doctor # ★追加
+from routers import health, optimize, schedule, doctor, public_doctor
+from routers import auth as auth_router
 import routers.holiday as holiday
 import routers.settings as settings_router
 
 settings = get_settings()
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title=settings.project_name)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# --- 🚀 修正箇所：CORS（通信許可）設定の強化 ---
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -34,14 +40,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# ---------------------------------------------
 
-# ルーターを登録
 app.include_router(health.router)
+app.include_router(auth_router.router)
 app.include_router(optimize.router)
 app.include_router(schedule.router)
 app.include_router(doctor.router)
-app.include_router(public_doctor.router)  # ★追加
+app.include_router(public_doctor.router)
 app.include_router(holiday.router)
 app.include_router(settings_router.router)
 
