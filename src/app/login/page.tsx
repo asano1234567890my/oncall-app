@@ -20,7 +20,7 @@ export default function LoginPage() {
 
     try {
       await login(name, password);
-      router.push("/dashboard");
+      router.push("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました");
     } finally {

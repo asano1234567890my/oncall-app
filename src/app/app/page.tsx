@@ -1,0 +1,439 @@
+// src/app/app/page.tsx — 初心者向けメイン画面
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2, Settings, ChevronRight, X } from "lucide-react";
+import ScheduleBoard from "../components/ScheduleBoard";
+import { DoctorSettingsPanel } from "../components/SettingsPanel";
+import RulesConfig from "../components/settings/RulesConfig";
+import WeightsConfig from "../components/settings/WeightsConfig";
+import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
+import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
+import SettingsModalPortal from "../components/settings/SettingsModalPortal";
+import { useOnCallCore } from "../hooks/useOnCallCore";
+
+type SettingsDrawer = "rules" | "weights" | "doctors" | "holidays" | "previous" | "other" | null;
+
+export default function AppPage() {
+  const core = useOnCallCore();
+  const router = useRouter();
+
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
+
+  // ── 認証ガード ──
+  useEffect(() => {
+    if (!core.isAuthLoading && !core.auth.isAuthenticated) {
+      router.push("/login");
+    }
+  }, [core.auth.isAuthenticated, core.isAuthLoading, router]);
+
+  if (core.isAuthLoading || !core.auth.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  const hasSchedule = core.schedule.length > 0;
+
+  const openDrawer = (drawer: SettingsDrawer) => setActiveDrawer(drawer);
+  const closeDrawer = () => setActiveDrawer(null);
+
+  const previousMonthShiftCount = useMemo(() =>
+    core.prevMonthTailDays.reduce((count, day) => {
+      const d = core.getPreviousMonthShiftDoctorId(day, "day");
+      const n = core.getPreviousMonthShiftDoctorId(day, "night");
+      return count + (d ? 1 : 0) + (n ? 1 : 0);
+    }, 0),
+    [core.prevMonthTailDays, core.getPreviousMonthShiftDoctorId],
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 font-sans">
+      {/* ── ヘッダー ── */}
+      <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+          <span className="text-lg font-extrabold text-gray-800">シフらく</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setIsSettingsOpen(true); setActiveDrawer(null); }}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              <Settings className="h-4 w-4" />
+              設定
+            </button>
+            <span className="hidden text-sm text-gray-400 sm:inline">{core.auth.hospitalName}</span>
+            <button
+              onClick={core.logout}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              ログアウト
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── メインコンテンツ ── */}
+      <main className="mx-auto w-full max-w-5xl px-4 py-6">
+        {!hasSchedule && !core.isLoading ? (
+          /* ── 生成前：ステップガイド ── */
+          <SetupGuide core={core} onOpenSettings={() => { setIsSettingsOpen(true); setActiveDrawer(null); }} />
+        ) : (
+          /* ── 生成後：スケジュール表 ── */
+          <div className="relative">
+            {core.isLoading && (
+              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-white/70 p-4 backdrop-blur-[1px]">
+                <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl md:px-6">
+                  <div className="flex flex-col items-center text-center">
+                    <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
+                    <div className="text-base font-bold text-gray-800 md:text-lg">当直表を自動生成しています</div>
+                    <div className="mt-2 text-sm text-gray-500">完了までそのままお待ちください。</div>
+                    <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                      <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <DoctorSettingsPanel
+              isBulkSavingDoctors={core.isBulkSavingDoctors}
+              activeDoctors={core.activeDoctors}
+              minScoreMap={core.minScoreMap}
+              maxScoreMap={core.maxScoreMap}
+              targetScoreMap={core.targetScoreMap}
+              scoreMin={core.scoreMin}
+              scoreMax={core.scoreMax}
+              onSaveAllDoctorsSettings={core.saveAllDoctorsSettings}
+              onMinScoreChange={core.handleMinScoreChange}
+              onMaxScoreChange={core.handleMaxScoreChange}
+              onTargetScoreChange={core.handleTargetScoreChange}
+            />
+
+            <ScheduleBoard
+              isLoading={core.isLoading}
+              toastMessage={core.toastMessage}
+              hoverErrorMessage={core.hoverErrorMessage}
+              dragSourceType={core.dragSourceType}
+              error={core.error}
+              schedule={core.schedule}
+              scheduleColumns={core.scheduleColumns}
+              scoreEntries={core.scoreEntries}
+              getDoctorName={core.getDoctorName}
+              highlightedDoctorId={core.highlightedDoctorId}
+              selectedManualDoctorId={core.selectedManualDoctorId}
+              isEraseSelectionActive={core.isEraseSelectionActive}
+              year={core.year}
+              month={core.month}
+              holidaySet={core.holidaySet}
+              manualHolidaySetInMonth={core.manualHolidaySetInMonth}
+              toYmd={core.toYmd}
+              getWeekday={core.getWeekday}
+              isHighlightedDoctorBlockedDay={core.isHighlightedDoctorBlockedDay}
+              isShiftLocked={core.isShiftLocked}
+              invalidHoverShiftKey={core.invalidHoverShiftKey}
+              touchHoverShiftKey={core.touchHoverShiftKey}
+              isSwapMode={core.isSwapMode}
+              swapSource={core.swapSource}
+              isSwapSourceSelected={core.isSwapSourceSelected}
+              onHandleShiftDragOver={core.handleShiftDragOver}
+              onHandleShiftDragLeave={core.handleShiftDragLeave}
+              onHandleShiftDrop={core.handleShiftDrop}
+              onHandleDisabledDayDragOver={core.handleDisabledDayDragOver}
+              onHandleDisabledDayDragLeave={core.handleDisabledDayDragLeave}
+              onShiftDragStart={core.handleShiftDragStart}
+              onDoctorListDragStart={core.handleDoctorListDragStart}
+              onShiftTouchStart={core.handleShiftTouchStart}
+              onDoctorListTouchStart={core.handleDoctorListTouchStart}
+              onTouchDragMove={core.handleTouchDragMove}
+              onTouchDragEnd={core.handleTouchDragEnd}
+              onTouchDragCancel={core.handleTouchDragCancel}
+              onShiftTap={core.handleShiftTap}
+              onSwapButtonPress={core.handleSwapButtonPress}
+              onCancelSwapSelection={core.cancelSwapSelection}
+              onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
+              onSelectManualDoctor={core.selectManualDoctor}
+              onToggleEraseSelection={core.toggleEraseSelection}
+              onClearDragState={core.clearDragState}
+              onToggleShiftLock={core.toggleShiftLock}
+              onToggleSwapMode={core.toggleSwapMode}
+              onLockAll={core.handleLockAll}
+              onUnlockAll={core.handleUnlockAll}
+              onUndo={core.undo}
+              onRedo={core.redo}
+              canUndo={core.canUndo}
+              canRedo={core.canRedo}
+              onRegenerateUnlocked={core.handleGenerateWithGuard}
+              onTrashDragOver={core.handleTrashDragOver}
+              onTrashDrop={core.handleTrashDrop}
+              lockedShiftCount={core.lockedShiftKeys.size}
+              onDeleteMonthSchedule={core.handleDeleteMonthSchedule}
+              isDeletingMonthSchedule={core.isDeletingMonthSchedule}
+              onSaveToDB={core.handleSaveWithValidation}
+              isSaving={core.isSaving}
+              isOverrideMode={core.isOverrideMode}
+              onToggleOverrideMode={core.handleToggleOverrideMode}
+              saveValidationMessages={core.saveValidationMessages}
+              onDismissSaveValidation={core.handleDismissSaveValidation}
+              onForceSaveToDB={core.handleForceSaveToDB}
+              saveMessage={core.saveMessage}
+            />
+          </div>
+        )}
+      </main>
+
+      {/* ── 設定フルスクリーンモーダル ── */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3">
+            <h2 className="text-lg font-bold text-gray-800">設定</h2>
+            <button
+              onClick={() => { setIsSettingsOpen(false); setActiveDrawer(null); }}
+              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mx-auto max-w-lg divide-y">
+            <SettingsMenuItem
+              emoji="📋"
+              title="基本ルール"
+              subtitle="当直間隔・上限回数など"
+              onClick={() => openDrawer("rules")}
+            />
+            <SettingsMenuItem
+              emoji="⚖️"
+              title="優先度の調整"
+              subtitle="できれば守りたいルールの強さ"
+              onClick={() => openDrawer("weights")}
+            />
+            <SettingsMenuItem
+              emoji="👨‍⚕️"
+              title="医師の管理"
+              subtitle="名前・目標回数・不可日"
+              onClick={() => openDrawer("doctors")}
+            />
+            <SettingsMenuItem
+              emoji="📅"
+              title="祝日・休日設定"
+              subtitle="カレンダーで休日を追加・変更"
+              onClick={() => openDrawer("holidays")}
+            />
+            <SettingsMenuItem
+              emoji="📊"
+              title="前月の勤務実績"
+              subtitle="先月末の当直データ入力"
+              onClick={() => openDrawer("previous")}
+            />
+            <SettingsMenuItem
+              emoji="⚙️"
+              title="その他"
+              subtitle="日当直モード・初期画面設定"
+              onClick={() => openDrawer("other")}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── 各設定ドロワー ── */}
+      <RulesConfig
+        isOpen={activeDrawer === "rules"}
+        hardConstraints={core.hardConstraints}
+        isSaving={core.isSavingOptimizerConfig}
+        saveMessage={core.optimizerSaveMessage}
+        onClose={closeDrawer}
+        onReset={() => core.setHardConstraints(core.DEFAULT_HARD_CONSTRAINTS)}
+        onSave={() => { void core.saveOptimizerConfig(); }}
+        onHardConstraintChange={core.handleHardConstraintChange}
+      />
+
+      <WeightsConfig
+        isOpen={activeDrawer === "weights"}
+        objectiveWeights={core.objectiveWeights}
+        hardConstraints={core.hardConstraints}
+        isSaving={core.isSavingOptimizerConfig}
+        saveMessage={core.optimizerSaveMessage}
+        onClose={closeDrawer}
+        onReset={() => core.setObjectiveWeights(core.DEFAULT_OBJECTIVE_WEIGHTS)}
+        onSave={() => { void core.saveOptimizerConfig(); }}
+        onWeightChange={core.setWeight}
+      />
+
+      <SettingsModalPortal isOpen={activeDrawer === "doctors"}>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl sm:max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-4 py-4 sm:px-5">
+              <h3 className="text-base font-bold text-gray-900">医師の不可日設定</h3>
+              <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+            </div>
+            <div className="overflow-y-auto p-4 sm:p-5">
+              <UnavailableDaysInput
+                doctorUnavailableMonth={core.doctorUnavailableMonth}
+                activeDoctors={core.activeDoctors}
+                selectedDoctorId={core.selectedDoctorId}
+                unavailableMap={core.unavailableMap}
+                fixedUnavailableWeekdaysMap={core.fixedUnavailableWeekdaysMap}
+                pyWeekdays={core.pyWeekdays}
+                onSelectedDoctorChange={core.setSelectedDoctorId}
+                onDoctorUnavailableMonthChange={core.setDoctorUnavailableMonth}
+                onToggleAllUnavailable={core.toggleAllUnavailable}
+                onToggleUnavailable={core.toggleUnavailable}
+                onToggleFixedWeekday={core.toggleFixedWeekday}
+              />
+            </div>
+          </div>
+        </div>
+      </SettingsModalPortal>
+
+      <PreviousMonthShiftsConfig
+        isOpen={activeDrawer === "previous"}
+        year={core.year}
+        month={core.month}
+        activeDoctors={core.activeDoctors}
+        prevMonthLastDay={core.prevMonthLastDay}
+        prevMonthTailDays={core.prevMonthTailDays}
+        previousMonthShiftCount={previousMonthShiftCount}
+        getPreviousMonthShiftDoctorId={core.getPreviousMonthShiftDoctorId}
+        onClose={closeDrawer}
+        onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
+        onSetPreviousMonthShift={core.setPreviousMonthShift}
+      />
+    </div>
+  );
+}
+
+/* ── 設定メニュー項目 ── */
+function SettingsMenuItem({ emoji, title, subtitle, onClick }: {
+  emoji: string;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex w-full items-center gap-4 px-6 py-5 text-left hover:bg-gray-50 transition-colors"
+    >
+      <span className="text-2xl">{emoji}</span>
+      <div className="flex-1 min-w-0">
+        <div className="text-base font-bold text-gray-800">{title}</div>
+        <div className="text-sm text-gray-500">{subtitle}</div>
+      </div>
+      <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-400" />
+    </button>
+  );
+}
+
+/* ── 生成前ステップガイド ── */
+function SetupGuide({ core, onOpenSettings }: {
+  core: ReturnType<typeof useOnCallCore>;
+  onOpenSettings: () => void;
+}) {
+  const doctorCount = core.numDoctors;
+  const hasBasicSettings = core.hardConstraints.interval_days >= 1;
+  const hasDoctors = doctorCount > 0;
+
+  // 不可日が1人以上に設定されているか
+  const hasUnavailableDays = Object.keys(core.unavailableMap).length > 0;
+
+  return (
+    <div className="mx-auto max-w-lg py-8">
+      <h2 className="text-center text-xl font-bold text-gray-800 mb-2">
+        {core.year}年{core.month}月のシフトを作成
+      </h2>
+      <p className="text-center text-sm text-gray-500 mb-8">
+        設定を確認して、生成ボタンを押してください
+      </p>
+
+      <div className="space-y-3 mb-8">
+        <StepItem
+          done={hasBasicSettings}
+          title="基本設定"
+          description={hasBasicSettings ? `当直間隔 ${core.hardConstraints.interval_days}日` : "未設定"}
+          onAction={onOpenSettings}
+        />
+        <StepItem
+          done={hasDoctors}
+          title="医師登録"
+          description={hasDoctors ? `${doctorCount}名 登録済み` : "未登録"}
+          onAction={onOpenSettings}
+        />
+        <StepItem
+          done={hasUnavailableDays}
+          title="不可日設定"
+          description={hasUnavailableDays ? "設定済み" : "未設定（スキップ可）"}
+          onAction={onOpenSettings}
+          optional
+        />
+      </div>
+
+      {/* 年月セレクタ */}
+      <div className="mb-6 flex items-center justify-center gap-3">
+        <select
+          value={core.year}
+          onChange={(e) => core.handleYearChange(Number(e.target.value))}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        >
+          {[core.year - 1, core.year, core.year + 1].map((y) => (
+            <option key={y} value={y}>{y}年</option>
+          ))}
+        </select>
+        <select
+          value={core.month}
+          onChange={(e) => core.handleMonthChange(Number(e.target.value))}
+          className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+            <option key={m} value={m}>{m}月</option>
+          ))}
+        </select>
+      </div>
+
+      <button
+        onClick={core.handleGenerateWithGuard}
+        disabled={!hasDoctors || core.isLoading}
+        className="w-full rounded-xl bg-blue-600 py-4 text-base font-bold text-white shadow-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {core.isLoading ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            生成中...
+          </span>
+        ) : (
+          `${core.year}年${core.month}月のシフトを生成する`
+        )}
+      </button>
+    </div>
+  );
+}
+
+/* ── ステップ項目 ── */
+function StepItem({ done, title, description, onAction, optional = false }: {
+  done: boolean;
+  title: string;
+  description: string;
+  onAction: () => void;
+  optional?: boolean;
+}) {
+  return (
+    <button
+      onClick={onAction}
+      className="flex w-full items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-4 text-left shadow-sm hover:border-blue-200 hover:bg-blue-50/30 transition-colors"
+    >
+      <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+        done ? "bg-green-100 text-green-600" : optional ? "bg-gray-100 text-gray-400" : "bg-yellow-100 text-yellow-600"
+      }`}>
+        {done ? "✓" : optional ? "−" : "!"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-bold text-gray-800">{title}</div>
+        <div className="text-xs text-gray-500">{description}</div>
+      </div>
+      <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-400" />
+    </button>
+  );
+}

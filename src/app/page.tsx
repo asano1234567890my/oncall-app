@@ -14,7 +14,7 @@ export default function LandingPage() {
   useEffect(() => {
     if (isLoading) return;
     if (auth.isAuthenticated) {
-      router.replace("/dashboard");
+      router.replace("/app");
     } else {
       setReady(true);
     }
