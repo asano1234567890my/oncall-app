@@ -1,9 +1,10 @@
 // src/app/app/page.tsx — 初心者向けメイン画面
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Settings, ChevronRight, X } from "lucide-react";
+import OnboardingModal from "../components/OnboardingModal";
 import ScheduleBoard from "../components/ScheduleBoard";
 import SetupWizard from "../components/SetupWizard";
 import { DoctorSettingsPanel } from "../components/SettingsPanel";
@@ -13,6 +14,7 @@ import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
 import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import { getAuthHeaders } from "../hooks/useAuth";
+import { useOnboarding } from "../hooks/useOnboarding";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 type SettingsDrawer = "rules" | "weights" | "doctors" | "holidays" | "previous" | "other" | null;
@@ -24,6 +26,8 @@ export default function AppPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
   const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
+  const onboarding = useOnboarding(core.auth.isAuthenticated);
+  const prevHadSchedule = useRef(false);
 
   // ── 認証ガード ──
   useEffect(() => {
@@ -51,6 +55,16 @@ export default function AppPage() {
     window.location.reload();
   }, []);
 
+  const hasSchedule = core.schedule.length > 0;
+
+  // Trigger onboarding when schedule first appears
+  useEffect(() => {
+    if (hasSchedule && !prevHadSchedule.current) {
+      onboarding.triggerOnboarding("generate");
+    }
+    prevHadSchedule.current = hasSchedule;
+  }, [hasSchedule, onboarding]);
+
   if (core.isAuthLoading || !core.auth.isAuthenticated || setupStatus === "loading") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -63,9 +77,12 @@ export default function AppPage() {
     return <SetupWizard onComplete={handleWizardComplete} />;
   }
 
-  const hasSchedule = core.schedule.length > 0;
-
-  const openDrawer = (drawer: SettingsDrawer) => setActiveDrawer(drawer);
+  const openDrawer = (drawer: SettingsDrawer) => {
+    setActiveDrawer(drawer);
+    if (drawer === "rules") onboarding.triggerOnboarding("rules");
+    if (drawer === "weights") onboarding.triggerOnboarding("weights");
+    if (drawer === "doctors") onboarding.triggerOnboarding("doctors");
+  };
   const closeDrawer = () => setActiveDrawer(null);
 
   const previousMonthShiftCount = useMemo(() =>
@@ -261,6 +278,18 @@ export default function AppPage() {
               subtitle="日当直モード・初期画面設定"
               onClick={() => openDrawer("other")}
             />
+
+            <div className="px-6 py-4">
+              <button
+                onClick={() => {
+                  onboarding.resetAll();
+                  setIsSettingsOpen(false);
+                }}
+                className="w-full rounded-lg border border-gray-200 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+              >
+                チュートリアルをもう一度見る
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -328,6 +357,9 @@ export default function AppPage() {
         onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
         onSetPreviousMonthShift={core.setPreviousMonthShift}
       />
+
+      {/* ── オンボーディング ── */}
+      <OnboardingModal section={onboarding.pendingSection} onDismiss={onboarding.dismissOnboarding} />
     </div>
   );
 }
