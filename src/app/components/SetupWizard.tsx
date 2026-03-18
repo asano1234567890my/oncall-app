@@ -1,0 +1,339 @@
+// src/app/components/SetupWizard.tsx — 初回セットアップウィザード
+"use client";
+
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+import { getAuthHeaders } from "../hooks/useAuth";
+
+type WizardProps = {
+  onComplete: () => void;
+};
+
+type WizardState = {
+  step: 1 | 2 | 3 | 4 | 5 | 6;
+  holidayShiftMode: "combined" | "split";
+  doctorCount: number;
+  minShifts: number;
+  maxShifts: number;
+  intervalDays: number;
+  maxSaturdayNights: number;
+};
+
+export default function SetupWizard({ onComplete }: WizardProps) {
+  const [state, setState] = useState<WizardState>({
+    step: 1,
+    holidayShiftMode: "combined",
+    doctorCount: 8,
+    minShifts: 3,
+    maxShifts: 5,
+    intervalDays: 1,
+    maxSaturdayNights: 2,
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const setStep = (step: WizardState["step"]) => setState((s) => ({ ...s, step }));
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  const handleFinish = async () => {
+    setIsSaving(true);
+    setError("");
+    try {
+      // 1. Create doctors
+      const doctorPromises = Array.from({ length: state.doctorCount }, (_, i) =>
+        fetch(`${apiUrl}/api/doctors/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          body: JSON.stringify({ name: `医師${i + 1}`, is_active: true }),
+        })
+      );
+      await Promise.all(doctorPromises);
+
+      // 2. Save optimizer config (hard_constraints + score range)
+      const optimizerConfig = {
+        score_min: state.minShifts,
+        score_max: state.maxShifts,
+        objective_weights: {},
+        hard_constraints: {
+          interval_days: state.intervalDays,
+          max_saturday_nights: state.maxSaturdayNights,
+          holiday_shift_mode: state.holidayShiftMode,
+        },
+      };
+      await fetch(`${apiUrl}/api/settings/optimizer_config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(optimizerConfig),
+      });
+
+      // 3. Mark setup as completed
+      await fetch(`${apiUrl}/api/settings/kv/setup_completed`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ value: true }),
+      });
+
+      onComplete();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "設定の保存に失敗しました");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-lg py-8 px-4">
+      {/* Progress */}
+      <div className="mb-8 flex items-center justify-center gap-1.5">
+        {[1, 2, 3, 4, 5].map((s) => (
+          <div
+            key={s}
+            className={`h-2 w-10 rounded-full transition-colors ${
+              s <= state.step ? "bg-blue-600" : "bg-gray-200"
+            }`}
+          />
+        ))}
+      </div>
+
+      {state.step === 1 && (
+        <StepContainer
+          title="当直の形式を教えてください"
+          subtitle="日曜・祝日の日直と、夜間の当直の担当者は？"
+        >
+          <div className="space-y-3">
+            <ChoiceButton
+              label="同じ人が両方担当"
+              description="日直と当直は同じ医師が担当します"
+              selected={state.holidayShiftMode === "combined"}
+              onClick={() => {
+                setState((s) => ({ ...s, holidayShiftMode: "combined", step: 2 }));
+              }}
+            />
+            <ChoiceButton
+              label="別々の人が担当"
+              description="日直と当直は異なる医師が担当します"
+              selected={state.holidayShiftMode === "split"}
+              onClick={() => {
+                setState((s) => ({ ...s, holidayShiftMode: "split", step: 2 }));
+              }}
+            />
+          </div>
+        </StepContainer>
+      )}
+
+      {state.step === 2 && (
+        <StepContainer
+          title="何人で当直を回していますか？"
+          subtitle="あとから医師の追加・削除もできます"
+        >
+          <div className="flex items-center justify-center gap-4 my-6">
+            <button
+              onClick={() => setState((s) => ({ ...s, doctorCount: Math.max(2, s.doctorCount - 1) }))}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-lg font-bold text-gray-600 hover:bg-gray-100"
+            >
+              −
+            </button>
+            <span className="text-4xl font-bold text-gray-800 w-16 text-center">{state.doctorCount}</span>
+            <button
+              onClick={() => setState((s) => ({ ...s, doctorCount: Math.min(30, s.doctorCount + 1) }))}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-lg font-bold text-gray-600 hover:bg-gray-100"
+            >
+              +
+            </button>
+          </div>
+          <p className="text-center text-sm text-gray-500 mb-6">{state.doctorCount}名</p>
+          <NavButtons onBack={() => setStep(1)} onNext={() => setStep(3)} />
+        </StepContainer>
+      )}
+
+      {state.step === 3 && (
+        <StepContainer
+          title="1ヶ月に1人あたり何回くらい当直しますか？"
+          subtitle="最低回数と最大回数を設定してください"
+        >
+          <div className="space-y-4 my-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">最低回数</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={10}
+                  step={1}
+                  value={state.minShifts}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setState((s) => ({ ...s, minShifts: v, maxShifts: Math.max(v, s.maxShifts) }));
+                  }}
+                  className="flex-1"
+                />
+                <span className="w-12 text-right text-lg font-bold text-gray-800">{state.minShifts}回</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">最大回数</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={15}
+                  step={1}
+                  value={state.maxShifts}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setState((s) => ({ ...s, maxShifts: v, minShifts: Math.min(v, s.minShifts) }));
+                  }}
+                  className="flex-1"
+                />
+                <span className="w-12 text-right text-lg font-bold text-gray-800">{state.maxShifts}回</span>
+              </div>
+            </div>
+          </div>
+          <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
+        </StepContainer>
+      )}
+
+      {state.step === 4 && (
+        <StepContainer
+          title="当直明けは何日空けたいですか？"
+          subtitle="連続を避けるために最低限空ける日数です"
+        >
+          <div className="grid grid-cols-2 gap-3 my-6">
+            {[
+              { value: 0, label: "翌日OK" },
+              { value: 1, label: "1日" },
+              { value: 2, label: "2日" },
+              { value: 3, label: "3日" },
+            ].map(({ value, label }) => (
+              <ChoiceButton
+                key={value}
+                label={label}
+                selected={state.intervalDays === value}
+                onClick={() => setState((s) => ({ ...s, intervalDays: value, step: 5 }))}
+              />
+            ))}
+          </div>
+          <button onClick={() => setStep(3)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2">
+            戻る
+          </button>
+        </StepContainer>
+      )}
+
+      {state.step === 5 && (
+        <StepContainer
+          title="土曜の夜間当直は月何回まで？"
+          subtitle="土曜の当直を制限できます"
+        >
+          <div className="grid grid-cols-3 gap-3 my-6">
+            {[
+              { value: 99, label: "制限なし" },
+              { value: 1, label: "1回" },
+              { value: 2, label: "2回" },
+            ].map(({ value, label }) => (
+              <ChoiceButton
+                key={value}
+                label={label}
+                selected={state.maxSaturdayNights === value}
+                onClick={() => setState((s) => ({ ...s, maxSaturdayNights: value, step: 6 }))}
+              />
+            ))}
+          </div>
+          <button onClick={() => setStep(4)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2">
+            戻る
+          </button>
+        </StepContainer>
+      )}
+
+      {state.step === 6 && (
+        <StepContainer
+          title="設定完了！"
+          subtitle="この設定はあとからいつでも変更できます"
+        >
+          <div className="my-6 rounded-xl bg-blue-50 p-4 text-sm text-gray-700 space-y-1">
+            <p>当直形式：{state.holidayShiftMode === "combined" ? "日直・当直 同一" : "日直・当直 別"}</p>
+            <p>医師：{state.doctorCount}名</p>
+            <p>月あたり：{state.minShifts}〜{state.maxShifts}回</p>
+            <p>当直間隔：{state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}</p>
+            <p>土曜上限：{state.maxSaturdayNights >= 99 ? "制限なし" : `${state.maxSaturdayNights}回`}</p>
+          </div>
+
+          {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>}
+
+          <button
+            onClick={() => { void handleFinish(); }}
+            disabled={isSaving}
+            className="w-full rounded-xl bg-blue-600 py-4 text-base font-bold text-white shadow-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          >
+            {isSaving ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                設定を保存中...
+              </span>
+            ) : (
+              "この設定で始める"
+            )}
+          </button>
+          <button onClick={() => setStep(5)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-2">
+            戻る
+          </button>
+        </StepContainer>
+      )}
+    </div>
+  );
+}
+
+/* ── サブコンポーネント ── */
+
+function StepContainer({ title, subtitle, children }: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="text-center">
+      <h2 className="text-xl font-bold text-gray-800 mb-2">{title}</h2>
+      <p className="text-sm text-gray-500 mb-6">{subtitle}</p>
+      {children}
+    </div>
+  );
+}
+
+function ChoiceButton({ label, description, selected, onClick }: {
+  label: string;
+  description?: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full rounded-xl border-2 px-4 py-4 text-left transition-colors ${
+        selected
+          ? "border-blue-600 bg-blue-50 text-blue-700"
+          : "border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50/30"
+      }`}
+    >
+      <div className="text-base font-bold">{label}</div>
+      {description && <div className="text-sm text-gray-500 mt-0.5">{description}</div>}
+    </button>
+  );
+}
+
+function NavButtons({ onBack, onNext }: { onBack: () => void; onNext: () => void }) {
+  return (
+    <div className="flex gap-3">
+      <button
+        onClick={onBack}
+        className="flex-1 rounded-xl border border-gray-300 py-3 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+      >
+        戻る
+      </button>
+      <button
+        onClick={onNext}
+        className="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
+      >
+        次へ
+      </button>
+    </div>
+  );
+}

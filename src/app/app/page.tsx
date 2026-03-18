@@ -1,16 +1,18 @@
 // src/app/app/page.tsx — 初心者向けメイン画面
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Settings, ChevronRight, X } from "lucide-react";
 import ScheduleBoard from "../components/ScheduleBoard";
+import SetupWizard from "../components/SetupWizard";
 import { DoctorSettingsPanel } from "../components/SettingsPanel";
 import RulesConfig from "../components/settings/RulesConfig";
 import WeightsConfig from "../components/settings/WeightsConfig";
 import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
 import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
+import { getAuthHeaders } from "../hooks/useAuth";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 type SettingsDrawer = "rules" | "weights" | "doctors" | "holidays" | "previous" | "other" | null;
@@ -21,6 +23,7 @@ export default function AppPage() {
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
+  const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
 
   // ── 認証ガード ──
   useEffect(() => {
@@ -29,12 +32,35 @@ export default function AppPage() {
     }
   }, [core.auth.isAuthenticated, core.isAuthLoading, router]);
 
-  if (core.isAuthLoading || !core.auth.isAuthenticated) {
+  // ── セットアップ完了チェック ──
+  useEffect(() => {
+    if (!core.auth.isAuthenticated) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    fetch(`${apiUrl}/api/settings/kv/setup_completed`, { headers: getAuthHeaders() })
+      .then((res) => res.json())
+      .then((data: unknown) => {
+        const value = (data as Record<string, unknown>)?.value;
+        setSetupStatus(value ? "done" : "needed");
+      })
+      .catch(() => setSetupStatus("done")); // on error, skip wizard
+  }, [core.auth.isAuthenticated]);
+
+  const handleWizardComplete = useCallback(() => {
+    setSetupStatus("done");
+    // Reload to re-fetch doctors and settings created by wizard
+    window.location.reload();
+  }, []);
+
+  if (core.isAuthLoading || !core.auth.isAuthenticated || setupStatus === "loading") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
+  }
+
+  if (setupStatus === "needed") {
+    return <SetupWizard onComplete={handleWizardComplete} />;
   }
 
   const hasSchedule = core.schedule.length > 0;

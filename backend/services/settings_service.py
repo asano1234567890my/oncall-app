@@ -48,6 +48,34 @@ async def get_custom_holidays(db: AsyncSession, hospital_id: uuid.UUID, year: in
     return value
 
 
+async def get_system_setting(db: AsyncSession, hospital_id: uuid.UUID, key: str) -> Any:
+    stmt = select(SystemSetting).where(
+        SystemSetting.hospital_id == hospital_id,
+        SystemSetting.key == key,
+    )
+    res = await db.execute(stmt)
+    row: Optional[SystemSetting] = res.scalar_one_or_none()
+    if row is None or row.value is None:
+        return None
+    return row.value
+
+
+async def upsert_system_setting(
+    db: AsyncSession, hospital_id: uuid.UUID, key: str, value: Any, description: str = ""
+) -> None:
+    stmt = insert(SystemSetting).values(
+        hospital_id=hospital_id,
+        key=key,
+        value=value,
+        description=description or f"System setting: {key}",
+    ).on_conflict_do_update(
+        constraint="uq_system_settings_hospital_key",
+        set_={"value": value, "description": description or f"System setting: {key}"},
+    )
+    await db.execute(stmt)
+    await db.commit()
+
+
 OPTIMIZER_CONFIG_KEY = "optimizer_config"
 
 
