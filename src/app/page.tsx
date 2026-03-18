@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import InlineDemo from "./components/InlineDemo";
 import { useAuth } from "./hooks/useAuth";
 
 export default function LandingPage() {
@@ -132,25 +133,17 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ────────── デモセクション（プレースホルダー） ────────── */}
+      {/* ────────── デモセクション ────────── */}
       <section id="demo" className="bg-white px-4 py-16 md:py-20">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-xl font-bold text-gray-800 md:text-2xl mb-4">
+        <div className="max-w-lg mx-auto">
+          <h2 className="text-xl font-bold text-gray-800 md:text-2xl mb-4 text-center">
             今すぐ試してみる
           </h2>
-          <p className="text-gray-600 mb-8">
+          <p className="text-gray-600 mb-8 text-center">
             登録不要で当直表の自動生成を体験できます。
           </p>
-          <div className="rounded-2xl border-2 border-dashed border-gray-300 bg-gray-50 p-12">
-            <p className="text-gray-400 text-sm">
-              デモ機能は近日公開予定です
-            </p>
-            <Link
-              href="/register"
-              className="mt-6 inline-block rounded-xl bg-blue-600 px-8 py-3 text-base font-bold text-white shadow-lg hover:bg-blue-700 transition-colors"
-            >
-              無料で始める
-            </Link>
+          <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+            <InlineDemo />
           </div>
         </div>
       </section>
