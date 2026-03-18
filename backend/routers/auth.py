@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.auth import create_access_token, get_current_hospital
@@ -19,7 +17,6 @@ from services.auth_service import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
-limiter = Limiter(key_func=get_remote_address)
 
 
 class LoginRequest(BaseModel):
@@ -45,8 +42,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("10/minute")
-async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     hospital = await get_hospital_by_name(db, body.name)
     if hospital is None or not verify_password(body.password, hospital.password_hash):
         raise HTTPException(
@@ -62,8 +58,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-@limiter.limit("5/minute")
-async def register(request: Request, body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if len(body.name.strip()) < 2:
         raise HTTPException(status_code=400, detail="病院名は2文字以上必要です")
     if len(body.password) < 8:
