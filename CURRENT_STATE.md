@@ -104,15 +104,17 @@
 | 3-5 | `page.tsx` に認証ガード（未認証→/loginリダイレクト）・ログアウトボタン追加 | `src/app/page.tsx` | ✅ 完了 |
 | 3-6 | 全APIフックに `getAuthHeaders()` (Authorization: Bearer) を追加 | `useScheduleApi.ts`, `useDoctorSettings.ts`, `useOptimizerConfig.ts`, `useCustomHolidays.ts` | ✅ 完了 |
 
-### 【後で】Task4（旧Task3）：仮保存機能
+### 【完了】Task4（旧Task3）：仮保存機能
 
 **目的：** 作業中シフトを下書きとしてDBに保存し、別デバイス・別日でも続きから作業できるようにする。
+**方式：** `system_settings` KVストア利用（キー: `draft_schedule_YYYY_MM`、値: JSONB）— テーブル新設不要
 
 | # | 内容 | 状態 |
 |---|------|------|
-| 4-1 | `draft_schedules` テーブル作成・マイグレーション | 未着手 |
-| 4-2 | `POST/GET /api/schedule/draft` API | 未着手 |
-| 4-3 | 「仮保存」「仮保存を読み込む」ボタン | 未着手 |
+| 4-1 | `settings_service.py` に `get/upsert/delete_draft_schedule` 追加 | ✅ 完了 |
+| 4-2 | `GET/PUT/DELETE /api/schedule/draft/{year}/{month}` API | ✅ 完了 |
+| 4-3 | `useDraftSchedule.ts` フック新設 + `useOnCallCore` 統合 | ✅ 完了 |
+| 4-4 | `/app` `/dashboard` 両方に仮保存/確定保存ボタン・読み込み・確定→仮保存コピー | ✅ 完了 |
 
 ---
 
@@ -195,6 +197,12 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-19 | 仮保存機能: system_settings KVストアで仮保存CRUD（GET/PUT/DELETE /api/schedule/draft/{year}/{month}）・useDraftScheduleフック・/app＋/dashboard両対応・確定→仮保存コピー |
+| 2026-03-19 | シフト表UX強化: 医師タップハイライト（青）・不可日/不可曜日per-shift赤ハイライト・スワップ時フラッシュアニメーション・ステータスバー固定高さ |
+| 2026-03-19 | ガイドボタン: 全ドロワー＋MobileScheduleBoard toolbar に「?」ボタン追加（per-section onShowGuide）・DoctorManageDrawerにマジックリンクコピー＋ロック機能追加 |
+| 2026-03-19 | MobileScheduleBoard新設: /app専用モバイルスケジュール表（タップ操作・coreプロップ1つ・スティッキーツールバー・DoctorSettingsPanel分離） |
+| 2026-03-19 | UI改善: ラベル統一（一覧モード/かんたんモード）・オンボーディング全セクション対応・シフトスコア設定UI・優先度説明文修正 |
+| 2026-03-18 | UX改善: SetupGuideの各ステップが対応するドロワーに直接遷移・SetupWizard間隔スライダー0-7日対応・/app↔/dashboardナビ追加・初期設定やり直しボタン・ブラウザ戻りAuth修正・InlineDemoタップ入替/年次モード/combined対応 |
 | 2026-03-18 | V2 UX Phase6完了: 初期画面設定（/app vs /dashboard トグル・ログイン後リダイレクト分岐） |
 | 2026-03-18 | V2 UX Phase5完了: 公開デモ（POST /api/demo/optimize + LP埋め込みInlineDemo） |
 | 2026-03-18 | V2 UX Phase4完了: オンボーディング（useOnboarding + OnboardingModal + DB永続化） |

@@ -6,12 +6,17 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { GenerationSettingsPanel, DoctorSettingsPanel } from "../components/SettingsPanel";
 import ScheduleBoard from "../components/ScheduleBoard";
+import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
+import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import { getAuthHeaders } from "../hooks/useAuth";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
   const core = useOnCallCore();
   const router = useRouter();
+
+  // ── シフトスコア設定 ──
+  const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
 
   // ── パスワード変更（ダッシュボード固有UI） ──
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -69,9 +74,15 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
       <main className="mx-auto w-full max-w-7xl rounded-xl bg-white p-3 shadow-lg md:p-6 xl:p-8">
         <div className="mb-4 flex items-center justify-between border-b pb-4 md:mb-8">
-          <h1 className="text-xl font-bold text-gray-800 md:text-3xl">丸投げ当直表</h1>
+          <h1 className="text-xl font-bold text-gray-800 md:text-3xl">一覧モード</h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-gray-500">{core.auth.hospitalName}</span>
+            <button
+              onClick={() => router.push("/app")}
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
+            >
+              かんたんモード
+            </button>
             <button
               onClick={() => { setIsPasswordModalOpen(true); setPwError(""); setPwSuccess(""); }}
               className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
@@ -159,6 +170,7 @@ export default function DashboardPage() {
             isSavingOptimizerConfig={core.isSavingOptimizerConfig}
             optimizerSaveMessage={core.optimizerSaveMessage}
             onSaveOptimizerConfig={() => { void core.saveOptimizerConfig(); }}
+            onToggleShiftScores={() => setIsShiftScoresOpen(true)}
             onToggleWeights={core.handleToggleWeightsPanel}
             onResetWeights={() => core.setObjectiveWeights(core.DEFAULT_OBJECTIVE_WEIGHTS)}
             onCloseWeights={() => core.setIsWeightsOpen(false)}
@@ -237,6 +249,7 @@ export default function DashboardPage() {
               toYmd={core.toYmd}
               getWeekday={core.getWeekday}
               isHighlightedDoctorBlockedDay={core.isHighlightedDoctorBlockedDay}
+              isHighlightedDoctorBlockedShift={core.isHighlightedDoctorBlockedShift}
               isShiftLocked={core.isShiftLocked}
               invalidHoverShiftKey={core.invalidHoverShiftKey}
               touchHoverShiftKey={core.touchHoverShiftKey}
@@ -284,10 +297,29 @@ export default function DashboardPage() {
               onDismissSaveValidation={core.handleDismissSaveValidation}
               onForceSaveToDB={core.handleForceSaveToDB}
               saveMessage={core.saveMessage}
+              isDraftSaving={core.isDraftSaving}
+              isDraftLoading={core.isDraftLoading}
+              draftSavedAt={core.draftSavedAt}
+              draftMessage={core.draftMessage}
+              onSaveDraft={() => { void core.handleSaveDraft(); }}
+              onLoadDraft={() => { void core.handleLoadDraft(); }}
+              onCopyConfirmedToDraft={() => { void core.handleCopyConfirmedToDraft(); }}
             />
           </div>
         </div>
       </main>
+
+      {/* ── シフトスコア設定 ── */}
+      <ShiftScoresConfig
+        isOpen={isShiftScoresOpen}
+        shiftScores={core.shiftScores}
+        isSaving={core.isSavingOptimizerConfig}
+        saveMessage={core.optimizerSaveMessage}
+        onClose={() => setIsShiftScoresOpen(false)}
+        onReset={() => core.setShiftScores(DEFAULT_SHIFT_SCORES)}
+        onSave={() => { void core.saveOptimizerConfig(); }}
+        onShiftScoreChange={(key, value) => core.setShiftScores({ ...core.shiftScores, [key]: value })}
+      />
     </div>
   );
 }

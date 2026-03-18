@@ -13,6 +13,7 @@ import { useRealtimeScores } from "./useRealtimeScores";
 import { useOptimizerConfig } from "./useOptimizerConfig";
 import { useNavigationGuard, getScheduleSignature } from "./useNavigationGuard";
 import { useAuth, getAuthHeaders } from "./useAuth";
+import { useDraftSchedule } from "./useDraftSchedule";
 import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, type ObjectiveWeights, type PreviousMonthShift, type ScheduleRow } from "../types/dashboard";
 
 export function useOnCallCore() {
@@ -31,6 +32,7 @@ export function useOnCallCore() {
     setDoctors, holidays, setHolidays,
     holidayWorkdayOverrides, setHolidayWorkdayOverrides,
     scoreMin, setScoreMin, scoreMax, setScoreMax,
+    shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
     isWeightsOpen, setIsWeightsOpen,
     isHardConstraintsOpen, setIsHardConstraintsOpen,
@@ -62,8 +64,8 @@ export function useOnCallCore() {
 
   // ── 最適化設定 ──
   const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig } = useOptimizerConfig({
-    scoreMin, scoreMax, objectiveWeights, hardConstraints,
-    setScoreMin, setScoreMax, setObjectiveWeights, setHardConstraints,
+    scoreMin, scoreMax, shiftScores, objectiveWeights, hardConstraints,
+    setScoreMin, setScoreMax, setShiftScores, setObjectiveWeights, setHardConstraints,
   });
 
   // ── 祝日 ──
@@ -108,7 +110,7 @@ export function useOnCallCore() {
   const { scoreEntries } = useRealtimeScores({
     activeDoctors, schedule, year, month,
     holidaySet, manualHolidaySetInMonth, holidayWorkdayOverrides,
-    scoreMin, scoreMax, minScoreMap, maxScoreMap, targetScoreMap,
+    scoreMin, scoreMax, shiftScores, minScoreMap, maxScoreMap, targetScoreMap,
   });
 
   // ── ドラッグ&ドロップ ──
@@ -156,6 +158,9 @@ export function useOnCallCore() {
 
   // ── 認証 ──
   const { auth, isLoading: isAuthLoading, logout } = useAuth();
+
+  // ── 仮保存 ──
+  const draft = useDraftSchedule(year, month, auth.isAuthenticated);
 
   // ── Effects ──
   useEffect(() => {
@@ -334,6 +339,35 @@ export function useOnCallCore() {
     });
   };
 
+  // ── 仮保存ハンドラ ──
+  const handleSaveDraft = async () => {
+    if (schedule.length === 0) return;
+    await draft.saveDraft(schedule);
+  };
+
+  const handleLoadDraft = async () => {
+    if (dirtyRef.current) {
+      const ok = typeof window !== "undefined" ? window.confirm("現在の編集を破棄して仮保存を読み込みますか？") : false;
+      if (!ok) return;
+    }
+    const loaded = await draft.loadDraft();
+    if (loaded) {
+      commitSchedule(loaded);
+    }
+  };
+
+  const handleCopyConfirmedToDraft = async () => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    try {
+      const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { headers: getAuthHeaders() });
+      if (!res.ok) return;
+      const data = (await res.json()) as ScheduleRow[];
+      if (!data || data.length === 0) return;
+      await draft.saveDraft(data);
+      commitSchedule(data);
+    } catch { /* ignore */ }
+  };
+
   // ── 派生値 ──
   const weightChanges = useMemo(() => {
     const keys = Object.keys(DEFAULT_OBJECTIVE_WEIGHTS) as (keyof ObjectiveWeights)[];
@@ -371,6 +405,7 @@ export function useOnCallCore() {
     manualHolidaySetInMonth, autoHolidayDaysInMonth,
     isHolidayLikeDay,
     scoreMin, setScoreMin, scoreMax, setScoreMax,
+    shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
     isWeightsOpen, setIsWeightsOpen,
     isHardConstraintsOpen, setIsHardConstraintsOpen,
@@ -419,6 +454,18 @@ export function useOnCallCore() {
     handleGenerateWithGuard,
     handleSaveWithValidation,
     handleForceSaveToDB,
+
+    // ナビゲーションガード
+    confirmMoveWithUnsavedChanges,
+
+    // 仮保存
+    isDraftSaving: draft.isDraftSaving,
+    isDraftLoading: draft.isDraftLoading,
+    draftSavedAt: draft.draftSavedAt,
+    draftMessage: draft.draftMessage,
+    handleSaveDraft,
+    handleLoadDraft,
+    handleCopyConfirmedToDraft,
 
     // デフォルト値リセット
     DEFAULT_HARD_CONSTRAINTS,

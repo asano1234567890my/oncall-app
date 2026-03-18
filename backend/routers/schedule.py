@@ -15,6 +15,11 @@ from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from models.shift import ShiftAssignment
+from services.settings_service import (
+    get_draft_schedule,
+    upsert_draft_schedule,
+    delete_draft_schedule,
+)
 
 router = APIRouter(prefix="/api/schedule", tags=["Schedule"])
 
@@ -32,6 +37,10 @@ class SaveScheduleRequest(BaseModel):
     year: int
     month: int
     num_doctors: int
+    schedule: List[ShiftData]
+
+
+class SaveDraftRequest(BaseModel):
     schedule: List[ShiftData]
 
 
@@ -223,6 +232,49 @@ async def delete_schedule(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+## ── Draft Schedule ──
+
+
+@router.get("/draft/{year}/{month}")
+async def get_draft(
+    year: int,
+    month: int,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    data = await get_draft_schedule(db, hospital_id, year, month)
+    if data is None:
+        return {"schedule": None, "saved_at": None}
+    return {"schedule": data.get("schedule"), "saved_at": data.get("saved_at")}
+
+
+@router.put("/draft/{year}/{month}")
+async def save_draft(
+    year: int,
+    month: int,
+    req: SaveDraftRequest,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    schedule_data = [
+        {"day": item.day, "day_shift": str(item.day_shift) if item.day_shift else None, "night_shift": str(item.night_shift) if item.night_shift else None}
+        for item in req.schedule
+    ]
+    saved_at = await upsert_draft_schedule(db, hospital_id, year, month, schedule_data)
+    return {"success": True, "saved_at": saved_at}
+
+
+@router.delete("/draft/{year}/{month}")
+async def remove_draft(
+    year: int,
+    month: int,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    await delete_draft_schedule(db, hospital_id, year, month)
+    return {"success": True}
 
 
 @router.get("/{year}/{month}")
