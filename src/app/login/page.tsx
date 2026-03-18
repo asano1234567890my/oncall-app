@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -20,7 +20,16 @@ export default function LoginPage() {
 
     try {
       await login(name, password);
-      router.push("/app");
+      // Check user's default page preference
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      let dest = "/app";
+      try {
+        const res = await fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() });
+        const data: unknown = await res.json();
+        const value = (data as Record<string, unknown>)?.value;
+        if (value === "/dashboard") dest = "/dashboard";
+      } catch { /* default to /app */ }
+      router.push(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました");
     } finally {

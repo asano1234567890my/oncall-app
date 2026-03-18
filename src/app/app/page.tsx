@@ -358,6 +358,21 @@ export default function AppPage() {
         onSetPreviousMonthShift={core.setPreviousMonthShift}
       />
 
+      {/* ── その他設定ドロワー ── */}
+      <SettingsModalPortal isOpen={activeDrawer === "other"}>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[90vh]">
+            <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-4 sm:px-5">
+              <h3 className="text-base font-bold text-gray-900">その他の設定</h3>
+              <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+            </div>
+            <div className="overflow-y-auto p-4 sm:p-5 space-y-4">
+              <DefaultPageSetting />
+            </div>
+          </div>
+        </div>
+      </SettingsModalPortal>
+
       {/* ── オンボーディング ── */}
       <OnboardingModal section={onboarding.pendingSection} onDismiss={onboarding.dismissOnboarding} />
     </div>
@@ -493,5 +508,68 @@ function StepItem({ done, title, description, onAction, optional = false }: {
       </div>
       <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-400" />
     </button>
+  );
+}
+
+/* ── 初期画面設定 ── */
+function DefaultPageSetting() {
+  const [defaultPage, setDefaultPage] = useState<"/app" | "/dashboard">("/app");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
+      .then((res) => res.json())
+      .then((data: unknown) => {
+        const value = (data as Record<string, unknown>)?.value;
+        if (value === "/dashboard") setDefaultPage("/dashboard");
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggle = async (page: "/app" | "/dashboard") => {
+    setDefaultPage(page);
+    setIsSaving(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      await fetch(`${apiUrl}/api/settings/kv/default_page`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ value: page }),
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <h4 className="text-sm font-bold text-gray-800 mb-2">ログイン後の初期画面</h4>
+      <p className="text-xs text-gray-500 mb-3">ログイン後に表示される画面を選択できます。</p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => { void handleToggle("/app"); }}
+          disabled={isSaving}
+          className={`flex-1 rounded-lg border-2 py-2.5 text-sm font-bold transition-colors ${
+            defaultPage === "/app"
+              ? "border-blue-600 bg-blue-50 text-blue-700"
+              : "border-gray-200 text-gray-600 hover:border-blue-200"
+          }`}
+        >
+          かんたんモード
+        </button>
+        <button
+          onClick={() => { void handleToggle("/dashboard"); }}
+          disabled={isSaving}
+          className={`flex-1 rounded-lg border-2 py-2.5 text-sm font-bold transition-colors ${
+            defaultPage === "/dashboard"
+              ? "border-blue-600 bg-blue-50 text-blue-700"
+              : "border-gray-200 text-gray-600 hover:border-blue-200"
+          }`}
+        >
+          ダッシュボード
+        </button>
+      </div>
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -41,6 +41,7 @@ export default function RegisterPage() {
 
       // 登録成功後そのままログイン
       await login(name, password);
+      // New users always start with /app (setup wizard)
       router.push("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました");

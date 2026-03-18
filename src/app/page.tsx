@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InlineDemo from "./components/InlineDemo";
-import { useAuth } from "./hooks/useAuth";
+import { useAuth, getAuthHeaders } from "./hooks/useAuth";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -15,7 +15,15 @@ export default function LandingPage() {
   useEffect(() => {
     if (isLoading) return;
     if (auth.isAuthenticated) {
-      router.replace("/app");
+      // Check user's default page preference
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
+        .then((res) => res.json())
+        .then((data: unknown) => {
+          const value = (data as Record<string, unknown>)?.value;
+          router.replace(value === "/dashboard" ? "/dashboard" : "/app");
+        })
+        .catch(() => router.replace("/app"));
     } else {
       setReady(true);
     }
