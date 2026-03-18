@@ -6,31 +6,31 @@ import { usePathname, useRouter } from "next/navigation";
 type Crumb = { href: string; label: string };
 
 function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === "/") return [{ href: "/", label: "ダッシュボード" }];
+  if (pathname === "/dashboard") return [{ href: "/dashboard", label: "ダッシュボード" }];
 
   if (pathname.startsWith("/admin/doctors")) {
     return [
-      { href: "/", label: "シフらく" },
+      { href: "/dashboard", label: "シフらく" },
       { href: "/admin/doctors", label: "医師管理" },
     ];
   }
 
   if (pathname.startsWith("/view")) {
     return [
-      { href: "/", label: "シフらく" },
+      { href: "/dashboard", label: "シフらく" },
       { href: "/view", label: "当直表を見る" },
     ];
   }
 
-  return [{ href: "/", label: "シフらく" }];
+  return [{ href: "/dashboard", label: "シフらく" }];
 }
 
 export default function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
 
-  // ✅ 管理導線を出す範囲を限定（/ と /admin のみ）
-  const isAdminScope = pathname === "/" || pathname.startsWith("/admin");
+  // ✅ 管理導線を出す範囲を限定（/dashboard と /admin のみ）
+  const isAdminScope = pathname === "/dashboard" || pathname.startsWith("/admin");
   // ✅ 閲覧・入力スコープ（管理導線を完全に絶つ）
   const isPublicScope = pathname.startsWith("/view") || pathname.startsWith("/entry");
 
@@ -60,7 +60,7 @@ export default function AppHeader() {
 
   // 管理スコープ（/ と /admin）だけ従来UI
   const crumbs = buildCrumbs(pathname);
-  const isHome = pathname === "/";
+  const isHome = pathname === "/dashboard";
 
   return (
     <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
@@ -99,9 +99,9 @@ export default function AppHeader() {
             {isAdminScope && (
               <nav className="hidden md:flex items-center gap-2">
                 <Link
-                  href="/"
+                  href="/dashboard"
                   className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                    pathname === "/"
+                    pathname === "/dashboard"
                       ? "bg-gray-900 text-white border-gray-900"
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
@@ -148,9 +148,9 @@ export default function AppHeader() {
         {isAdminScope && (
           <div className="md:hidden mt-3 flex gap-2">
             <Link
-              href="/"
+              href="/dashboard"
               className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-                pathname === "/"
+                pathname === "/dashboard"
                   ? "bg-gray-900 text-white border-gray-900"
                   : "bg-white text-gray-700"
               }`}

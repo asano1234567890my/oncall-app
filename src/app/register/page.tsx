@@ -41,7 +41,7 @@ export default function RegisterPage() {
 
       // 登録成功後そのままログイン
       await login(name, password);
-      router.push("/");
+      router.push("/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました");
     } finally {
