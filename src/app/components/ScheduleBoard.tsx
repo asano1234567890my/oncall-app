@@ -26,6 +26,7 @@ type ScheduleBoardProps = {
   toYmd: (year: number, month: number, day: number) => string;
   getWeekday: (year: number, month: number, day: number) => string;
   isHighlightedDoctorBlockedDay: (day: number) => boolean;
+  isHighlightedDoctorBlockedShift: (day: number, shiftType: ShiftType) => boolean;
   isShiftLocked: (day: number, shiftType: ShiftType) => boolean;
   invalidHoverShiftKey: string | null;
   touchHoverShiftKey: string | null;
@@ -95,6 +96,14 @@ type ScheduleBoardProps = {
   isSaving: boolean;
   saveMessage: string;
   saveValidationMessages: string[];
+  // 仮保存
+  isDraftSaving?: boolean;
+  isDraftLoading?: boolean;
+  draftSavedAt?: string | null;
+  draftMessage?: string;
+  onSaveDraft?: () => void;
+  onLoadDraft?: () => void;
+  onCopyConfirmedToDraft?: () => void;
 };
 
 export default function ScheduleBoard({
@@ -117,6 +126,7 @@ export default function ScheduleBoard({
   toYmd,
   getWeekday,
   isHighlightedDoctorBlockedDay,
+  isHighlightedDoctorBlockedShift,
   isShiftLocked,
   invalidHoverShiftKey,
   touchHoverShiftKey,
@@ -164,6 +174,13 @@ export default function ScheduleBoard({
   isSaving,
   saveMessage,
   saveValidationMessages,
+  isDraftSaving,
+  isDraftLoading,
+  draftSavedAt,
+  draftMessage,
+  onSaveDraft,
+  onLoadDraft,
+  onCopyConfirmedToDraft,
 }: ScheduleBoardProps) {
   const highlightedDoctorName = highlightedDoctorId ? getDoctorName(highlightedDoctorId) : null;
   const manualSelectionLabel = selectedManualDoctorId ? getDoctorName(selectedManualDoctorId) : null;
@@ -216,11 +233,13 @@ export default function ScheduleBoard({
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div className="w-full min-w-0 text-[9px] leading-tight text-gray-500">
                 D&D で移動・入替・上書きできます。スマホでは [⇄] ボタンで入れ替え元/先を選び、医師や削除をタップ配置できます。
-                {highlightedDoctorName ? <div className="mt-0.5 font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</div> : null}
-                {manualSelectionLabel ? <div className="mt-0.5 font-semibold text-emerald-700">タップ配置: {manualSelectionLabel}</div> : null}
-                {isEraseSelectionActive ? <div className="mt-0.5 font-semibold text-red-600">タップ削除: 削除アイテム選択中</div> : null}
-                {swapSourceLabel ? <div className="mt-0.5 font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</div> : null}
-                {isOverrideMode ? <div className="mt-0.5 font-semibold text-amber-700">強制配置モード: 手動配置の制約チェックを無効化中</div> : null}
+                <div className="h-4 mt-0.5 flex flex-wrap items-center gap-1.5 overflow-hidden">
+                  {highlightedDoctorName && <span className="font-semibold text-sky-700">ハイライト中: {highlightedDoctorName}</span>}
+                  {manualSelectionLabel && <span className="font-semibold text-emerald-700">タップ配置: {manualSelectionLabel}</span>}
+                  {isEraseSelectionActive && <span className="font-semibold text-red-600">タップ削除: 削除アイテム選択中</span>}
+                  {swapSourceLabel && <span className="font-semibold text-sky-700">入れ替え元: {swapSourceLabel}</span>}
+                  {isOverrideMode && <span className="font-semibold text-amber-700">強制配置モード: 制約チェック無効</span>}
+                </div>
               </div>
               <div className="flex w-full flex-wrap items-center gap-1.5 md:w-auto md:shrink-0 md:justify-end">
                 <button
@@ -390,7 +409,8 @@ export default function ScheduleBoard({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-y-1 md:grid-cols-2 md:gap-x-3 md:gap-y-2">
+          <div className="overflow-x-auto -mx-3 px-3">
+          <div className="min-w-[540px] grid grid-cols-2 gap-x-2 gap-y-1">
             {scheduleColumns.map((rows, index) => (
               <div key={`column-${index}`} className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm">
                 <table className="w-full table-fixed select-none bg-white text-center text-[7px] leading-tight sm:text-[9px] md:text-[10px]">
@@ -418,6 +438,7 @@ export default function ScheduleBoard({
                         highlightedDoctorId={highlightedDoctorId}
                         hoverErrorMessage={hoverErrorMessage}
                         isHighlightedDoctorBlockedDay={isHighlightedDoctorBlockedDay}
+                        isHighlightedDoctorBlockedShift={isHighlightedDoctorBlockedShift}
                         isShiftLocked={isShiftLocked}
                         invalidHoverShiftKey={invalidHoverShiftKey}
                         touchHoverShiftKey={touchHoverShiftKey}
@@ -445,17 +466,34 @@ export default function ScheduleBoard({
               </div>
             ))}
           </div>
+          </div>
 
           <div className="mt-2 flex flex-col items-center gap-1">
             <ScheduleValidationAlert messages={saveValidationMessages} onDismiss={onDismissSaveValidation} onForceSave={onForceSaveToDB} />
-            <button
-              type="button"
-              onClick={onSaveToDB}
-              disabled={isSaving}
-              className="w-full rounded-full bg-green-600 px-3 py-1.5 text-[10px] font-bold text-white shadow transition hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSaving ? "保存中..." : "このシフトを保存"}
-            </button>
+            <div className="flex w-full gap-1.5">
+              {onSaveDraft && (
+                <button type="button" onClick={onSaveDraft} disabled={isDraftSaving}
+                  className="flex-1 rounded-full border border-green-600 px-3 py-1.5 text-[10px] font-bold text-green-700 transition hover:bg-green-50 disabled:opacity-60">
+                  {isDraftSaving ? "仮保存中..." : "仮保存"}
+                </button>
+              )}
+              <button type="button" onClick={onSaveToDB} disabled={isSaving}
+                className="flex-1 rounded-full bg-green-600 px-3 py-1.5 text-[10px] font-bold text-white shadow transition hover:bg-green-700 disabled:opacity-60">
+                {isSaving ? "確定中..." : "確定保存"}
+              </button>
+            </div>
+            {draftSavedAt && onLoadDraft && (
+              <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                <span>仮保存あり ({new Date(draftSavedAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })})</span>
+                <button type="button" onClick={onLoadDraft} disabled={isDraftLoading}
+                  className="font-bold text-blue-600 underline hover:text-blue-800">{isDraftLoading ? "読込中..." : "読み込む"}</button>
+              </div>
+            )}
+            {onCopyConfirmedToDraft && (
+              <button type="button" onClick={onCopyConfirmedToDraft}
+                className="text-[10px] text-gray-400 underline hover:text-gray-600">確定済みシフトを仮保存にコピー</button>
+            )}
+            {draftMessage ? <div className="text-[10px] font-bold text-blue-700">{draftMessage}</div> : null}
             {saveMessage ? <div className="text-[10px] font-bold text-green-800">保存結果: {saveMessage}</div> : null}
           </div>
         </div>

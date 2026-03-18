@@ -103,6 +103,7 @@ export function useScheduleDnd({
     getSwapConstraintMessage,
     validateScheduleViolations,
     isHighlightedDoctorBlockedDay,
+    isHighlightedDoctorBlockedShift,
   } = useScheduleConstraints({
     schedule,
     year,
@@ -980,6 +981,7 @@ export function useScheduleDnd({
     isEraseSelectionActive,
     isSwapSourceSelected,
     isHighlightedDoctorBlockedDay,
+    isHighlightedDoctorBlockedShift,
     toggleHighlightedDoctor,
     selectManualDoctor,
     toggleEraseSelection,

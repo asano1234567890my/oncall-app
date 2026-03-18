@@ -5,19 +5,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Settings, ChevronRight, X } from "lucide-react";
 import OnboardingModal from "../components/OnboardingModal";
-import ScheduleBoard from "../components/ScheduleBoard";
+import MobileScheduleBoard from "../components/MobileScheduleBoard";
 import SetupWizard from "../components/SetupWizard";
 import { DoctorSettingsPanel } from "../components/SettingsPanel";
 import RulesConfig from "../components/settings/RulesConfig";
 import WeightsConfig from "../components/settings/WeightsConfig";
+import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
+import HolidaySettingsDrawer from "../components/settings/HolidaySettingsDrawer";
 import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
 import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
+import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
+import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import { getAuthHeaders } from "../hooks/useAuth";
 import { useOnboarding } from "../hooks/useOnboarding";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
-type SettingsDrawer = "rules" | "weights" | "doctors" | "holidays" | "previous" | "other" | null;
+type SettingsDrawer = "shift-scores" | "rules" | "weights" | "doctor-manage" | "doctor-scores" | "doctors" | "holidays" | "previous" | "other" | null;
 
 export default function AppPage() {
   const core = useOnCallCore();
@@ -63,7 +67,23 @@ export default function AppPage() {
       onboarding.triggerOnboarding("generate");
     }
     prevHadSchedule.current = hasSchedule;
-  }, [hasSchedule, onboarding]);
+  }, [hasSchedule, onboarding.triggerOnboarding]);
+
+  // Trigger dnd onboarding after generate onboarding is dismissed
+  useEffect(() => {
+    if (hasSchedule && onboarding.hasSeen("generate") && !onboarding.pendingSection) {
+      onboarding.triggerOnboarding("dnd");
+    }
+  }, [hasSchedule, onboarding.hasSeen, onboarding.pendingSection, onboarding.triggerOnboarding]);
+
+  const previousMonthShiftCount = useMemo(() =>
+    core.prevMonthTailDays.reduce((count, day) => {
+      const d = core.getPreviousMonthShiftDoctorId(day, "day");
+      const n = core.getPreviousMonthShiftDoctorId(day, "night");
+      return count + (d ? 1 : 0) + (n ? 1 : 0);
+    }, 0),
+    [core.prevMonthTailDays, core.getPreviousMonthShiftDoctorId],
+  );
 
   if (core.isAuthLoading || !core.auth.isAuthenticated || setupStatus === "loading") {
     return (
@@ -77,22 +97,19 @@ export default function AppPage() {
     return <SetupWizard onComplete={handleWizardComplete} />;
   }
 
-  const openDrawer = (drawer: SettingsDrawer) => {
+  const openDrawer = (drawer: SettingsDrawer, fromSettings = false) => {
     setActiveDrawer(drawer);
+    if (!fromSettings) setIsSettingsOpen(false);
+    if (drawer === "shift-scores") onboarding.triggerOnboarding("shift-scores");
     if (drawer === "rules") onboarding.triggerOnboarding("rules");
     if (drawer === "weights") onboarding.triggerOnboarding("weights");
+    if (drawer === "doctor-manage") onboarding.triggerOnboarding("doctor-manage");
     if (drawer === "doctors") onboarding.triggerOnboarding("doctors");
+    if (drawer === "doctor-scores") onboarding.triggerOnboarding("doctor-scores");
+    if (drawer === "holidays") onboarding.triggerOnboarding("holidays");
+    if (drawer === "previous") onboarding.triggerOnboarding("previous");
   };
   const closeDrawer = () => setActiveDrawer(null);
-
-  const previousMonthShiftCount = useMemo(() =>
-    core.prevMonthTailDays.reduce((count, day) => {
-      const d = core.getPreviousMonthShiftDoctorId(day, "day");
-      const n = core.getPreviousMonthShiftDoctorId(day, "night");
-      return count + (d ? 1 : 0) + (n ? 1 : 0);
-    }, 0),
-    [core.prevMonthTailDays, core.getPreviousMonthShiftDoctorId],
-  );
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
@@ -108,9 +125,15 @@ export default function AppPage() {
               <Settings className="h-4 w-4" />
               設定
             </button>
+            <button
+              onClick={() => { if (core.confirmMoveWithUnsavedChanges()) router.push("/dashboard"); }}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+            >
+              一覧モード
+            </button>
             <span className="hidden text-sm text-gray-400 sm:inline">{core.auth.hospitalName}</span>
             <button
-              onClick={core.logout}
+              onClick={() => { if (core.confirmMoveWithUnsavedChanges()) core.logout(); }}
               className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
             >
               ログアウト
@@ -123,16 +146,16 @@ export default function AppPage() {
       <main className="mx-auto w-full max-w-5xl px-4 py-6">
         {!hasSchedule && !core.isLoading ? (
           /* ── 生成前：ステップガイド ── */
-          <SetupGuide core={core} onOpenSettings={() => { setIsSettingsOpen(true); setActiveDrawer(null); }} />
+          <SetupGuide core={core} onOpenDrawer={(drawer) => openDrawer(drawer)} />
         ) : (
-          /* ── 生成後：スケジュール表 ── */
+          /* ── 生成後：スケジュール表（モバイル専用） ── */
           <div className="relative">
             {core.isLoading && (
               <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-white/70 p-4 backdrop-blur-[1px]">
-                <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl md:px-6">
+                <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl">
                   <div className="flex flex-col items-center text-center">
                     <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
-                    <div className="text-base font-bold text-gray-800 md:text-lg">当直表を自動生成しています</div>
+                    <div className="text-base font-bold text-gray-800">当直表を自動生成しています</div>
                     <div className="mt-2 text-sm text-gray-500">完了までそのままお待ちください。</div>
                     <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
                       <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
@@ -141,89 +164,7 @@ export default function AppPage() {
                 </div>
               </div>
             )}
-
-            <DoctorSettingsPanel
-              isBulkSavingDoctors={core.isBulkSavingDoctors}
-              activeDoctors={core.activeDoctors}
-              minScoreMap={core.minScoreMap}
-              maxScoreMap={core.maxScoreMap}
-              targetScoreMap={core.targetScoreMap}
-              scoreMin={core.scoreMin}
-              scoreMax={core.scoreMax}
-              onSaveAllDoctorsSettings={core.saveAllDoctorsSettings}
-              onMinScoreChange={core.handleMinScoreChange}
-              onMaxScoreChange={core.handleMaxScoreChange}
-              onTargetScoreChange={core.handleTargetScoreChange}
-            />
-
-            <ScheduleBoard
-              isLoading={core.isLoading}
-              toastMessage={core.toastMessage}
-              hoverErrorMessage={core.hoverErrorMessage}
-              dragSourceType={core.dragSourceType}
-              error={core.error}
-              schedule={core.schedule}
-              scheduleColumns={core.scheduleColumns}
-              scoreEntries={core.scoreEntries}
-              getDoctorName={core.getDoctorName}
-              highlightedDoctorId={core.highlightedDoctorId}
-              selectedManualDoctorId={core.selectedManualDoctorId}
-              isEraseSelectionActive={core.isEraseSelectionActive}
-              year={core.year}
-              month={core.month}
-              holidaySet={core.holidaySet}
-              manualHolidaySetInMonth={core.manualHolidaySetInMonth}
-              toYmd={core.toYmd}
-              getWeekday={core.getWeekday}
-              isHighlightedDoctorBlockedDay={core.isHighlightedDoctorBlockedDay}
-              isShiftLocked={core.isShiftLocked}
-              invalidHoverShiftKey={core.invalidHoverShiftKey}
-              touchHoverShiftKey={core.touchHoverShiftKey}
-              isSwapMode={core.isSwapMode}
-              swapSource={core.swapSource}
-              isSwapSourceSelected={core.isSwapSourceSelected}
-              onHandleShiftDragOver={core.handleShiftDragOver}
-              onHandleShiftDragLeave={core.handleShiftDragLeave}
-              onHandleShiftDrop={core.handleShiftDrop}
-              onHandleDisabledDayDragOver={core.handleDisabledDayDragOver}
-              onHandleDisabledDayDragLeave={core.handleDisabledDayDragLeave}
-              onShiftDragStart={core.handleShiftDragStart}
-              onDoctorListDragStart={core.handleDoctorListDragStart}
-              onShiftTouchStart={core.handleShiftTouchStart}
-              onDoctorListTouchStart={core.handleDoctorListTouchStart}
-              onTouchDragMove={core.handleTouchDragMove}
-              onTouchDragEnd={core.handleTouchDragEnd}
-              onTouchDragCancel={core.handleTouchDragCancel}
-              onShiftTap={core.handleShiftTap}
-              onSwapButtonPress={core.handleSwapButtonPress}
-              onCancelSwapSelection={core.cancelSwapSelection}
-              onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
-              onSelectManualDoctor={core.selectManualDoctor}
-              onToggleEraseSelection={core.toggleEraseSelection}
-              onClearDragState={core.clearDragState}
-              onToggleShiftLock={core.toggleShiftLock}
-              onToggleSwapMode={core.toggleSwapMode}
-              onLockAll={core.handleLockAll}
-              onUnlockAll={core.handleUnlockAll}
-              onUndo={core.undo}
-              onRedo={core.redo}
-              canUndo={core.canUndo}
-              canRedo={core.canRedo}
-              onRegenerateUnlocked={core.handleGenerateWithGuard}
-              onTrashDragOver={core.handleTrashDragOver}
-              onTrashDrop={core.handleTrashDrop}
-              lockedShiftCount={core.lockedShiftKeys.size}
-              onDeleteMonthSchedule={core.handleDeleteMonthSchedule}
-              isDeletingMonthSchedule={core.isDeletingMonthSchedule}
-              onSaveToDB={core.handleSaveWithValidation}
-              isSaving={core.isSaving}
-              isOverrideMode={core.isOverrideMode}
-              onToggleOverrideMode={core.handleToggleOverrideMode}
-              saveValidationMessages={core.saveValidationMessages}
-              onDismissSaveValidation={core.handleDismissSaveValidation}
-              onForceSaveToDB={core.handleForceSaveToDB}
-              saveMessage={core.saveMessage}
-            />
+            <MobileScheduleBoard core={core} onOpenSettings={() => { setIsSettingsOpen(true); setActiveDrawer(null); }} onShowGuide={() => onboarding.showGuide("dnd")} />
           </div>
         )}
       </main>
@@ -243,56 +184,103 @@ export default function AppPage() {
 
           <div className="mx-auto max-w-lg divide-y">
             <SettingsMenuItem
+              emoji="🎯"
+              title="シフトスコア"
+              subtitle="シフト種別ごとの負担度"
+              onClick={() => openDrawer("shift-scores", true)}
+            />
+            <SettingsMenuItem
               emoji="📋"
               title="基本ルール"
               subtitle="当直間隔・上限回数など"
-              onClick={() => openDrawer("rules")}
+              onClick={() => openDrawer("rules", true)}
             />
             <SettingsMenuItem
               emoji="⚖️"
               title="優先度の調整"
               subtitle="できれば守りたいルールの強さ"
-              onClick={() => openDrawer("weights")}
+              onClick={() => openDrawer("weights", true)}
             />
             <SettingsMenuItem
               emoji="👨‍⚕️"
               title="医師の管理"
-              subtitle="名前・目標回数・不可日"
-              onClick={() => openDrawer("doctors")}
+              subtitle="追加・名前変更・削除"
+              onClick={() => openDrawer("doctor-manage", true)}
+            />
+            <SettingsMenuItem
+              emoji="📊"
+              title="スコア設定"
+              subtitle="医師ごとの目標・上限・下限"
+              onClick={() => openDrawer("doctor-scores", true)}
+            />
+            <SettingsMenuItem
+              emoji="🚫"
+              title="不可日設定"
+              subtitle="医師ごとの不可日カレンダー"
+              onClick={() => openDrawer("doctors", true)}
             />
             <SettingsMenuItem
               emoji="📅"
               title="祝日・休日設定"
               subtitle="カレンダーで休日を追加・変更"
-              onClick={() => openDrawer("holidays")}
+              onClick={() => openDrawer("holidays", true)}
             />
             <SettingsMenuItem
-              emoji="📊"
+              emoji="🗓️"
               title="前月の勤務実績"
               subtitle="先月末の当直データ入力"
-              onClick={() => openDrawer("previous")}
+              onClick={() => openDrawer("previous", true)}
             />
             <SettingsMenuItem
               emoji="⚙️"
               title="その他"
               subtitle="日当直モード・初期画面設定"
-              onClick={() => openDrawer("other")}
+              onClick={() => openDrawer("other", true)}
             />
 
-            <div className="px-6 py-4">
+            <div className="px-6 py-4 space-y-2">
               <button
                 onClick={() => {
-                  onboarding.resetAll();
-                  setIsSettingsOpen(false);
+                  // setup_completed をリセットして初期設定ウィザードを再表示
+                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+                  void fetch(`${apiUrl}/api/settings/kv/setup_completed`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                    body: JSON.stringify({ value: false }),
+                  }).then(() => {
+                    setSetupStatus("needed");
+                    setIsSettingsOpen(false);
+                  });
                 }}
                 className="w-full rounded-lg border border-gray-200 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
               >
-                チュートリアルをもう一度見る
+                初期設定をやり直す
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── 医師管理ドロワー ── */}
+      <DoctorManageDrawer
+        isOpen={activeDrawer === "doctor-manage"}
+        onClose={closeDrawer}
+        onDoctorsChanged={() => { void core.refetchDoctors(); }}
+        onShowGuide={() => onboarding.showGuide("doctor-manage")}
+      />
+
+      {/* ── シフトスコア設定ドロワー ── */}
+      <ShiftScoresConfig
+        isOpen={activeDrawer === "shift-scores"}
+        shiftScores={core.shiftScores}
+        isSaving={core.isSavingOptimizerConfig}
+        saveMessage={core.optimizerSaveMessage}
+        onClose={closeDrawer}
+        onReset={() => core.setShiftScores(DEFAULT_SHIFT_SCORES)}
+        onSave={() => { void core.saveOptimizerConfig(); }}
+        onShiftScoreChange={(key, value) => core.setShiftScores({ ...core.shiftScores, [key]: value })}
+        onShowGuide={() => onboarding.showGuide("shift-scores")}
+      />
 
       {/* ── 各設定ドロワー ── */}
       <RulesConfig
@@ -304,6 +292,7 @@ export default function AppPage() {
         onReset={() => core.setHardConstraints(core.DEFAULT_HARD_CONSTRAINTS)}
         onSave={() => { void core.saveOptimizerConfig(); }}
         onHardConstraintChange={core.handleHardConstraintChange}
+        onShowGuide={() => onboarding.showGuide("rules")}
       />
 
       <WeightsConfig
@@ -316,14 +305,26 @@ export default function AppPage() {
         onReset={() => core.setObjectiveWeights(core.DEFAULT_OBJECTIVE_WEIGHTS)}
         onSave={() => { void core.saveOptimizerConfig(); }}
         onWeightChange={core.setWeight}
+        onShowGuide={() => onboarding.showGuide("weights")}
       />
 
       <SettingsModalPortal isOpen={activeDrawer === "doctors"}>
         <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
           <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-blue-100 bg-white shadow-2xl sm:max-h-[90vh]">
             <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-4 py-4 sm:px-5">
-              <h3 className="text-base font-bold text-gray-900">医師の不可日設定</h3>
-              <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+              <h3 className="text-base font-bold text-gray-900">不可日設定</h3>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => onboarding.showGuide("doctors")} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
+                <button
+                  type="button"
+                  onClick={() => { void core.saveAllDoctorsSettings(); }}
+                  disabled={core.isBulkSavingDoctors}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {core.isBulkSavingDoctors ? "保存中..." : "保存"}
+                </button>
+                <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+              </div>
             </div>
             <div className="overflow-y-auto p-4 sm:p-5">
               <UnavailableDaysInput
@@ -344,6 +345,65 @@ export default function AppPage() {
         </div>
       </SettingsModalPortal>
 
+      {/* ── スコア設定ドロワー ── */}
+      <SettingsModalPortal isOpen={activeDrawer === "doctor-scores"}>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-orange-100 bg-white shadow-2xl sm:max-h-[90vh]">
+            <div className="flex items-center justify-between border-b border-orange-100 bg-orange-50 px-4 py-4 sm:px-5">
+              <h3 className="text-base font-bold text-gray-900">スコア設定</h3>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => onboarding.showGuide("doctor-scores")} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
+                <button
+                  type="button"
+                  onClick={() => { void core.saveAllDoctorsSettings(); }}
+                  disabled={core.isBulkSavingDoctors}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {core.isBulkSavingDoctors ? "保存中..." : "保存"}
+                </button>
+                <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-4 sm:p-5">
+              <DoctorSettingsPanel
+                isBulkSavingDoctors={core.isBulkSavingDoctors}
+                activeDoctors={core.activeDoctors}
+                minScoreMap={core.minScoreMap}
+                maxScoreMap={core.maxScoreMap}
+                targetScoreMap={core.targetScoreMap}
+                scoreMin={core.scoreMin}
+                scoreMax={core.scoreMax}
+                onSaveAllDoctorsSettings={() => { void core.saveAllDoctorsSettings(); }}
+                onMinScoreChange={core.handleMinScoreChange}
+                onMaxScoreChange={core.handleMaxScoreChange}
+                onTargetScoreChange={core.handleTargetScoreChange}
+                hideSaveButton
+              />
+            </div>
+          </div>
+        </div>
+      </SettingsModalPortal>
+
+      {/* ── 祝日・休日設定ドロワー ── */}
+      <HolidaySettingsDrawer
+        isOpen={activeDrawer === "holidays"}
+        onClose={closeDrawer}
+        year={core.year}
+        month={core.month}
+        daysInMonth={core.daysInMonth}
+        holidayWorkdayOverrides={core.holidayWorkdayOverrides}
+        isHolidayLikeDay={core.isHolidayLikeDay}
+        onToggleHoliday={core.toggleHoliday}
+        onToggleHolidayOverride={core.handleHolidayOverrideToggle}
+        onSaveCustomHolidays={() => { void core.saveCustomHolidays(); }}
+        isLoadingCustom={core.isLoadingCustom}
+        isSavingCustom={core.isSavingCustom}
+        customError={core.customError}
+        customSaveMessage={core.customSaveMessage}
+        hasUnsavedCustomChanges={core.hasUnsavedCustomChanges}
+        onShowGuide={() => onboarding.showGuide("holidays")}
+      />
+
       <PreviousMonthShiftsConfig
         isOpen={activeDrawer === "previous"}
         year={core.year}
@@ -356,6 +416,7 @@ export default function AppPage() {
         onClose={closeDrawer}
         onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
         onSetPreviousMonthShift={core.setPreviousMonthShift}
+        onShowGuide={() => onboarding.showGuide("previous")}
       />
 
       {/* ── その他設定ドロワー ── */}
@@ -363,7 +424,7 @@ export default function AppPage() {
         <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
           <div className="flex max-h-[85dvh] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[90vh]">
             <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-4 sm:px-5">
-              <h3 className="text-base font-bold text-gray-900">その他の設定</h3>
+              <h3 className="text-base font-bold text-gray-900">その他</h3>
               <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
             </div>
             <div className="overflow-y-auto p-4 sm:p-5 space-y-4">
@@ -402,16 +463,19 @@ function SettingsMenuItem({ emoji, title, subtitle, onClick }: {
 }
 
 /* ── 生成前ステップガイド ── */
-function SetupGuide({ core, onOpenSettings }: {
+function SetupGuide({ core, onOpenDrawer }: {
   core: ReturnType<typeof useOnCallCore>;
-  onOpenSettings: () => void;
+  onOpenDrawer: (drawer: SettingsDrawer) => void;
 }) {
   const doctorCount = core.numDoctors;
   const hasBasicSettings = core.hardConstraints.interval_days >= 1;
   const hasDoctors = doctorCount > 0;
 
-  // 不可日が1人以上に設定されているか
-  const hasUnavailableDays = Object.keys(core.unavailableMap).length > 0;
+  // 不可日が設定されている医師の数
+  const unavailableDoctorCount = core.activeDoctors.filter(
+    (d) => (core.unavailableMap[d.id]?.length ?? 0) > 0
+  ).length;
+  const hasUnavailableDays = unavailableDoctorCount > 0;
 
   return (
     <div className="mx-auto max-w-lg py-8">
@@ -425,21 +489,25 @@ function SetupGuide({ core, onOpenSettings }: {
       <div className="space-y-3 mb-8">
         <StepItem
           done={hasBasicSettings}
-          title="基本設定"
+          title="基本ルール"
           description={hasBasicSettings ? `当直間隔 ${core.hardConstraints.interval_days}日` : "未設定"}
-          onAction={onOpenSettings}
+          onAction={() => onOpenDrawer("rules")}
         />
         <StepItem
           done={hasDoctors}
-          title="医師登録"
+          title="医師の管理"
           description={hasDoctors ? `${doctorCount}名 登録済み` : "未登録"}
-          onAction={onOpenSettings}
+          onAction={() => onOpenDrawer("doctor-manage")}
         />
         <StepItem
           done={hasUnavailableDays}
           title="不可日設定"
-          description={hasUnavailableDays ? "設定済み" : "未設定（スキップ可）"}
-          onAction={onOpenSettings}
+          description={
+            hasUnavailableDays
+              ? `${unavailableDoctorCount}/${doctorCount}名 入力済み`
+              : "未設定（スキップ可）"
+          }
+          onAction={() => onOpenDrawer("doctors")}
           optional
         />
       </div>
@@ -567,7 +635,7 @@ function DefaultPageSetting() {
               : "border-gray-200 text-gray-600 hover:border-blue-200"
           }`}
         >
-          ダッシュボード
+          一覧モード
         </button>
       </div>
     </div>

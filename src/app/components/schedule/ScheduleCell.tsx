@@ -17,6 +17,7 @@ type ScheduleCellProps = {
   highlightedDoctorId: string | null;
   hoverErrorMessage: string | null;
   isHighlightedDoctorBlockedDay: (day: number) => boolean;
+  isHighlightedDoctorBlockedShift: (day: number, shiftType: ShiftType) => boolean;
   isShiftLocked: (day: number, shiftType: ShiftType) => boolean;
   invalidHoverShiftKey: string | null;
   touchHoverShiftKey: string | null;
@@ -74,6 +75,7 @@ export default function ScheduleCell({
   highlightedDoctorId,
   hoverErrorMessage,
   isHighlightedDoctorBlockedDay,
+  isHighlightedDoctorBlockedShift,
   isShiftLocked,
   invalidHoverShiftKey,
   touchHoverShiftKey,
@@ -115,6 +117,8 @@ export default function ScheduleCell({
   const daySwapSelected = isSwapSourceSelected(row.day, "day");
   const nightSwapSelected = isSwapSourceSelected(row.day, "night");
   const highlightBlocked = isHighlightedDoctorBlockedDay(row.day);
+  const dayBlocked = isHighlightedDoctorBlockedShift(row.day, "day");
+  const nightBlocked = isHighlightedDoctorBlockedShift(row.day, "night");
 
   const renderHoverTooltip = (isVisible: boolean) => {
     if (!isVisible || !hoverErrorMessage) return null;
@@ -139,7 +143,7 @@ export default function ScheduleCell({
 
     return `${tone} min-w-0 flex-1 truncate rounded-full px-0.5 py-[1px] text-left text-[8px] font-bold leading-tight whitespace-nowrap touch-none sm:px-1 sm:py-0.5 sm:text-[9px] ${
       locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
-    } ${isHighlighted ? "ring-1 ring-sky-500 ring-offset-1" : ""}`;
+    } ${isHighlighted ? "ring-2 ring-blue-600 ring-offset-1 bg-blue-100 text-blue-900" : ""}`;
   };
 
   const dateCellClass = isHolidayLike
@@ -159,11 +163,11 @@ export default function ScheduleCell({
       : dayTouchHovered
         ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
         : dayLocked
-          ? highlightBlocked
-            ? "border-amber-300 bg-red-100"
+          ? dayBlocked
+            ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
             : "border-amber-300 bg-amber-50"
-          : highlightBlocked
-            ? "border-red-200 bg-red-100"
+          : dayBlocked
+            ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
             : isHolidayLike
               ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
               : "border-transparent bg-white hover:border-gray-200";
@@ -174,11 +178,11 @@ export default function ScheduleCell({
       : nightTouchHovered
         ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
         : nightLocked
-          ? highlightBlocked
-            ? "border-amber-300 bg-red-100"
+          ? nightBlocked
+            ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
             : "border-amber-300 bg-amber-50"
-          : highlightBlocked
-            ? "border-red-200 bg-red-100"
+          : nightBlocked
+            ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
             : isHolidayLike
               ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
               : "border-transparent bg-white hover:border-gray-200";
@@ -188,8 +192,8 @@ export default function ScheduleCell({
       ? "cursor-not-allowed border-red-300 bg-red-200 text-red-700"
       : dayTouchHovered
         ? "border-sky-300 bg-sky-50 text-sky-700 ring-1 ring-sky-200"
-        : highlightBlocked
-          ? "cursor-not-allowed border-red-200 bg-red-100 text-red-500"
+        : dayBlocked
+          ? "cursor-not-allowed border-red-400 bg-red-500/30 text-red-600 ring-1 ring-inset ring-red-400"
           : "cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400";
 
   const renderShiftBox = (shiftType: ShiftType) => {

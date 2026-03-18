@@ -24,3 +24,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 入れ替え完了フラッシュ（赤→透明へフェードアウト） */
+@keyframes swap-flash {
+  0% {
+    background-color: rgb(239 68 68 / 0.4);
+    color: rgb(127 29 29);
+  }
+  100% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+.demo-swap-flash {
+  animation: swap-flash 1.2s ease-out forwards;
+}
+.swap-flash {
+  animation: swap-flash 1.5s ease-out forwards;
+}

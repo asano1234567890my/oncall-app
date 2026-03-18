@@ -188,6 +188,7 @@ export function useScheduleConstraints({
   ) => hasAnyManualUnavailableEntry(doctorId, day, shiftType) || hasAnyFixedUnavailableEntry(doctorId, day, shiftType);
 
   const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
+  const isHighlightedDoctorBlockedShift = (day: number, shiftType: ShiftType) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day, shiftType);
 
   const getPlacementConstraintMessage = (
     doctorId: string | null | undefined,
@@ -435,6 +436,7 @@ export function useScheduleConstraints({
     validateScheduleViolations,
     isDoctorBlockedByManualConstraints,
     isHighlightedDoctorBlockedDay,
+    isHighlightedDoctorBlockedShift,
     hasAnyManualUnavailableEntry,
     hasAnyFixedUnavailableEntry,
   };
