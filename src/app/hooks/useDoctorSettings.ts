@@ -267,5 +267,5 @@ export function useDoctorSettings({
     }
   };
 
-  return { getUnsavedDoctorNames, saveAllDoctorsSettings };
+  return { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors: fetchDoctors };
 }

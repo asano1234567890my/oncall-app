@@ -4,9 +4,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getAuthHeaders } from "./useAuth";
 
-export type OnboardingSection = "rules" | "weights" | "doctors" | "generate" | "dnd";
+export type OnboardingSection = "shift-scores" | "rules" | "weights" | "doctor-manage" | "doctors" | "doctor-scores" | "holidays" | "previous" | "generate" | "dnd";
 
-const ALL_SECTIONS: OnboardingSection[] = ["rules", "weights", "doctors", "generate", "dnd"];
+const ALL_SECTIONS: OnboardingSection[] = ["shift-scores", "rules", "weights", "doctor-manage", "doctors", "doctor-scores", "holidays", "previous", "generate", "dnd"];
 
 export function useOnboarding(isAuthenticated: boolean) {
   const [seenSections, setSeenSections] = useState<Set<OnboardingSection>>(new Set(ALL_SECTIONS));
@@ -69,10 +69,15 @@ export function useOnboarding(isAuthenticated: boolean) {
     });
   }, []);
 
+  const showGuide = useCallback((section: OnboardingSection) => {
+    setPendingSection(section);
+  }, []);
+
   return {
     pendingSection,
     triggerOnboarding,
     dismissOnboarding,
+    showGuide,
     resetAll,
     hasSeen: (section: OnboardingSection) => seenSections.has(section),
   };

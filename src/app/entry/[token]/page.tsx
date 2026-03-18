@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
 import { format } from "date-fns";
 import TargetShiftPopover from "../../components/TargetShiftPopover";
 import type {
@@ -379,6 +380,7 @@ export default function EntryPage() {
                     <DayPicker
                       month={month}
                       onMonthChange={setMonth}
+                      locale={ja}
                       onDayClick={handleDayClick}
                       navLayout="after"
                       modifiers={calendarModifiers}

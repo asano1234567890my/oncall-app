@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, type HardConstraints, type ObjectiveWeights } from "../types/dashboard";
+import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, DEFAULT_SHIFT_SCORES, type HardConstraints, type ObjectiveWeights, type ShiftScores } from "../types/dashboard";
 import { getAuthHeaders } from "./useAuth";
 
 type UseOptimizerConfigParams = {
   scoreMin: number;
   scoreMax: number;
+  shiftScores: ShiftScores;
   objectiveWeights: ObjectiveWeights;
   hardConstraints: HardConstraints;
   setScoreMin: (v: number) => void;
   setScoreMax: (v: number) => void;
+  setShiftScores: (v: ShiftScores) => void;
   setObjectiveWeights: (v: ObjectiveWeights) => void;
   setHardConstraints: (v: HardConstraints) => void;
 };
@@ -16,10 +18,12 @@ type UseOptimizerConfigParams = {
 export function useOptimizerConfig({
   scoreMin,
   scoreMax,
+  shiftScores,
   objectiveWeights,
   hardConstraints,
   setScoreMin,
   setScoreMax,
+  setShiftScores,
   setObjectiveWeights,
   setHardConstraints,
 }: UseOptimizerConfigParams) {
@@ -37,6 +41,9 @@ export function useOptimizerConfig({
         const cfg = data as Record<string, unknown>;
         if (typeof cfg.score_min === "number") setScoreMin(cfg.score_min);
         if (typeof cfg.score_max === "number") setScoreMax(cfg.score_max);
+        if (cfg.shift_scores && typeof cfg.shift_scores === "object") {
+          setShiftScores({ ...DEFAULT_SHIFT_SCORES, ...(cfg.shift_scores as Partial<ShiftScores>) });
+        }
         if (cfg.objective_weights && typeof cfg.objective_weights === "object") {
           setObjectiveWeights({ ...DEFAULT_OBJECTIVE_WEIGHTS, ...(cfg.objective_weights as Partial<ObjectiveWeights>) });
         }
@@ -62,6 +69,7 @@ export function useOptimizerConfig({
         body: JSON.stringify({
           score_min: scoreMin,
           score_max: scoreMax,
+          shift_scores: shiftScores,
           objective_weights: objectiveWeights,
           hard_constraints: hardConstraints,
         }),

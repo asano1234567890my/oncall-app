@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { DayPicker } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
 import { format } from "date-fns";
 import StepperNumberInput from "./inputs/StepperNumberInput";
@@ -62,6 +63,7 @@ type GenerationSettingsPanelProps = {
   isSavingOptimizerConfig: boolean;
   optimizerSaveMessage: string;
   onSaveOptimizerConfig: () => void;
+  onToggleShiftScores: () => void;
   onToggleWeights: () => void;
   onResetWeights: () => void;
   onCloseWeights: () => void;
@@ -101,6 +103,7 @@ type DoctorSettingsPanelProps = {
   onMinScoreChange: (doctorId: string, value: number) => void;
   onMaxScoreChange: (doctorId: string, value: number) => void;
   onTargetScoreChange: (doctorId: string, value: number) => void;
+  hideSaveButton?: boolean;
 };
 
 export function GenerationSettingsPanel({
@@ -137,6 +140,7 @@ export function GenerationSettingsPanel({
   isSavingOptimizerConfig,
   optimizerSaveMessage,
   onSaveOptimizerConfig,
+  onToggleShiftScores,
   onToggleWeights,
   onResetWeights,
   onCloseWeights,
@@ -313,24 +317,31 @@ export function GenerationSettingsPanel({
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={onToggleShiftScores}
+            className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+          >
+            シフトスコアを開く
+          </button>
+          <button
+            type="button"
             onClick={onToggleWeights}
             className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-100"
           >
-            重み設定を開く
+            優先度の調整を開く
           </button>
           <button
             type="button"
             onClick={onToggleHardConstraints}
             className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-100"
           >
-            ルール（ハード制約）設定を開く
+            基本ルールを開く
           </button>
           <button
             type="button"
             onClick={onTogglePreviousMonthShifts}
             className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-100"
           >
-            前月末勤務を確認・修正する
+            前月の勤務実績を確認・修正する
           </button>
         </div>
       </div>
@@ -414,6 +425,7 @@ export function GenerationSettingsPanel({
         <DayPicker
           mode="multiple"
           month={displayMonth}
+          locale={ja}
           selected={holidaySelectedDates}
           onDayClick={handleHolidayDateClick}
           showOutsideDays

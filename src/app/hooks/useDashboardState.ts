@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import {
   DEFAULT_HARD_CONSTRAINTS,
   DEFAULT_OBJECTIVE_WEIGHTS,
+  DEFAULT_SHIFT_SCORES,
   type Doctor,
   type FixedUnavailableWeekdayMap,
   type HardConstraints,
   type ObjectiveWeights,
   type PreviousMonthShift,
+  type ShiftScores,
   type ShiftType,
   type TargetShift,
   type UnavailableDateMap,
@@ -50,6 +52,7 @@ export default function useDashboardState() {
   const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => new Set());
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
+  const [shiftScores, setShiftScores] = useState<ShiftScores>(DEFAULT_SHIFT_SCORES);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [isHardConstraintsOpen, setIsHardConstraintsOpen] = useState(false);
@@ -114,7 +117,12 @@ export default function useDashboardState() {
     return doctorNameById[doctorId] ?? "不明";
   };
 
-  const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
+  const activeDoctors = useMemo(() =>
+    doctors
+      .filter((doctor) => doctor.is_active !== false)
+      .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true })),
+    [doctors],
+  );
   const activeDoctorIds = useMemo(() => activeDoctors.map((doctor) => doctor.id), [activeDoctors]);
   const numDoctors = activeDoctors.length;
 
@@ -282,6 +290,8 @@ export default function useDashboardState() {
     setScoreMin,
     scoreMax,
     setScoreMax,
+    shiftScores,
+    setShiftScores,
     objectiveWeights,
     setObjectiveWeights,
     setWeight,

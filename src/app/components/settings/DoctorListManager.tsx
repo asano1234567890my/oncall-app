@@ -15,6 +15,7 @@ type DoctorListManagerProps = {
   onMinScoreChange: (doctorId: string, value: number) => void;
   onMaxScoreChange: (doctorId: string, value: number) => void;
   onTargetScoreChange: (doctorId: string, value: number) => void;
+  hideSaveButton?: boolean;
 };
 
 export default function DoctorListManager({
@@ -29,25 +30,28 @@ export default function DoctorListManager({
   onMinScoreChange,
   onMaxScoreChange,
   onTargetScoreChange,
+  hideSaveButton = false,
 }: DoctorListManagerProps) {
   return (
     <>
-      <div className="mb-4 md:mb-6">
-        <button
-          type="button"
-          onClick={onSaveAllDoctorsSettings}
-          disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-          className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
-            isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-          title="全医師の Min / Max / 目標値と不可設定を保存します。"
-        >
-          {isBulkSavingDoctors ? "保存中..." : "全員の設定を保存"}
-        </button>
-        <div className="mt-2 text-[11px] text-gray-500">
-          各医師の Min / Max / 目標値に加えて、医師別不可日設定と個別不可曜日の設定もまとめて保存できます。重み・ルール設定は上記の「スコア・重み・ルールを保存」ボタンをご使用ください。
+      {!hideSaveButton && (
+        <div className="mb-4 md:mb-6">
+          <button
+            type="button"
+            onClick={onSaveAllDoctorsSettings}
+            disabled={isBulkSavingDoctors || activeDoctors.length === 0}
+            className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
+              isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+            title="全医師の Min / Max / 目標値と不可設定を保存します。"
+          >
+            {isBulkSavingDoctors ? "保存中..." : "全員の設定を保存"}
+          </button>
+          <div className="mt-2 text-[11px] text-gray-500">
+            各医師の Min / Max / 目標値に加えて、医師別不可日設定と個別不可曜日の設定もまとめて保存できます。重み・ルール設定は上記の「スコア・重み・ルールを保存」ボタンをご使用ください。
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm md:mb-5 md:p-4">
         <h3 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-bold text-orange-800 md:text-base">

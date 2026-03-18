@@ -1,17 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { auth, isLoading: isAuthLoading, login } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // ログイン済みならリダイレクト
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (auth.isAuthenticated) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
+        .then((res) => res.json())
+        .then((data: unknown) => {
+          const value = (data as Record<string, unknown>)?.value;
+          router.replace(value === "/dashboard" ? "/dashboard" : "/app");
+        })
+        .catch(() => router.replace("/app"));
+    }
+  }, [auth.isAuthenticated, isAuthLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +51,15 @@ export default function LoginPage() {
       setIsLoading(false);
     }
   };
+
+  // ログイン済みチェック中
+  if (isAuthLoading || auth.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 gap-8">

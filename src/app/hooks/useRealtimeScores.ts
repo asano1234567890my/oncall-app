@@ -1,5 +1,6 @@
 import { useMemo } from "react";
-import type { Doctor, DoctorScoreEntry, ScheduleRow } from "../types/dashboard";
+import type { Doctor, DoctorScoreEntry, ScheduleRow, ShiftScores } from "../types/dashboard";
+import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 
 type UseRealtimeScoresParams = {
   activeDoctors: Doctor[];
@@ -11,15 +12,11 @@ type UseRealtimeScoresParams = {
   holidayWorkdayOverrides: Set<string>;
   scoreMin: number;
   scoreMax: number;
+  shiftScores: ShiftScores;
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
   targetScoreMap: Record<string, number>;
 };
-
-const SCORE_DAY_WEIGHT = 0.5;
-const SCORE_SATURDAY_NIGHT = 1.5;
-const SCORE_SUNHOL_NIGHT = 1.0;
-const SCORE_WEEKDAY_NIGHT = 1.0;
 
 const formatDayKey = (year: number, month: number, day: number) =>
   `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -35,11 +32,13 @@ export function useRealtimeScores({
   holidayWorkdayOverrides,
   scoreMin,
   scoreMax,
+  shiftScores,
   minScoreMap,
   maxScoreMap,
   targetScoreMap,
 }: UseRealtimeScoresParams) {
   const liveScores = useMemo(() => {
+    const ss = shiftScores ?? DEFAULT_SHIFT_SCORES;
     const totals: Record<string, number> = {};
 
     activeDoctors.forEach((doctor) => {
@@ -56,21 +55,21 @@ export function useRealtimeScores({
       const isSundayOrHoliday = isSunday || isHoliday || isManualHoliday;
 
       if (row.day_shift) {
-        totals[row.day_shift] = (totals[row.day_shift] ?? 0) + (isSundayOrHoliday ? SCORE_DAY_WEIGHT : 0);
+        totals[row.day_shift] = (totals[row.day_shift] ?? 0) + (isSundayOrHoliday ? ss.holiday_day : 0);
       }
 
       if (row.night_shift) {
         const nightWeight = isSundayOrHoliday
-          ? SCORE_SUNHOL_NIGHT
+          ? ss.holiday_night
           : isSaturday
-            ? SCORE_SATURDAY_NIGHT
-            : SCORE_WEEKDAY_NIGHT;
+            ? ss.saturday_night
+            : ss.weekday_night;
         totals[row.night_shift] = (totals[row.night_shift] ?? 0) + nightWeight;
       }
     });
 
     return totals;
-  }, [activeDoctors, schedule, year, month, holidaySet, manualHolidaySetInMonth, holidayWorkdayOverrides]);
+  }, [activeDoctors, schedule, year, month, holidaySet, manualHolidaySetInMonth, holidayWorkdayOverrides, shiftScores]);
 
   const scoreEntries = useMemo<DoctorScoreEntry[]>(() => {
     return activeDoctors.map((doctor) => {

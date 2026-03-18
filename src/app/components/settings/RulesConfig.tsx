@@ -13,6 +13,7 @@ type RulesConfigProps = {
   onClose: () => void;
   onReset: () => void;
   onSave?: () => void;
+  onShowGuide?: () => void;
   onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
 };
 
@@ -24,6 +25,7 @@ export default function RulesConfig({
   onClose,
   onReset,
   onSave,
+  onShowGuide,
   onHardConstraintChange,
 }: RulesConfigProps) {
   return (
@@ -32,7 +34,7 @@ export default function RulesConfig({
         <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:max-h-[90vh]">
           <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
             <div>
-              <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
+              <h3 className="text-base font-bold text-gray-900">基本ルール</h3>
               <p className="mt-1 text-xs text-gray-500">数値を 0 にすると制限なし。スケジュール生成時に厳守されます。</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -53,6 +55,9 @@ export default function RulesConfig({
               >
                 既定値に戻す
               </button>
+              {onShowGuide && (
+                <button type="button" onClick={onShowGuide} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

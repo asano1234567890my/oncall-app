@@ -3,10 +3,13 @@ POST /api/demo/optimize — 公開デモ用（認証不要・DB書き込みな�
 """
 from __future__ import annotations
 
+import calendar
 import time
 from collections import defaultdict
+from datetime import date
 from typing import Any, Dict, List, Optional
 
+import jpholiday
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -30,16 +33,27 @@ def _check_rate_limit(client_ip: str) -> None:
     _rate_limits[client_ip].append(now)
 
 
+def _undo_rate_limit(client_ip: str) -> None:
+    """生成失敗時にカウントを1つ取り消す"""
+    if _rate_limits[client_ip]:
+        _rate_limits[client_ip].pop()
+
+
 class DemoOptimizeRequest(BaseModel):
     num_doctors: int = Field(ge=2, le=15)
     year: int
     month: int
     holidays: List[int] = Field(default_factory=list)
-    interval_days: int = Field(default=1, ge=0, le=5)
-    max_saturday_nights: int = Field(default=2, ge=0, le=10)
+    interval_days: int = Field(default=2, ge=0, le=7)
+    max_saturday_nights: int = Field(default=2, ge=0, le=99)
+    max_sunhol_works: Optional[int] = Field(default=None, ge=1, le=10)
     score_min: float = Field(default=3)
-    score_max: float = Field(default=5)
+    score_max: float = Field(default=6)
     holiday_shift_mode: Optional[str] = None
+    objective_weights: Optional[Dict[str, Any]] = None
+    target_score_by_doctor: Optional[Dict[str, float]] = None
+    min_score_by_doctor: Optional[Dict[str, float]] = None
+    max_score_by_doctor: Optional[Dict[str, float]] = None
 
 
 @router.post("/optimize")
@@ -48,18 +62,34 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
     _check_rate_limit(client_ip)
 
     try:
+        # 祝日が未指定なら jpholiday から自動取得
+        holidays = req.holidays
+        if not holidays:
+            num_days = calendar.monthrange(req.year, req.month)[1]
+            holidays = [
+                d
+                for d in range(1, num_days + 1)
+                if jpholiday.is_holiday(date(req.year, req.month, d))
+            ]
+
         hard_constraints: Dict[str, Any] = {
             "interval_days": req.interval_days,
             "max_saturday_nights": req.max_saturday_nights,
         }
+        if req.max_sunhol_works is not None:
+            hard_constraints["max_sunhol_works"] = req.max_sunhol_works
         if req.holiday_shift_mode:
             hard_constraints["holiday_shift_mode"] = req.holiday_shift_mode
+
+        # JSON keys are strings; optimizer expects int keys
+        def _int_keys(d: Optional[Dict[str, float]]) -> Dict[int, float]:
+            return {int(k): v for k, v in (d or {}).items()}
 
         optimizer = OnCallOptimizer(
             num_doctors=req.num_doctors,
             year=req.year,
             month=req.month,
-            holidays=req.holidays,
+            holidays=holidays,
             unavailable={},
             fixed_unavailable_weekdays={},
             prev_month_worked_days={},
@@ -69,12 +99,12 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
             score_max=req.score_max,
             past_sat_counts={},
             past_sunhol_counts={},
-            min_score_by_doctor={},
-            max_score_by_doctor={},
-            target_score_by_doctor={},
+            min_score_by_doctor=_int_keys(req.min_score_by_doctor),
+            max_score_by_doctor=_int_keys(req.max_score_by_doctor),
+            target_score_by_doctor=_int_keys(req.target_score_by_doctor),
             past_total_scores={},
             sat_prev={},
-            objective_weights={},
+            objective_weights=req.objective_weights or {},
             hard_constraints=hard_constraints,
             locked_shifts=[],
         )
@@ -83,12 +113,13 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
         solve_result = optimizer.solve()
 
         if not solve_result.get("success"):
+            _undo_rate_limit(client_ip)
             raise HTTPException(
                 status_code=400,
                 detail=solve_result.get("message", "生成に失敗しました"),
             )
 
-        # Map int indices to "医師N" names for display
+        # Map int indices to "demo_N" IDs for display
         if isinstance(solve_result.get("schedule"), list):
             for row in solve_result["schedule"]:
                 if row.get("day_shift") is not None:
@@ -118,4 +149,5 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        _undo_rate_limit(client_ip)
         raise HTTPException(status_code=500, detail=str(e))

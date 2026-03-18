@@ -131,7 +131,7 @@ export function useScheduleApi({
   const [saveMessage, setSaveMessage] = useState("");
   const [error, setError] = useState("");
 
-  const { getUnsavedDoctorNames, saveAllDoctorsSettings } = useDoctorSettings({
+  const { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors } = useDoctorSettings({
     activeDoctors,
     unavailableMap,
     fixedUnavailableWeekdaysMap,
@@ -412,5 +412,6 @@ export function useScheduleApi({
     handleDeleteMonthSchedule,
     handleGenerate,
     handleSaveToDB,
+    refetchDoctors,
   };
 }

@@ -143,12 +143,13 @@ export default function LandingPage() {
 
       {/* ────────── デモセクション ────────── */}
       <section id="demo" className="bg-white px-4 py-16 md:py-20">
-        <div className="max-w-lg mx-auto">
+        <div className="max-w-xl mx-auto">
           <h2 className="text-xl font-bold text-gray-800 md:text-2xl mb-4 text-center">
             今すぐ試してみる
           </h2>
           <p className="text-gray-600 mb-8 text-center">
-            登録不要で当直表の自動生成を体験できます。
+            登録不要で当直表の自動生成を体験できます。<br className="hidden sm:inline" />
+            ルールを設定して、1か月分のシフトを自動生成。
           </p>
           <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
             <InlineDemo />

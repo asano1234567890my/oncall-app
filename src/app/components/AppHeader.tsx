@@ -6,12 +6,12 @@ import { usePathname, useRouter } from "next/navigation";
 type Crumb = { href: string; label: string };
 
 function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === "/dashboard") return [{ href: "/dashboard", label: "ダッシュボード" }];
+  if (pathname === "/dashboard") return [{ href: "/dashboard", label: "一覧モード" }];
 
   if (pathname.startsWith("/admin/doctors")) {
     return [
-      { href: "/dashboard", label: "シフらく" },
-      { href: "/admin/doctors", label: "医師管理" },
+      { href: "/dashboard", label: "一覧モード" },
+      { href: "/admin/doctors", label: "医師一覧" },
     ];
   }
 
@@ -22,12 +22,16 @@ function buildCrumbs(pathname: string): Crumb[] {
     ];
   }
 
-  return [{ href: "/dashboard", label: "シフらく" }];
+  return [{ href: "/dashboard", label: "一覧モード" }];
 }
 
 export default function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
+
+  // ✅ LP・/app・認証ページでは AppHeader 自体を非表示（各ページが独自ヘッダーを持つ）
+  const hideHeader = pathname === "/" || pathname === "/app" || pathname === "/login" || pathname === "/register";
+  if (hideHeader) return null;
 
   // ✅ 管理導線を出す範囲を限定（/dashboard と /admin のみ）
   const isAdminScope = pathname === "/dashboard" || pathname.startsWith("/admin");
@@ -106,7 +110,7 @@ export default function AppHeader() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  シフらく
+                  一覧モード
                 </Link>
                 <Link
                   href="/admin/doctors"
@@ -116,7 +120,7 @@ export default function AppHeader() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  医師管理
+                  医師一覧
                 </Link>
                 <Link
                   href="/view"
@@ -155,7 +159,7 @@ export default function AppHeader() {
                   : "bg-white text-gray-700"
               }`}
             >
-              作成
+              一覧モード
             </Link>
             <Link
               href="/admin/doctors"
@@ -165,7 +169,7 @@ export default function AppHeader() {
                   : "bg-white text-gray-700"
               }`}
             >
-              医師
+              医師一覧
             </Link>
             <Link
               href="/view"

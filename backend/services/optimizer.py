@@ -32,6 +32,7 @@ class ObjectiveWeights:
 class OnCallOptimizer:
     """CP-SAT model for monthly on-call schedule generation."""
 
+    # Default score weights (×10 for integer arithmetic in CP-SAT)
     W_WEEKDAY_NIGHT = 10  # 1.0
     W_SAT_NIGHT = 15      # 1.5
     W_SUNHOL_DAY = 5      # 0.5
@@ -66,6 +67,7 @@ class OnCallOptimizer:
         prevent_sunhol_consecutive: Optional[Any] = None,
         respect_unavailable_days: Optional[Any] = None,
         locked_shifts: Optional[List[Dict[str, Any]]] = None,
+        shift_scores: Optional[Dict[str, float]] = None,
     ):
         self.num_doctors = num_doctors
         self.year = year
@@ -105,6 +107,19 @@ class OnCallOptimizer:
 
         # locked_shifts are normalized to doctor_idx at the router boundary.
         self.locked_shifts = locked_shifts or []
+
+        # Apply configurable shift scores (override class defaults)
+        ss = shift_scores or {}
+        if "weekday_night" in ss:
+            self.W_WEEKDAY_NIGHT = int(round(float(ss["weekday_night"]) * 10))
+        if "saturday_night" in ss:
+            self.W_SAT_NIGHT = int(round(float(ss["saturday_night"]) * 10))
+        if "holiday_day" in ss:
+            self.W_SUNHOL_DAY = int(round(float(ss["holiday_day"]) * 10))
+        if "holiday_night" in ss:
+            self.W_SUNHOL_NIGHT = int(round(float(ss["holiday_night"]) * 10))
+        # combined day+night = holiday_day + holiday_night
+        self.W_DAY_NIGHT = self.W_SUNHOL_DAY + self.W_SUNHOL_NIGHT
 
         ow = objective_weights or {}
         self.objective_weights = ObjectiveWeights(

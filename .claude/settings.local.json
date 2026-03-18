@@ -7,7 +7,24 @@
       "Bash(git commit:*)",
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
-      "Bash(wc -l src/app/components/ScheduleBoard.tsx src/app/components/settings/*.tsx src/app/hooks/*.ts backend/services/*.py)"
+      "Bash(wc -l src/app/components/ScheduleBoard.tsx src/app/components/settings/*.tsx src/app/hooks/*.ts backend/services/*.py)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run:*)",
+      "Bash(curl -s http://localhost:3001/)",
+      "Bash(curl -s http://localhost:3001/app)",
+      "Bash(curl -v http://localhost:3001/)",
+      "Bash(curl -v http://localhost:3000/)",
+      "Bash(.venv/Scripts/python -m pytest backend/tests/test_optimizer_history_scores.py -v)",
+      "Bash(python -m pytest backend/tests/test_optimizer_history_scores.py -v)",
+      "Bash(python -m pytest tests/test_optimizer_history_scores.py -v)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/optimizer.py''\\).read\\(\\)\\); print\\(''optimizer.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/optimizer_history.py''\\).read\\(\\)\\); print\\(''optimizer_history.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/settings_service.py''\\).read\\(\\)\\); print\\(''settings_service.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/routers/optimize.py''\\).read\\(\\)\\); print\\(''optimize.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/optimizer.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''optimizer.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/optimizer_history.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''optimizer_history.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/services/settings_service.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''settings_service.py OK''\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''backend/routers/optimize.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''optimize.py OK''\\)\")"
     ]
   }
 }

@@ -198,24 +198,26 @@ export default function SetupWizard({ onComplete }: WizardProps) {
           title="当直明けは何日空けたいですか？"
           subtitle="連続を避けるために最低限空ける日数です"
         >
-          <div className="grid grid-cols-2 gap-3 my-6">
-            {[
-              { value: 0, label: "翌日OK" },
-              { value: 1, label: "1日" },
-              { value: 2, label: "2日" },
-              { value: 3, label: "3日" },
-            ].map(({ value, label }) => (
-              <ChoiceButton
-                key={value}
-                label={label}
-                selected={state.intervalDays === value}
-                onClick={() => setState((s) => ({ ...s, intervalDays: value, step: 5 }))}
+          <div className="my-6">
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={0}
+                max={7}
+                value={state.intervalDays}
+                onChange={(e) => setState((s) => ({ ...s, intervalDays: Number(e.target.value) }))}
+                className="flex-1"
               />
-            ))}
+              <span className="w-16 text-right text-lg font-bold text-gray-800">
+                {state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}
+              </span>
+            </div>
+            <div className="flex justify-between text-[10px] text-gray-400 mt-0.5 px-0.5">
+              <span>翌日OK</span>
+              <span>7日</span>
+            </div>
           </div>
-          <button onClick={() => setStep(3)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2">
-            戻る
-          </button>
+          <NavButtons onBack={() => setStep(3)} onNext={() => setStep(5)} />
         </StepContainer>
       )}
 

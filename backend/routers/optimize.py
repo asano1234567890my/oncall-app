@@ -12,6 +12,7 @@ from models.doctor import Doctor
 from schemas.optimize import OptimizeRequest, OptimizeResponse
 from services.optimizer import OnCallOptimizer
 from services.optimizer_history import build_past_total_scores
+from services.settings_service import get_optimizer_config
 
 router = APIRouter(prefix="/api/optimize", tags=["Optimize"])
 
@@ -110,12 +111,17 @@ async def generate_schedule(
                 out[_key_to_idx(k)] = v
             return out
 
+        # Load shift_scores from optimizer config
+        optimizer_cfg = await get_optimizer_config(db, hospital_id)
+        shift_scores = optimizer_cfg.get("shift_scores")
+
         historical_past_total_scores = await build_past_total_scores(
             db,
             hospital_id=hospital_id,
             doctor_ids=[doctor.id for doctor in doctors],
             target_year=req.year,
             target_month=req.month,
+            shift_scores=shift_scores,
         )
         merged_past_total_scores: Dict[str, float] = {
             str(doctor_id): score
@@ -198,6 +204,7 @@ async def generate_schedule(
             objective_weights=weights_dict,
             hard_constraints=req.hard_constraints,
             locked_shifts=locked_shifts_idx,
+            shift_scores=shift_scores,
         )
 
         optimizer.build_model()

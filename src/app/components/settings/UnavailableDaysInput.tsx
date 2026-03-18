@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { DayPicker } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
 import TargetShiftPopover from "../TargetShiftPopover";
 import { useCustomHolidays } from "../../hooks/useCustomHolidays";
@@ -16,7 +17,7 @@ import { getFixedWeekdayTargetShift, getUnavailableDateTargetShift } from "../..
 import {
   baseCalendarModifierClasses,
   dayPickerBaseClassName,
-  dayPickerClassNames,
+  dayPickerWithNavClassNames,
   fixedWeekdayLabels,
   getFixedWeekdayButtonLabel,
   getFixedWeekdayButtonTone,
@@ -221,12 +222,13 @@ export default function UnavailableDaysInput({
             mode="multiple"
             month={doctorUnavailableMonth}
             onMonthChange={handleDoctorUnavailableMonthChange}
+            locale={ja}
             selected={selectedUnavailableDates}
             onDayClick={handleUnavailableDayClick}
             showOutsideDays
             disabled={!selectedDoctorId}
             className={dayPickerBaseClassName}
-            classNames={dayPickerClassNames}
+            classNames={dayPickerWithNavClassNames}
             modifiers={unavailableCalendarModifiers}
             modifiersClassNames={{
               ...baseCalendarModifierClasses,
