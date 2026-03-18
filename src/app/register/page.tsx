@@ -52,7 +52,7 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">丸投げ当直表</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">🏥 シフらく</h1>
         <p className="text-sm text-gray-500 text-center mb-8">新規病院アカウントを作成</p>
 
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">

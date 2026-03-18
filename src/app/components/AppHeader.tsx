@@ -10,19 +10,19 @@ function buildCrumbs(pathname: string): Crumb[] {
 
   if (pathname.startsWith("/admin/doctors")) {
     return [
-      { href: "/", label: "丸投げ当直表" },
+      { href: "/", label: "シフらく" },
       { href: "/admin/doctors", label: "医師管理" },
     ];
   }
 
   if (pathname.startsWith("/view")) {
     return [
-      { href: "/", label: "丸投げ当直表" },
+      { href: "/", label: "シフらく" },
       { href: "/view", label: "当直表を見る" },
     ];
   }
 
-  return [{ href: "/", label: "丸投げ当直表" }];
+  return [{ href: "/", label: "シフらく" }];
 }
 
 export default function AppHeader() {
@@ -41,7 +41,7 @@ export default function AppHeader() {
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="font-extrabold text-gray-800 whitespace-nowrap">
-              🏥 丸投げ当直表 v1.1
+              🏥 シフらく v1.1
             </div>
 
             <button
@@ -70,7 +70,7 @@ export default function AppHeader() {
           <div className="min-w-0">
             <div className="flex items-center gap-3">
               <div className="font-extrabold text-gray-800 whitespace-nowrap">
-                🏥 丸投げ当直表 v1.1
+                🏥 シフらく v1.1
               </div>
 
               <nav className="hidden sm:flex items-center gap-2 text-xs text-gray-500 min-w-0">
@@ -106,7 +106,7 @@ export default function AppHeader() {
                       : "bg-white text-gray-700 hover:bg-gray-50"
                   }`}
                 >
-                  丸投げ当直表
+                  シフらく
                 </Link>
                 <Link
                   href="/admin/doctors"

@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "丸投げ当直表",
-  description: "医師当直スケジュール自動生成サービス",
+  title: "シフらく",
+  description: "当直表作成を、もっと早く、もっと公平に。AIでたたき台を作り、現場で仕上げる。",
 };
 
 export default function RootLayout({

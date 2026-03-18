@@ -29,10 +29,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 gap-8">
+      {/* ヒーローセクション */}
+      <div className="text-center max-w-lg">
+        <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
+          🏥 シフらく
+        </h1>
+        <p className="text-base font-semibold text-gray-500 mb-6">
+          さくっと当直表。あとで細かく調整。
+        </p>
+        <ul className="text-sm text-gray-500 space-y-1.5">
+          <li>当直表作成を、もっと早く、もっと公平に。</li>
+          <li>AIでたたき台を作り、現場で仕上げる。</li>
+          <li>希望休も固定曜日も、まとめて反映。</li>
+        </ul>
+      </div>
+
+      {/* ログインカード */}
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">丸投げ当直表</h1>
-        <p className="text-sm text-gray-500 text-center mb-8">病院名とパスワードでログイン</p>
+        <p className="text-sm text-gray-500 text-center mb-6">病院名とパスワードでログイン</p>
 
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
           <div>
