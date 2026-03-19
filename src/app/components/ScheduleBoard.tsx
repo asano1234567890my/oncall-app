@@ -34,6 +34,7 @@ type ScheduleBoardProps = {
   isOverrideMode: boolean;
   swapSource: SwapSource | null;
   isSwapSourceSelected: (day: number, shiftType: ShiftType) => boolean;
+  getSwapViolation: (day: number, shiftType: ShiftType) => string | null;
   onHandleShiftDragOver: (
     event: DragEvent<HTMLDivElement>,
     day: number,
@@ -133,6 +134,7 @@ export default function ScheduleBoard({
   isOverrideMode,
   swapSource,
   isSwapSourceSelected,
+  getSwapViolation,
   onHandleShiftDragOver,
   onHandleShiftDragLeave,
   onHandleShiftDrop,
@@ -442,6 +444,7 @@ export default function ScheduleBoard({
                         touchHoverShiftKey={touchHoverShiftKey}
                         isSwapMode={isSwapMode}
                         isSwapSourceSelected={isSwapSourceSelected}
+                        getSwapViolation={getSwapViolation}
                         onHandleShiftDragOver={onHandleShiftDragOver}
                         onHandleShiftDragLeave={onHandleShiftDragLeave}
                         onHandleShiftDrop={onHandleShiftDrop}

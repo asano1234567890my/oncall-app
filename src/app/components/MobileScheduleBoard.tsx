@@ -14,7 +14,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
     schedule, scoreEntries, year, month,
     holidaySet, manualHolidaySetInMonth, toYmd, getWeekday, getDoctorName,
     highlightedDoctorId, selectedManualDoctorId, isEraseSelectionActive,
-    isShiftLocked, isSwapMode, swapSource, isSwapSourceSelected, isOverrideMode,
+    isShiftLocked, isSwapMode, swapSource, isSwapSourceSelected, getSwapViolation, isOverrideMode,
     lockedShiftKeys, unavailableMap,
     handleShiftTap, handleSwapButtonPress, toggleHighlightedDoctor,
     selectManualDoctor, toggleEraseSelection, cancelSwapSelection,
@@ -110,20 +110,21 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
     const isFlashing = swappedCells.has(`${day}-${st}`);
     const isDocHighlighted = Boolean(docId && highlightedDoctorId && docId === highlightedDoctorId);
     const cellUnavail = isCellUnavail(ymd, st);
+    const violation = getSwapViolation(day, st);
     if (!enabled) return <td className={`px-1 py-1 text-center text-[10px] ${cellUnavail ? "bg-red-500/30" : "text-gray-300"}`}>{cellUnavail ? <span className="text-red-600 font-black">✕</span> : "-"}</td>;
-    const bg = isFlashing ? "swap-flash" : swSel ? "bg-yellow-100" : cellUnavail ? "bg-red-500/30 ring-1 ring-inset ring-red-400" : isDocHighlighted ? "bg-blue-500/25 ring-1 ring-inset ring-blue-400" : locked ? "bg-amber-50" : "";
+    const bg = isFlashing ? "swap-flash" : swSel ? "bg-yellow-100" : violation ? "bg-red-50 ring-1 ring-inset ring-red-300" : cellUnavail ? "bg-red-500/30 ring-1 ring-inset ring-red-400" : isDocHighlighted ? "bg-blue-500/25 ring-1 ring-inset ring-blue-400" : locked ? "bg-amber-50" : "";
     return (
-      <td className={`px-1 py-1 ${bg}`}>
+      <td className={`px-1 py-1 ${bg}`} title={violation ?? undefined}>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={() => handleTapWithHighlight(day, st, docId, locked, isHL)}
             className={`min-w-0 flex-1 truncate text-left text-[11px] font-bold ${
-              isDocHighlighted ? "text-blue-700 font-black" : docId ? (st === "day" ? "text-orange-800" : "text-indigo-800") : "text-gray-400"
+              violation ? "text-red-400" : isDocHighlighted ? "text-blue-700 font-black" : docId ? (st === "day" ? "text-orange-800" : "text-indigo-800") : "text-gray-400"
             }`}>
             {docId ? getDoctorName(docId) : "-"}
           </button>
           <button type="button" onClick={() => handleSwapWithFlash(day, st, locked, isHL)}
             className={`shrink-0 flex h-6 w-6 items-center justify-center rounded border text-[10px] font-bold ${
-              swSel ? "border-yellow-400 bg-yellow-100 text-yellow-800" : "border-gray-300 bg-white text-gray-500 active:bg-gray-100"
+              swSel ? "border-yellow-400 bg-yellow-100 text-yellow-800" : violation ? "border-red-200 bg-red-50 text-red-400" : "border-gray-300 bg-white text-gray-500 active:bg-gray-100"
             }`}>⇄</button>
           <button type="button" onClick={() => toggleShiftLock(day, st)} disabled={!docId}
             className={`shrink-0 flex h-6 w-6 items-center justify-center rounded border disabled:opacity-20 ${
@@ -132,6 +133,11 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
             <Lock className={`h-3 w-3 ${locked ? "text-amber-600" : "text-gray-400"}`} />
           </button>
         </div>
+        {violation && swapSource && (
+          <div className="mt-0.5 text-[9px] leading-tight text-red-500 truncate" title={violation}>
+            {violation.split("\n")[0]}
+          </div>
+        )}
       </td>
     );
   };

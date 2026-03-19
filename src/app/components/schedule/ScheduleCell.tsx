@@ -23,6 +23,7 @@ type ScheduleCellProps = {
   touchHoverShiftKey: string | null;
   isSwapMode: boolean;
   isSwapSourceSelected: (day: number, shiftType: ShiftType) => boolean;
+  getSwapViolation: (day: number, shiftType: ShiftType) => string | null;
   onHandleShiftDragOver: (
     event: DragEvent<HTMLDivElement>,
     day: number,
@@ -81,6 +82,7 @@ export default function ScheduleCell({
   touchHoverShiftKey,
   isSwapMode,
   isSwapSourceSelected,
+  getSwapViolation,
   onHandleShiftDragOver,
   onHandleShiftDragLeave,
   onHandleShiftDrop,
@@ -119,6 +121,8 @@ export default function ScheduleCell({
   const highlightBlocked = isHighlightedDoctorBlockedDay(row.day);
   const dayBlocked = isHighlightedDoctorBlockedShift(row.day, "day");
   const nightBlocked = isHighlightedDoctorBlockedShift(row.day, "night");
+  const daySwapViolation = getSwapViolation(row.day, "day");
+  const nightSwapViolation = getSwapViolation(row.day, "night");
 
   const renderHoverTooltip = (isVisible: boolean) => {
     if (!isVisible || !hoverErrorMessage) return null;
@@ -160,32 +164,36 @@ export default function ScheduleCell({
     ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
     : dayHoverInvalid
       ? "cursor-not-allowed border-red-300 bg-red-200"
-      : dayTouchHovered
-        ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
-        : dayLocked
-          ? dayBlocked
-            ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
-            : "border-amber-300 bg-amber-50"
-          : dayBlocked
-            ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
-            : isHolidayLike
-              ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
-              : "border-transparent bg-white hover:border-gray-200";
+      : daySwapViolation
+        ? "border-red-200 bg-red-50"
+        : dayTouchHovered
+          ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+          : dayLocked
+            ? dayBlocked
+              ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
+              : "border-amber-300 bg-amber-50"
+            : dayBlocked
+              ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
+              : isHolidayLike
+                ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
+                : "border-transparent bg-white hover:border-gray-200";
   const nightCellClass = nightSwapSelected
     ? "border-amber-400 bg-amber-50 ring-1 ring-amber-300"
     : nightHoverInvalid
       ? "cursor-not-allowed border-red-300 bg-red-200"
-      : nightTouchHovered
-        ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
-        : nightLocked
-          ? nightBlocked
-            ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
-            : "border-amber-300 bg-amber-50"
-          : nightBlocked
-            ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
-            : isHolidayLike
-              ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
-              : "border-transparent bg-white hover:border-gray-200";
+      : nightSwapViolation
+        ? "border-red-200 bg-red-50"
+        : nightTouchHovered
+          ? "border-sky-300 bg-sky-50 ring-1 ring-sky-200"
+          : nightLocked
+            ? nightBlocked
+              ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
+              : "border-amber-300 bg-amber-50"
+            : nightBlocked
+              ? "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400"
+              : isHolidayLike
+                ? "border-red-100 bg-red-50 hover:border-red-200 hover:bg-red-100/80"
+                : "border-transparent bg-white hover:border-gray-200";
   const disabledDayCellClass = daySwapSelected
     ? "border-sky-400 bg-sky-50 text-sky-700 ring-1 ring-sky-300"
     : dayHoverInvalid
@@ -204,6 +212,7 @@ export default function ScheduleCell({
     const swapSelected = shiftType === "day" ? daySwapSelected : nightSwapSelected;
     const shiftKey = shiftType === "day" ? dayShiftKey : nightShiftKey;
     const cellClass = shiftType === "day" ? dayCellClass : nightCellClass;
+    const swapViolation = shiftType === "day" ? daySwapViolation : nightSwapViolation;
 
     if (shiftType === "day" && !isDayShiftEnabled) {
       return (
@@ -237,6 +246,7 @@ export default function ScheduleCell({
         onDragOver={(event) => onHandleShiftDragOver(event, row.day, shiftType, locked, isHolidayLike)}
         onDragLeave={() => onHandleShiftDragLeave(row.day, shiftType)}
         onDrop={(event) => onHandleShiftDrop(event, row.day, shiftType, locked, isHolidayLike)}
+        title={swapViolation ?? undefined}
         className={`relative flex min-h-5 w-full items-center justify-between gap-0.5 rounded border px-[2px] py-[2px] sm:min-h-6 sm:gap-1 sm:px-0.5 sm:py-0.5 ${cellClass}`}
       >
         {doctorId ? (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayMap,
@@ -966,6 +966,30 @@ export function useScheduleDnd({
     return () => window.clearTimeout(timeoutId);
   }, [toastMessage]);
 
+  // ── スワップ違反プレビュー ──
+  const swapViolationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!swapSource) return map;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        const key = `${row.day}-${st}`;
+        if (swapSource.day === row.day && swapSource.shiftType === st) continue;
+        const locked = lockedShiftKeys.has(key);
+        if (locked) { map.set(key, "ロック済み"); continue; }
+        const hlInfo = isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) continue; // 平日日直は非表示枠
+        const msg = getSwapConstraintMessage(swapSource.doctorId, swapSource.day, swapSource.shiftType, row.day, st);
+        if (msg) map.set(key, msg);
+      }
+    }
+    return map;
+  }, [swapSource, schedule, lockedShiftKeys, isHolidayLikeDay, getSwapConstraintMessage]);
+
+  const getSwapViolation = (day: number, shiftType: ShiftType): string | null => {
+    if (!swapSource) return null;
+    return swapViolationMap.get(`${day}-${shiftType}`) ?? null;
+  };
+
   return {
     toastMessage,
     hoverErrorMessage,
@@ -980,6 +1004,7 @@ export function useScheduleDnd({
     selectedManualDoctorId: getSelectedManualDoctorId(),
     isEraseSelectionActive,
     isSwapSourceSelected,
+    getSwapViolation,
     isHighlightedDoctorBlockedDay,
     isHighlightedDoctorBlockedShift,
     toggleHighlightedDoctor,

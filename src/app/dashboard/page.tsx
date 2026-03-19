@@ -270,6 +270,7 @@ export default function DashboardPage() {
               isSwapMode={core.isSwapMode}
               swapSource={core.swapSource}
               isSwapSourceSelected={core.isSwapSourceSelected}
+              getSwapViolation={core.getSwapViolation}
               onHandleShiftDragOver={core.handleShiftDragOver}
               onHandleShiftDragLeave={core.handleShiftDragLeave}
               onHandleShiftDrop={core.handleShiftDrop}
