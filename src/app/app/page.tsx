@@ -164,7 +164,7 @@ export default function AppPage() {
           /* ── 生成後：スケジュール表（モバイル専用） ── */
           <div className="relative">
             {core.isLoading && (
-              <div className="absolute inset-0 z-20 flex items-center justify-center rounded-lg bg-white/70 p-4 backdrop-blur-[1px]">
+              <div className="fixed inset-x-0 top-[57px] bottom-0 z-30 flex items-center justify-center bg-white/70 p-4 backdrop-blur-[1px]">
                 <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl">
                   <div className="flex flex-col items-center text-center">
                     <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
