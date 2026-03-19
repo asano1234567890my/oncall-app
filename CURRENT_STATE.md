@@ -197,6 +197,7 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-20 | 確定シフト閲覧: /app ヘッダーに「確定シフト」ボタン追加・確定済みスケジュールの読み取り専用テーブル表示・「仮保存にコピーして編集」ボタン |
 | 2026-03-19 | 仮保存機能: system_settings KVストアで仮保存CRUD（GET/PUT/DELETE /api/schedule/draft/{year}/{month}）・useDraftScheduleフック・/app＋/dashboard両対応・確定→仮保存コピー |
 | 2026-03-19 | シフト表UX強化: 医師タップハイライト（青）・不可日/不可曜日per-shift赤ハイライト・スワップ時フラッシュアニメーション・ステータスバー固定高さ |
 | 2026-03-19 | ガイドボタン: 全ドロワー＋MobileScheduleBoard toolbar に「?」ボタン追加（per-section onShowGuide）・DoctorManageDrawerにマジックリンクコピー＋ロック機能追加 |

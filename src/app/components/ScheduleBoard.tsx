@@ -103,7 +103,6 @@ type ScheduleBoardProps = {
   draftMessage?: string;
   onSaveDraft?: () => void;
   onLoadDraft?: () => void;
-  onCopyConfirmedToDraft?: () => void;
 };
 
 export default function ScheduleBoard({
@@ -180,7 +179,6 @@ export default function ScheduleBoard({
   draftMessage,
   onSaveDraft,
   onLoadDraft,
-  onCopyConfirmedToDraft,
 }: ScheduleBoardProps) {
   const highlightedDoctorName = highlightedDoctorId ? getDoctorName(highlightedDoctorId) : null;
   const manualSelectionLabel = selectedManualDoctorId ? getDoctorName(selectedManualDoctorId) : null;
@@ -488,10 +486,6 @@ export default function ScheduleBoard({
                 <button type="button" onClick={onLoadDraft} disabled={isDraftLoading}
                   className="font-bold text-blue-600 underline hover:text-blue-800">{isDraftLoading ? "読込中..." : "読み込む"}</button>
               </div>
-            )}
-            {onCopyConfirmedToDraft && (
-              <button type="button" onClick={onCopyConfirmedToDraft}
-                className="text-[10px] text-gray-400 underline hover:text-gray-600">確定済みシフトを仮保存にコピー</button>
             )}
             {draftMessage ? <div className="text-[10px] font-bold text-blue-700">{draftMessage}</div> : null}
             {saveMessage ? <div className="text-[10px] font-bold text-green-800">保存結果: {saveMessage}</div> : null}

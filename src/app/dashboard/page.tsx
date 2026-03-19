@@ -17,6 +17,16 @@ export default function DashboardPage() {
 
   // ── シフトスコア設定 ──
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
+  const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
+
+  const handleLoadConfirmedForEdit = async () => {
+    setIsLoadingConfirmed(true);
+    try {
+      await core.handleCopyConfirmedToDraft();
+    } finally {
+      setIsLoadingConfirmed(false);
+    }
+  };
 
   // ── パスワード変更（ダッシュボード固有UI） ──
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -197,6 +207,10 @@ export default function DashboardPage() {
             onSetPreviousMonthShift={core.setPreviousMonthShift}
             onGenerate={core.handleGenerateWithGuard}
             isGenerateDisabled={core.isOverrideMode}
+            onLoadConfirmedForEdit={() => { void handleLoadConfirmedForEdit(); }}
+            isLoadingConfirmed={isLoadingConfirmed}
+            onSaveAllDoctorsSettings={() => { void core.saveAllDoctorsSettings(); }}
+            isBulkSavingDoctors={core.isBulkSavingDoctors}
           />
 
           <div className="relative min-w-0">
@@ -303,7 +317,6 @@ export default function DashboardPage() {
               draftMessage={core.draftMessage}
               onSaveDraft={() => { void core.handleSaveDraft(); }}
               onLoadDraft={() => { void core.handleLoadDraft(); }}
-              onCopyConfirmedToDraft={() => { void core.handleCopyConfirmedToDraft(); }}
             />
           </div>
         </div>
