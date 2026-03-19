@@ -54,19 +54,24 @@ export default function AppPage() {
       .catch(() => setSetupStatus("done")); // on error, skip wizard
   }, [core.auth.isAuthenticated]);
 
-  const handleWizardComplete = useCallback((options?: { openDoctorManage?: boolean }) => {
+  const handleWizardComplete = useCallback((options?: { openDoctorManage?: boolean; openUnavailable?: boolean }) => {
     setSetupStatus("done");
     if (options?.openDoctorManage) {
-      // Store flag before reload so we can open doctor manage drawer after
       sessionStorage.setItem("open_doctor_manage", "1");
+    }
+    if (options?.openUnavailable) {
+      sessionStorage.setItem("open_unavailable", "1");
     }
     // Reload to re-fetch doctors and settings created by wizard
     window.location.reload();
   }, []);
 
-  // やり直し後に医師管理画面を自動で開く
+  // ウィザード完了後にドロワーを自動で開く
   useEffect(() => {
-    if (sessionStorage.getItem("open_doctor_manage")) {
+    if (sessionStorage.getItem("open_unavailable")) {
+      sessionStorage.removeItem("open_unavailable");
+      setActiveDrawer("doctors");
+    } else if (sessionStorage.getItem("open_doctor_manage")) {
       sessionStorage.removeItem("open_doctor_manage");
       setActiveDrawer("doctor-manage");
     }

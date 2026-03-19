@@ -6,25 +6,31 @@ import { Loader2 } from "lucide-react";
 import { getAuthHeaders } from "../hooks/useAuth";
 
 type WizardProps = {
-  onComplete: (options?: { openDoctorManage?: boolean }) => void;
+  onComplete: (options?: { openDoctorManage?: boolean; openUnavailable?: boolean }) => void;
   isRedo?: boolean;
 };
 
+type StepNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
 type WizardState = {
-  step: 1 | 2 | 3 | 4 | 5 | 6;
+  step: StepNumber;
   holidayShiftMode: "combined" | "split" | "";
   doctorCount: number;
+  doctorNames: string[];
   minShifts: number;
   maxShifts: number;
   intervalDays: number;
   maxSaturdayNights: number;
 };
 
+const TOTAL_VISIBLE_STEPS = 7; // progress bar steps (excluding confirm)
+
 export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [state, setState] = useState<WizardState>({
     step: 1,
     holidayShiftMode: "",
     doctorCount: 8,
+    doctorNames: Array.from({ length: 8 }, (_, i) => `医師${i + 1}`),
     minShifts: 3,
     maxShifts: 5,
     intervalDays: 1,
@@ -33,23 +39,45 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [currentDoctorCount, setCurrentDoctorCount] = useState<number | null>(null);
+  const [existingDoctorNames, setExistingDoctorNames] = useState<string[]>([]);
+  const [wantUnavailable, setWantUnavailable] = useState(false);
 
-  const setStep = (step: WizardState["step"]) => setState((s) => ({ ...s, step }));
+  const setStep = (step: StepNumber) => setState((s) => ({ ...s, step }));
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  // やり直し時に現在の医師数を取得
+  // やり直し時に現在の医師情報を取得
   useEffect(() => {
     if (!isRedo) return;
     fetch(`${apiUrl}/api/doctors/`, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then((data: unknown[]) => {
+      .then((data: Array<{ name: string }>) => {
         setCurrentDoctorCount(data.length);
-        setState((s) => ({ ...s, doctorCount: data.length }));
+        setExistingDoctorNames(data.map((d) => d.name));
+        setState((s) => ({
+          ...s,
+          doctorCount: data.length,
+          doctorNames: data.map((d) => d.name),
+        }));
       })
       .catch(() => {/* ignore */});
   }, [isRedo, apiUrl]);
 
-  const handleFinish = async () => {
+  // 医師数変更時に名前配列を同期
+  const syncDoctorNames = (newCount: number) => {
+    setState((s) => {
+      const names = [...s.doctorNames];
+      if (newCount > names.length) {
+        for (let i = names.length; i < newCount; i++) {
+          names.push(`医師${i + 1}`);
+        }
+      } else if (newCount < names.length) {
+        names.length = newCount;
+      }
+      return { ...s, doctorCount: newCount, doctorNames: names };
+    });
+  };
+
+  const handleFinish = async (openUnavailable: boolean) => {
     setIsSaving(true);
     setError("");
     try {
@@ -57,30 +85,34 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
       if (isRedo && currentDoctorCount !== null) {
         const diff = state.doctorCount - currentDoctorCount;
         if (diff > 0) {
-          // 増えた分だけダミー医師を追加
-          const startIndex = currentDoctorCount + 1;
           const doctorPromises = Array.from({ length: diff }, (_, i) =>
             fetch(`${apiUrl}/api/doctors/`, {
               method: "POST",
               headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-              body: JSON.stringify({ name: `医師${startIndex + i}`, is_active: true }),
+              body: JSON.stringify({ name: state.doctorNames[currentDoctorCount + i] || `医師${currentDoctorCount + i + 1}`, is_active: true }),
             })
           );
           await Promise.all(doctorPromises);
         }
+        // Update existing doctor names if changed
+        for (let i = 0; i < Math.min(currentDoctorCount, state.doctorCount); i++) {
+          if (state.doctorNames[i] !== existingDoctorNames[i]) {
+            // Name changed — would need doctor IDs to update, skip for now
+          }
+        }
       } else if (!isRedo) {
-        // 初回: 全員作成
-        const doctorPromises = Array.from({ length: state.doctorCount }, (_, i) =>
+        // 初回: 全員作成（カスタム名で）
+        const doctorPromises = state.doctorNames.map((name) =>
           fetch(`${apiUrl}/api/doctors/`, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            body: JSON.stringify({ name: `医師${i + 1}`, is_active: true }),
+            body: JSON.stringify({ name, is_active: true }),
           })
         );
         await Promise.all(doctorPromises);
       }
 
-      // 2. Save optimizer config (hard_constraints + score range)
+      // 2. Save optimizer config
       const optimizerConfig = {
         score_min: state.minShifts,
         score_max: state.maxShifts,
@@ -104,9 +136,11 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         body: JSON.stringify({ value: true }),
       });
 
-      // 減った場合は医師管理画面を案内
       const needsDoctorManage = isRedo && currentDoctorCount !== null && state.doctorCount < currentDoctorCount;
-      onComplete(needsDoctorManage ? { openDoctorManage: true } : undefined);
+      onComplete({
+        openDoctorManage: needsDoctorManage,
+        openUnavailable: openUnavailable,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "設定の保存に失敗しました");
     } finally {
@@ -127,16 +161,17 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     <div className="mx-auto max-w-lg py-8 px-4">
       {/* Progress */}
       <div className="mb-8 flex items-center justify-center gap-1.5">
-        {[1, 2, 3, 4, 5].map((s) => (
+        {Array.from({ length: TOTAL_VISIBLE_STEPS }, (_, i) => i + 1).map((s) => (
           <div
             key={s}
-            className={`h-2 w-10 rounded-full transition-colors ${
+            className={`h-2 w-8 rounded-full transition-colors ${
               s <= state.step ? "bg-blue-600" : "bg-gray-200"
             }`}
           />
         ))}
       </div>
 
+      {/* Step 1: 当直形式 */}
       {state.step === 1 && (
         <StepContainer
           title="当直の形式を教えてください"
@@ -147,21 +182,17 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               label="同じ人が両方担当"
               description="日直と当直は同じ医師が担当します"
               selected={state.holidayShiftMode === "combined"}
-              onClick={() => {
-                setState((s) => ({ ...s, holidayShiftMode: "combined" }));
-              }}
+              onClick={() => setState((s) => ({ ...s, holidayShiftMode: "combined" }))}
             />
             <ChoiceButton
               label="別々の人が担当"
               description="日直と当直は異なる医師が担当します"
               selected={state.holidayShiftMode === "split"}
-              onClick={() => {
-                setState((s) => ({ ...s, holidayShiftMode: "split" }));
-              }}
+              onClick={() => setState((s) => ({ ...s, holidayShiftMode: "split" }))}
             />
           </div>
           <button
-            onClick={() => setState((s) => ({ ...s, step: 2 }))}
+            onClick={() => setStep(2)}
             className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             disabled={!state.holidayShiftMode}
           >
@@ -170,6 +201,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         </StepContainer>
       )}
 
+      {/* Step 2: 医師人数 */}
       {state.step === 2 && (
         <StepContainer
           title="何人で当直を回していますか？"
@@ -177,14 +209,14 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         >
           <div className="flex items-center justify-center gap-4 my-6">
             <button
-              onClick={() => setState((s) => ({ ...s, doctorCount: Math.max(2, s.doctorCount - 1) }))}
+              onClick={() => syncDoctorNames(Math.max(2, state.doctorCount - 1))}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-lg font-bold text-gray-600 hover:bg-gray-100"
             >
               −
             </button>
             <span className="text-4xl font-bold text-gray-800 w-16 text-center">{state.doctorCount}</span>
             <button
-              onClick={() => setState((s) => ({ ...s, doctorCount: Math.min(30, s.doctorCount + 1) }))}
+              onClick={() => syncDoctorNames(Math.min(30, state.doctorCount + 1))}
               className="flex h-10 w-10 items-center justify-center rounded-full border border-gray-300 text-lg font-bold text-gray-600 hover:bg-gray-100"
             >
               +
@@ -200,7 +232,36 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         </StepContainer>
       )}
 
+      {/* Step 3: 医師の名前 */}
       {state.step === 3 && (
+        <StepContainer
+          title="医師の名前を入力してください"
+          subtitle="そのままでもひとまず作成できます。後から変更も可能です。"
+        >
+          <div className="my-4 max-h-64 overflow-y-auto space-y-2 px-1">
+            {state.doctorNames.map((name, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="w-8 text-right text-sm text-gray-400 shrink-0">{i + 1}.</span>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => {
+                    const names = [...state.doctorNames];
+                    names[i] = e.target.value;
+                    setState((s) => ({ ...s, doctorNames: names }));
+                  }}
+                  className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder={`医師${i + 1}`}
+                />
+              </div>
+            ))}
+          </div>
+          <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
+        </StepContainer>
+      )}
+
+      {/* Step 4: 回数 */}
+      {state.step === 4 && (
         <StepContainer
           title="1ヶ月に1人あたり何回くらい当直しますか？"
           subtitle="最低回数と最大回数を設定してください"
@@ -243,11 +304,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               </div>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
+          <NavButtons onBack={() => setStep(3)} onNext={() => setStep(5)} />
         </StepContainer>
       )}
 
-      {state.step === 4 && (
+      {/* Step 5: 間隔 */}
+      {state.step === 5 && (
         <StepContainer
           title="当直明けは何日空けたいですか？"
           subtitle="連続を避けるために最低限空ける日数です"
@@ -271,11 +333,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               <span>7日</span>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(3)} onNext={() => setStep(5)} />
+          <NavButtons onBack={() => setStep(4)} onNext={() => setStep(6)} />
         </StepContainer>
       )}
 
-      {state.step === 5 && (
+      {/* Step 6: 土曜上限 */}
+      {state.step === 6 && (
         <StepContainer
           title="土曜の夜間当直は月何回まで？"
           subtitle="土曜の当直を制限できます"
@@ -294,21 +357,47 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               />
             ))}
           </div>
-          <NavButtons onBack={() => setStep(4)} onNext={() => setStep(6)} />
+          <NavButtons onBack={() => setStep(5)} onNext={() => setStep(7)} />
         </StepContainer>
       )}
 
-      {state.step === 6 && (
+      {/* Step 7: 不可日設定 */}
+      {state.step === 7 && (
+        <StepContainer
+          title="休み希望はありますか？"
+          subtitle="医師ごとに当直に入れない日を設定できます"
+        >
+          <div className="space-y-3 my-6">
+            <ChoiceButton
+              label="今は設定しない"
+              description="まずはシフトを生成してみましょう。後からいつでも設定できます。"
+              selected={!wantUnavailable}
+              onClick={() => setWantUnavailable(false)}
+            />
+            <ChoiceButton
+              label="先に設定する"
+              description="完了後に不可日の設定画面が開きます。"
+              selected={wantUnavailable}
+              onClick={() => setWantUnavailable(true)}
+            />
+          </div>
+          <NavButtons onBack={() => setStep(6)} onNext={() => setStep(8)} />
+        </StepContainer>
+      )}
+
+      {/* Step 8: 確認 */}
+      {state.step === 8 && (
         <StepContainer
           title="設定完了！"
           subtitle="この設定はあとからいつでも変更できます"
         >
-          <div className="my-6 rounded-xl bg-blue-50 p-4 text-sm text-gray-700 space-y-1">
+          <div className="my-6 rounded-xl bg-blue-50 p-4 text-sm text-gray-700 space-y-1 text-left">
             <p>当直形式：{state.holidayShiftMode === "combined" ? "日直・当直 同一" : "日直・当直 別"}</p>
-            <p>医師：{state.doctorCount}名</p>
+            <p>医師：{state.doctorNames.join("、")}</p>
             <p>月あたり：{state.minShifts}〜{state.maxShifts}回</p>
             <p>当直間隔：{state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}</p>
             <p>土曜上限：{state.maxSaturdayNights >= 99 ? "制限なし" : `${state.maxSaturdayNights}回`}</p>
+            <p>休み希望：{wantUnavailable ? "設定する" : "あとで"}</p>
           </div>
 
           {isRedo && currentDoctorCount !== null && state.doctorCount < currentDoctorCount && (
@@ -320,7 +409,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>}
 
           <button
-            onClick={() => { void handleFinish(); }}
+            onClick={() => { void handleFinish(wantUnavailable); }}
             disabled={isSaving}
             className="w-full rounded-xl bg-blue-600 py-4 text-base font-bold text-white shadow-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
@@ -333,7 +422,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               "この設定で始める"
             )}
           </button>
-          <button onClick={() => setStep(5)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-2">
+          <button onClick={() => setStep(7)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-2">
             戻る
           </button>
         </StepContainer>
