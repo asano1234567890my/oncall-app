@@ -27,12 +27,15 @@ const TOTAL_VISIBLE_STEPS = 7; // progress bar steps (excluding confirm)
 
 // Step order: 人数→名前→形式→回数→間隔→土曜→不可日→確認
 
+const doctorLabel = (index: number, total: number) =>
+  `医師${total >= 10 ? String(index + 1).padStart(2, "0") : String(index + 1)}`;
+
 export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [state, setState] = useState<WizardState>({
     step: 1,
     holidayShiftMode: "",
     doctorCount: 8,
-    doctorNames: Array.from({ length: 8 }, (_, i) => `医師${i + 1}`),
+    doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
     minShifts: 3,
     maxShifts: 5,
     intervalDays: 1,
@@ -70,7 +73,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
       const names = [...s.doctorNames];
       if (newCount > names.length) {
         for (let i = names.length; i < newCount; i++) {
-          names.push(`医師${i + 1}`);
+          names.push(doctorLabel(i, newCount));
         }
       } else if (newCount < names.length) {
         names.length = newCount;
@@ -91,7 +94,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
             fetch(`${apiUrl}/api/doctors/`, {
               method: "POST",
               headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-              body: JSON.stringify({ name: state.doctorNames[currentDoctorCount + i] || `医師${currentDoctorCount + i + 1}`, is_active: true }),
+              body: JSON.stringify({ name: state.doctorNames[currentDoctorCount + i] || doctorLabel(currentDoctorCount + i, state.doctorCount), is_active: true }),
             })
           );
           await Promise.all(doctorPromises);
@@ -222,7 +225,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
                     setState((s) => ({ ...s, doctorNames: names }));
                   }}
                   className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder={`医師${i + 1}`}
+                  placeholder={doctorLabel(i, state.doctorCount)}
                 />
               </div>
             ))}
