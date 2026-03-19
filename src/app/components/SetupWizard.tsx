@@ -11,7 +11,7 @@ type WizardProps = {
 
 type WizardState = {
   step: 1 | 2 | 3 | 4 | 5 | 6;
-  holidayShiftMode: "combined" | "split";
+  holidayShiftMode: "combined" | "split" | "";
   doctorCount: number;
   minShifts: number;
   maxShifts: number;
@@ -22,7 +22,7 @@ type WizardState = {
 export default function SetupWizard({ onComplete }: WizardProps) {
   const [state, setState] = useState<WizardState>({
     step: 1,
-    holidayShiftMode: "combined",
+    holidayShiftMode: "",
     doctorCount: 8,
     minShifts: 3,
     maxShifts: 5,
@@ -57,7 +57,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
         hard_constraints: {
           interval_days: state.intervalDays,
           max_saturday_nights: state.maxSaturdayNights,
-          holiday_shift_mode: state.holidayShiftMode,
+          holiday_shift_mode: state.holidayShiftMode || "combined",
         },
       };
       await fetch(`${apiUrl}/api/settings/optimizer_config`, {
@@ -106,7 +106,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               description="日直と当直は同じ医師が担当します"
               selected={state.holidayShiftMode === "combined"}
               onClick={() => {
-                setState((s) => ({ ...s, holidayShiftMode: "combined", step: 2 }));
+                setState((s) => ({ ...s, holidayShiftMode: "combined" }));
               }}
             />
             <ChoiceButton
@@ -114,10 +114,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               description="日直と当直は異なる医師が担当します"
               selected={state.holidayShiftMode === "split"}
               onClick={() => {
-                setState((s) => ({ ...s, holidayShiftMode: "split", step: 2 }));
+                setState((s) => ({ ...s, holidayShiftMode: "split" }));
               }}
             />
           </div>
+          <button
+            onClick={() => setState((s) => ({ ...s, step: 2 }))}
+            className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled={!state.holidayShiftMode}
+          >
+            次へ
+          </button>
         </StepContainer>
       )}
 
