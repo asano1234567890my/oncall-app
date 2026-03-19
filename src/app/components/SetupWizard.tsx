@@ -198,7 +198,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
             </p>
           )}
           <button
-            onClick={() => setStep(2)}
+            onClick={() => setStep(isRedo ? 3 : 2)}
             className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
           >
             次へ
@@ -206,8 +206,8 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         </StepContainer>
       )}
 
-      {/* Step 2: 医師の名前 */}
-      {state.step === 2 && (
+      {/* Step 2: 医師の名前（初回のみ、やり直し時はスキップ） */}
+      {state.step === 2 && !isRedo && (
         <StepContainer
           title="医師の名前を入力してください"
           subtitle="そのままでもひとまず作成できます。後から変更も可能です。"
@@ -261,7 +261,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           >
             次へ
           </button>
-          <button onClick={() => setStep(2)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-1">
+          <button onClick={() => setStep(isRedo ? 1 : 2)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-1">
             戻る
           </button>
         </StepContainer>
