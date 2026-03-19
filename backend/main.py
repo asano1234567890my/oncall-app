@@ -29,7 +29,9 @@ if hasattr(settings, "backend_cors_origins") and settings.backend_cors_origins:
     origins.extend(settings.backend_cors_origins)
 
 frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
+if frontend_url == "*":
+    origins = ["*"]
+elif frontend_url:
     origins.append(frontend_url.strip("/"))
 
 origins = list(set(origins))
