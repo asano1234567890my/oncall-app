@@ -7,6 +7,7 @@ import { getAuthHeaders } from "../hooks/useAuth";
 
 type WizardProps = {
   onComplete: () => void;
+  isRedo?: boolean;
 };
 
 type WizardState = {
@@ -19,7 +20,7 @@ type WizardState = {
   maxSaturdayNights: number;
 };
 
-export default function SetupWizard({ onComplete }: WizardProps) {
+export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [state, setState] = useState<WizardState>({
     step: 1,
     holidayShiftMode: "",
@@ -39,15 +40,17 @@ export default function SetupWizard({ onComplete }: WizardProps) {
     setIsSaving(true);
     setError("");
     try {
-      // 1. Create doctors
-      const doctorPromises = Array.from({ length: state.doctorCount }, (_, i) =>
-        fetch(`${apiUrl}/api/doctors/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-          body: JSON.stringify({ name: `医師${i + 1}`, is_active: true }),
-        })
-      );
-      await Promise.all(doctorPromises);
+      // 1. Create doctors (skip on redo — doctors already exist)
+      if (!isRedo) {
+        const doctorPromises = Array.from({ length: state.doctorCount }, (_, i) =>
+          fetch(`${apiUrl}/api/doctors/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+            body: JSON.stringify({ name: `医師${i + 1}`, is_active: true }),
+          })
+        );
+        await Promise.all(doctorPromises);
+      }
 
       // 2. Save optimizer config (hard_constraints + score range)
       const optimizerConfig = {
@@ -119,7 +122,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
             />
           </div>
           <button
-            onClick={() => setState((s) => ({ ...s, step: 2 }))}
+            onClick={() => setState((s) => ({ ...s, step: isRedo ? 3 : 2 }))}
             className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             disabled={!state.holidayShiftMode}
           >
@@ -196,7 +199,7 @@ export default function SetupWizard({ onComplete }: WizardProps) {
               </div>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
+          <NavButtons onBack={() => setStep(isRedo ? 1 : 2)} onNext={() => setStep(4)} />
         </StepContainer>
       )}
 

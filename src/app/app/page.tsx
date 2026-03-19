@@ -30,6 +30,7 @@ export default function AppPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
   const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
+  const [isSetupRedo, setIsSetupRedo] = useState(false);
   const onboarding = useOnboarding(core.auth.isAuthenticated);
   const prevHadSchedule = useRef(false);
 
@@ -94,7 +95,7 @@ export default function AppPage() {
   }
 
   if (setupStatus === "needed") {
-    return <SetupWizard onComplete={handleWizardComplete} />;
+    return <SetupWizard onComplete={handleWizardComplete} isRedo={isSetupRedo} />;
   }
 
   const openDrawer = (drawer: SettingsDrawer, fromSettings = false) => {
@@ -248,13 +249,14 @@ export default function AppPage() {
                     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                     body: JSON.stringify({ value: false }),
                   }).then(() => {
+                    setIsSetupRedo(true);
                     setSetupStatus("needed");
                     setIsSettingsOpen(false);
                   });
                 }}
                 className="w-full rounded-lg border border-gray-200 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
               >
-                初期設定をやり直す
+                初期設定からやり直す
               </button>
             </div>
           </div>
