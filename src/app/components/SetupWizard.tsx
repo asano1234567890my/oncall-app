@@ -243,13 +243,11 @@ export default function SetupWizard({ onComplete }: WizardProps) {
                 key={value}
                 label={label}
                 selected={state.maxSaturdayNights === value}
-                onClick={() => setState((s) => ({ ...s, maxSaturdayNights: value, step: 6 }))}
+                onClick={() => setState((s) => ({ ...s, maxSaturdayNights: value }))}
               />
             ))}
           </div>
-          <button onClick={() => setStep(4)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2">
-            戻る
-          </button>
+          <NavButtons onBack={() => setStep(4)} onNext={() => setStep(6)} />
         </StepContainer>
       )}
 
