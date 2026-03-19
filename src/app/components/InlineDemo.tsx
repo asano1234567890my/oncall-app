@@ -1,7 +1,7 @@
 // src/app/components/InlineDemo.tsx — LP埋め込みデモ（ルール設定＋1か月分表示）
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -289,6 +289,72 @@ export default function InlineDemo() {
   const isCombinedRow = (row: ScheduleRow) =>
     holidayShiftMode === "combined" && row.is_sunhol && row.day_shift && row.night_shift;
 
+  // ── 入れ替え先の違反プレビュー ──
+  // swapSelection が設定されている間、各セルに仮スワップして違反を事前チェック
+  const swapViolationMap = useMemo(() => {
+    const map = new Map<string, string>(); // "day-type" → 理由
+    if (!swapSelection) return map;
+
+    const selRow = schedule.find((r) => r.day === swapSelection.day);
+    if (!selRow) return map;
+    const combinedA = isCombinedRow(selRow);
+
+    for (const row of schedule) {
+      const types: Array<"day" | "night"> = [];
+      if (row.day_shift && !combinedA && !(isCombinedRow(row))) types.push("day");
+      if (row.night_shift) types.push("night");
+      // combined の場合は night ボタンだけ（day は非表示）
+      if (isCombinedRow(row)) {
+        types.length = 0;
+        types.push("night"); // combined は night ボタンで代表
+      }
+
+      for (const type of types) {
+        const effectiveType = isCombinedRow(row) ? "day" as const : type;
+        // 自分自身はスキップ
+        if (swapSelection.day === row.day && swapSelection.type === effectiveType) continue;
+
+        // 仮スワップ
+        const newSched = schedule.map((r) => ({ ...r }));
+        const rA = newSched.find((r) => r.day === swapSelection.day)!;
+        const rB = newSched.find((r) => r.day === row.day)!;
+        const combinedB = isCombinedRow(row);
+
+        if (combinedA && combinedB) {
+          const tmpD = rA.day_shift; const tmpN = rA.night_shift;
+          rA.day_shift = rB.day_shift; rA.night_shift = rB.night_shift;
+          rB.day_shift = tmpD; rB.night_shift = tmpN;
+        } else if (combinedA) {
+          const keyB = effectiveType === "day" ? "day_shift" as const : "night_shift" as const;
+          const tmpDoc = rA.day_shift;
+          rA.day_shift = rB[keyB]; rA.night_shift = rB[keyB];
+          rB[keyB] = tmpDoc;
+        } else if (combinedB) {
+          const keyA = swapSelection.type === "day" ? "day_shift" as const : "night_shift" as const;
+          const tmpDoc = rB.day_shift;
+          rB.day_shift = rA[keyA]; rB.night_shift = rA[keyA];
+          rA[keyA] = tmpDoc;
+        } else {
+          const keyA = swapSelection.type === "day" ? "day_shift" as const : "night_shift" as const;
+          const keyB = effectiveType === "day" ? "day_shift" as const : "night_shift" as const;
+          const tmp = rA[keyA];
+          rA[keyA] = rB[keyB];
+          rB[keyB] = tmp;
+        }
+
+        const violation = checkConstraints(newSched);
+        if (violation) {
+          map.set(`${row.day}-${type}`, violation);
+        }
+      }
+    }
+    return map;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [swapSelection, schedule, intervalDays, maxSaturdayNights, maxSunholWorks, holidayShiftMode]);
+
+  const getSwapViolation = (day: number, type: "day" | "night"): string | null =>
+    swapViolationMap.get(`${day}-${type}`) ?? null;
+
   // ── 入れ替えボタン ──
   const handleSwapBtn = (day: number, type: "day" | "night") => {
     setSwapWarning("");
@@ -471,6 +537,8 @@ export default function InlineDemo() {
               {schedule.map((row) => {
                 const dow = getWeekday(row.day);
                 const combined = isCombinedRow(row);
+                const dayViolation = getSwapViolation(row.day, "day");
+                const nightViolation = getSwapViolation(row.day, "night");
                 return (
                   <tr key={row.day} className={rowBgClass(row)}>
                     <td className="px-2 py-1 font-mono text-xs text-gray-500">{getDateStr(row.day)}</td>
@@ -482,13 +550,16 @@ export default function InlineDemo() {
                       className={`px-1 py-1 text-xs font-medium select-none rounded ${
                         isSwappedCell(row.day, "day")
                           ? "demo-swap-flash"
-                          : isSameDoctorHighlight(row.day_shift)
-                            ? "bg-blue-100 text-blue-800"
-                            : row.day_shift
-                              ? "text-gray-800 cursor-pointer hover:bg-blue-50 transition-colors"
-                              : "text-gray-400"
+                          : swapSelection && dayViolation
+                            ? "bg-red-100 text-red-700"
+                            : isSameDoctorHighlight(row.day_shift)
+                              ? "bg-blue-100 text-blue-800"
+                              : row.day_shift
+                                ? "text-gray-800 cursor-pointer hover:bg-blue-50 transition-colors"
+                                : "text-gray-400"
                       }`}
                       onClick={() => handleDoctorTap(row.day_shift)}
+                      title={swapSelection && dayViolation ? dayViolation : undefined}
                     >
                       {row.day_shift ? getDoctorShortLabel(row.day_shift) : "−"}
                     </td>
@@ -500,9 +571,11 @@ export default function InlineDemo() {
                           className={`px-2.5 py-1 rounded text-sm font-bold border transition-colors ${
                             isSwapSelected(row.day, "day")
                               ? "bg-blue-500 text-white border-blue-500"
-                              : "bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100"
+                              : dayViolation && swapSelection
+                                ? "bg-red-50 text-red-400 border-red-200 cursor-not-allowed"
+                                : "bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100"
                           }`}
-                          title="入れ替え"
+                          title={swapSelection && dayViolation ? dayViolation : "入れ替え"}
                         >↔</button>
                       )}
                     </td>
@@ -511,13 +584,16 @@ export default function InlineDemo() {
                       className={`px-1 py-1 text-xs font-medium select-none rounded ${
                         isSwappedCell(row.day, "night")
                           ? "demo-swap-flash"
-                          : isSameDoctorHighlight(row.night_shift)
-                            ? "bg-blue-100 text-blue-800"
-                            : row.night_shift
-                              ? "text-gray-800 cursor-pointer hover:bg-blue-50 transition-colors"
-                              : "text-gray-400"
+                          : swapSelection && nightViolation
+                            ? "bg-red-100 text-red-700"
+                            : isSameDoctorHighlight(row.night_shift)
+                              ? "bg-blue-100 text-blue-800"
+                              : row.night_shift
+                                ? "text-gray-800 cursor-pointer hover:bg-blue-50 transition-colors"
+                                : "text-gray-400"
                       }`}
                       onClick={() => handleDoctorTap(row.night_shift)}
+                      title={swapSelection && nightViolation ? nightViolation : undefined}
                     >
                       {getDoctorShortLabel(row.night_shift)}
                     </td>
@@ -529,9 +605,11 @@ export default function InlineDemo() {
                           className={`px-2.5 py-1 rounded text-sm font-bold border transition-colors ${
                             (combined ? isSwapSelectedCombined(row.day) : isSwapSelected(row.day, "night"))
                               ? "bg-blue-500 text-white border-blue-500"
-                              : "bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100"
+                              : (combined ? dayViolation : nightViolation) && swapSelection
+                                ? "bg-red-50 text-red-400 border-red-200 cursor-not-allowed"
+                                : "bg-amber-50 text-amber-600 border-amber-300 hover:bg-amber-100"
                           }`}
-                          title={combined ? "日当直セットで入れ替え" : "入れ替え"}
+                          title={swapSelection && (combined ? dayViolation : nightViolation) ? (combined ? dayViolation : nightViolation)! : (combined ? "日当直セットで入れ替え" : "入れ替え")}
                         >{combined ? "⇄" : "↔"}</button>
                       )}
                     </td>
