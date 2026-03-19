@@ -27,7 +27,6 @@ export default function InlineDemo() {
   const [distributionMode, setDistributionMode] = useState<"fair" | "seniority">("fair");
   const fairness = distributionMode === "fair";
   const seniorityMode = distributionMode === "seniority";
-  const [avoidConsecSat, setAvoidConsecSat] = useState(true);
 
   // ── UI状態 ──
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -69,7 +68,7 @@ export default function InlineDemo() {
     maxSunholWorks !== null,
     true, // 日当直モード
     fairness,
-    avoidConsecSat,
+
     seniorityMode,
   ].filter(Boolean).length;
 
@@ -114,7 +113,6 @@ export default function InlineDemo() {
         objectiveWeights.sunhol_fairness = 0;
         objectiveWeights.sat_month_fairness = 0;
       }
-      objectiveWeights.sat_consec = avoidConsecSat ? 80 : 0;
 
       const seniority = buildSeniorityScores();
       const scoreMax = seniorityMode
@@ -735,7 +733,7 @@ export default function InlineDemo() {
                     : `医師1＝1年目 … 医師${numDoctors}＝${numDoctors}年目として、ベテランほど少なく配分`}
                 </p>
               </div>
-              <ToggleRow label="連続する土曜当直を避ける" checked={avoidConsecSat} onChange={setAvoidConsecSat} />
+
             </div>
           </div>
         </div>
