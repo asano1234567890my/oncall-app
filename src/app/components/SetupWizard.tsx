@@ -1,12 +1,12 @@
 // src/app/components/SetupWizard.tsx — 初回セットアップウィザード
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { getAuthHeaders } from "../hooks/useAuth";
 
 type WizardProps = {
-  onComplete: () => void;
+  onComplete: (options?: { openDoctorManage?: boolean }) => void;
   isRedo?: boolean;
 };
 
@@ -32,16 +32,44 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   });
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
+  const [currentDoctorCount, setCurrentDoctorCount] = useState<number | null>(null);
 
   const setStep = (step: WizardState["step"]) => setState((s) => ({ ...s, step }));
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  // やり直し時に現在の医師数を取得
+  useEffect(() => {
+    if (!isRedo) return;
+    fetch(`${apiUrl}/api/doctors/`, { headers: getAuthHeaders() })
+      .then((res) => res.json())
+      .then((data: unknown[]) => {
+        setCurrentDoctorCount(data.length);
+        setState((s) => ({ ...s, doctorCount: data.length }));
+      })
+      .catch(() => {/* ignore */});
+  }, [isRedo, apiUrl]);
 
   const handleFinish = async () => {
     setIsSaving(true);
     setError("");
     try {
-      // 1. Create doctors (skip on redo — doctors already exist)
-      if (!isRedo) {
+      // 1. Handle doctors
+      if (isRedo && currentDoctorCount !== null) {
+        const diff = state.doctorCount - currentDoctorCount;
+        if (diff > 0) {
+          // 増えた分だけダミー医師を追加
+          const startIndex = currentDoctorCount + 1;
+          const doctorPromises = Array.from({ length: diff }, (_, i) =>
+            fetch(`${apiUrl}/api/doctors/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+              body: JSON.stringify({ name: `医師${startIndex + i}`, is_active: true }),
+            })
+          );
+          await Promise.all(doctorPromises);
+        }
+      } else if (!isRedo) {
+        // 初回: 全員作成
         const doctorPromises = Array.from({ length: state.doctorCount }, (_, i) =>
           fetch(`${apiUrl}/api/doctors/`, {
             method: "POST",
@@ -76,13 +104,24 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         body: JSON.stringify({ value: true }),
       });
 
-      onComplete();
+      // 減った場合は医師管理画面を案内
+      const needsDoctorManage = isRedo && currentDoctorCount !== null && state.doctorCount < currentDoctorCount;
+      onComplete(needsDoctorManage ? { openDoctorManage: true } : undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "設定の保存に失敗しました");
     } finally {
       setIsSaving(false);
     }
   };
+
+  // やり直し時の医師数差分メッセージ
+  const doctorDiffMessage = isRedo && currentDoctorCount !== null
+    ? state.doctorCount > currentDoctorCount
+      ? `${state.doctorCount - currentDoctorCount}名の仮医師を追加します`
+      : state.doctorCount < currentDoctorCount
+        ? `現在${currentDoctorCount}名登録済みです。完了後に医師管理画面で${currentDoctorCount - state.doctorCount}名をアーカイブしてください`
+        : "現在の人数と同じです"
+    : null;
 
   return (
     <div className="mx-auto max-w-lg py-8 px-4">
@@ -122,7 +161,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
             />
           </div>
           <button
-            onClick={() => setState((s) => ({ ...s, step: isRedo ? 3 : 2 }))}
+            onClick={() => setState((s) => ({ ...s, step: 2 }))}
             className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             disabled={!state.holidayShiftMode}
           >
@@ -134,7 +173,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
       {state.step === 2 && (
         <StepContainer
           title="何人で当直を回していますか？"
-          subtitle="あとから医師の追加・削除もできます"
+          subtitle={isRedo ? `現在${currentDoctorCount ?? "?"}名が登録されています` : "あとから医師の追加・削除もできます"}
         >
           <div className="flex items-center justify-center gap-4 my-6">
             <button
@@ -151,7 +190,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               +
             </button>
           </div>
-          <p className="text-center text-sm text-gray-500 mb-6">{state.doctorCount}名</p>
+          <p className="text-center text-sm text-gray-500 mb-2">{state.doctorCount}名</p>
+          {doctorDiffMessage && (
+            <p className={`text-center text-sm mb-4 ${state.doctorCount < (currentDoctorCount ?? 0) ? "text-amber-600" : "text-blue-600"}`}>
+              {doctorDiffMessage}
+            </p>
+          )}
           <NavButtons onBack={() => setStep(1)} onNext={() => setStep(3)} />
         </StepContainer>
       )}
@@ -199,7 +243,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               </div>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(isRedo ? 1 : 2)} onNext={() => setStep(4)} />
+          <NavButtons onBack={() => setStep(2)} onNext={() => setStep(4)} />
         </StepContainer>
       )}
 
@@ -266,6 +310,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
             <p>当直間隔：{state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}</p>
             <p>土曜上限：{state.maxSaturdayNights >= 99 ? "制限なし" : `${state.maxSaturdayNights}回`}</p>
           </div>
+
+          {isRedo && currentDoctorCount !== null && state.doctorCount < currentDoctorCount && (
+            <p className="text-sm text-amber-600 bg-amber-50 rounded-lg px-3 py-2 mb-4">
+              完了後に医師管理画面が開きます。不要な医師を削除してください。
+            </p>
+          )}
 
           {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>}
 
