@@ -27,13 +27,30 @@ export function useAuth() {
     const token = localStorage.getItem(TOKEN_KEY);
     const hospitalId = localStorage.getItem(HOSPITAL_ID_KEY);
     const hospitalName = localStorage.getItem(HOSPITAL_NAME_KEY);
-    setAuth({
-      token,
-      hospitalId,
-      hospitalName,
-      isAuthenticated: !!token,
-    });
-    setIsLoading(false);
+    if (!token) {
+      setIsLoading(false);
+      return;
+    }
+    // トークンの有効性をAPIで検証
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    fetch(`${apiUrl}/api/doctors/`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        if (res.status === 401) {
+          // トークン期限切れ → 自動ログアウト
+          localStorage.removeItem(TOKEN_KEY);
+          localStorage.removeItem(HOSPITAL_ID_KEY);
+          localStorage.removeItem(HOSPITAL_NAME_KEY);
+          localStorage.removeItem("setup_completed");
+          setAuth({ token: null, hospitalId: null, hospitalName: null, isAuthenticated: false });
+        } else {
+          setAuth({ token, hospitalId, hospitalName, isAuthenticated: true });
+        }
+      })
+      .catch(() => {
+        // ネットワークエラー時はローカルのトークンを信用
+        setAuth({ token, hospitalId, hospitalName, isAuthenticated: true });
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = useCallback(async (name: string, password: string): Promise<void> => {

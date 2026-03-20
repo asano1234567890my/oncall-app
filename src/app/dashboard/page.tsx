@@ -205,10 +205,6 @@ export default function DashboardPage() {
             onToggleFixedWeekday={core.toggleFixedWeekday}
             onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
             onSetPreviousMonthShift={core.setPreviousMonthShift}
-            onGenerate={core.handleGenerateWithGuard}
-            isGenerateDisabled={core.isOverrideMode}
-            onLoadConfirmedForEdit={() => { void handleLoadConfirmedForEdit(); }}
-            isLoadingConfirmed={isLoadingConfirmed}
             onSaveAllDoctorsSettings={() => { void core.saveAllDoctorsSettings(); }}
             isBulkSavingDoctors={core.isBulkSavingDoctors}
           />
@@ -242,6 +238,27 @@ export default function DashboardPage() {
               onMaxScoreChange={core.handleMaxScoreChange}
               onTargetScoreChange={core.handleTargetScoreChange}
             />
+
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={core.handleGenerateWithGuard}
+                disabled={core.isLoading || core.activeDoctors.length === 0 || core.isOverrideMode}
+                className={`w-full rounded-xl px-4 py-3 text-sm font-bold text-white shadow-lg transition ${
+                  core.isLoading || core.activeDoctors.length === 0 || core.isOverrideMode ? "cursor-not-allowed bg-gray-400" : "bg-blue-700 hover:bg-blue-800"
+                }`}
+              >
+                {core.isLoading ? "生成中..." : core.activeDoctors.length === 0 ? "有効な医師がいません" : core.isOverrideMode ? "強制配置モード中は生成できません" : "上記設定で当直表を自動生成"}
+              </button>
+              <button
+                type="button"
+                onClick={handleLoadConfirmedForEdit}
+                disabled={core.isLoading || isLoadingConfirmed}
+                className="w-full rounded-xl border-2 border-gray-300 px-4 py-3 text-sm font-bold text-gray-600 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isLoadingConfirmed ? "読み込み中..." : "確定済みシフトを修正する"}
+              </button>
+            </div>
 
             <ScheduleBoard
               isLoading={core.isLoading}

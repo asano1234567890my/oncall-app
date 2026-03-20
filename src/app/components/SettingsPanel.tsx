@@ -87,10 +87,6 @@ type GenerationSettingsPanelProps = {
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
   onPrevMonthLastDayChange: (value: number) => void;
   onSetPreviousMonthShift: (prevDay: number, shiftType: ShiftType, doctorId: string) => void;
-  onGenerate: () => void;
-  isGenerateDisabled?: boolean;
-  onLoadConfirmedForEdit?: () => void;
-  isLoadingConfirmed?: boolean;
   onSaveAllDoctorsSettings?: () => void;
   isBulkSavingDoctors?: boolean;
 };
@@ -168,10 +164,6 @@ export function GenerationSettingsPanel({
   onToggleFixedWeekday,
   onPrevMonthLastDayChange,
   onSetPreviousMonthShift,
-  onGenerate,
-  isGenerateDisabled = false,
-  onLoadConfirmedForEdit,
-  isLoadingConfirmed = false,
   onSaveAllDoctorsSettings,
   isBulkSavingDoctors = false,
 }: GenerationSettingsPanelProps) {
@@ -471,20 +463,9 @@ export function GenerationSettingsPanel({
         onToggleAllUnavailable={onToggleAllUnavailable}
         onToggleUnavailable={onToggleUnavailable}
         onToggleFixedWeekday={onToggleFixedWeekday}
+        onSave={onSaveAllDoctorsSettings}
+        isSaving={isBulkSavingDoctors}
       />
-
-      {onSaveAllDoctorsSettings && (
-        <button
-          type="button"
-          onClick={onSaveAllDoctorsSettings}
-          disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-          className={`mt-2 w-full rounded-lg py-2.5 text-sm font-bold text-white transition ${
-            isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-        >
-          {isBulkSavingDoctors ? "保存中..." : "不可日・スコア設定を保存"}
-        </button>
-      )}
 
       <PreviousMonthShiftsConfig
         isOpen={isPreviousMonthShiftsOpen}
@@ -500,27 +481,6 @@ export function GenerationSettingsPanel({
         onSetPreviousMonthShift={onSetPreviousMonthShift}
       />
 
-      <button
-        type="button"
-        onClick={onGenerate}
-        disabled={isLoading || numDoctors === 0 || isGenerateDisabled}
-        className={`mt-2 w-full rounded-xl px-4 py-3 text-sm font-bold text-white shadow-lg transition ${
-          isLoading || numDoctors === 0 || isGenerateDisabled ? "cursor-not-allowed bg-gray-400" : "bg-blue-700 hover:bg-blue-800"
-        }`}
-      >
-        {isLoading ? "生成中..." : numDoctors === 0 ? "有効な医師がいません" : isGenerateDisabled ? "強制配置モード中は生成できません" : "上記設定で当直表を自動生成"}
-      </button>
-
-      {onLoadConfirmedForEdit && (
-        <button
-          type="button"
-          onClick={onLoadConfirmedForEdit}
-          disabled={isLoading || isLoadingConfirmed}
-          className="mt-2 w-full rounded-xl border-2 border-gray-300 px-4 py-3 text-sm font-bold text-gray-600 transition hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isLoadingConfirmed ? "読み込み中..." : "確定済みシフトを修正する"}
-        </button>
-      )}
     </div>
   );
 }

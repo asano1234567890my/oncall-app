@@ -42,6 +42,8 @@ type UnavailableDaysInputProps = {
   onToggleAllUnavailable: () => void;
   onToggleUnavailable: (doctorId: string, ymd: string, targetShift?: TargetShift | null) => void;
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 };
 
 export default function UnavailableDaysInput({
@@ -56,6 +58,8 @@ export default function UnavailableDaysInput({
   onToggleAllUnavailable,
   onToggleUnavailable,
   onToggleFixedWeekday,
+  onSave,
+  isSaving = false,
 }: UnavailableDaysInputProps) {
   const doctorUnavailableYear = doctorUnavailableMonth.getFullYear();
   const doctorUnavailableMonthNumber = doctorUnavailableMonth.getMonth() + 1;
@@ -192,14 +196,28 @@ export default function UnavailableDaysInput({
             <h3 className="text-sm font-bold text-gray-800">医師別不可日設定</h3>
             <p className="mt-1 text-[11px] text-gray-500">平日・土曜は1タップで終日休み、日曜・祝日はポップアップで日直/当直別に設定できます。</p>
           </div>
-          <button
-            type="button"
-            onClick={onToggleAllUnavailable}
-            disabled={!selectedDoctorId}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
-          >
-            全リセット/全選択
-          </button>
+          <div className="flex items-center gap-2">
+            {onSave && (
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving}
+                className={`rounded-lg px-3 py-2 text-xs font-bold text-white transition ${
+                  isSaving ? "cursor-not-allowed bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {isSaving ? "保存中..." : "不可日を保存"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onToggleAllUnavailable}
+              disabled={!selectedDoctorId}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              全リセット/全選択
+            </button>
+          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2">
@@ -262,9 +280,23 @@ export default function UnavailableDaysInput({
       </div>
 
       <div className="mb-4 rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
-        <div className="mb-3">
-          <h3 className="text-sm font-bold text-gray-800">固定不可曜日</h3>
-          <p className="mt-1 text-[11px] text-gray-500">月〜土は1タップで終日不可、日曜と祝日はポップアップでシフト別に設定できます。</p>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-gray-800">固定不可曜日</h3>
+            <p className="mt-1 text-[11px] text-gray-500">月〜土は1タップで終日不可、日曜と祝日はポップアップでシフト別に設定できます。</p>
+          </div>
+          {onSave && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+              className={`rounded-lg px-3 py-2 text-xs font-bold text-white transition ${
+                isSaving ? "cursor-not-allowed bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
+            >
+              {isSaving ? "保存中..." : "固定曜日を保存"}
+            </button>
+          )}
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">

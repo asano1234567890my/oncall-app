@@ -48,16 +48,26 @@ export default function AppPage() {
   useEffect(() => {
     if (!core.auth.isAuthenticated) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    // localStorageにフラグがあればAPI不要でスキップ
+    if (localStorage.getItem("setup_completed")) {
+      setSetupStatus("done");
+      return;
+    }
     fetch(`${apiUrl}/api/settings/kv/setup_completed`, { headers: getAuthHeaders() })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then((data: unknown) => {
         const value = (data as Record<string, unknown>)?.value;
+        if (value) localStorage.setItem("setup_completed", "1");
         setSetupStatus(value ? "done" : "needed");
       })
       .catch(() => setSetupStatus("done")); // on error, skip wizard
   }, [core.auth.isAuthenticated]);
 
   const handleWizardComplete = useCallback((options?: { openDoctorManage?: boolean; openUnavailable?: boolean }) => {
+    localStorage.setItem("setup_completed", "1");
     setSetupStatus("done");
     if (options?.openDoctorManage) {
       sessionStorage.setItem("open_doctor_manage", "1");
@@ -319,6 +329,7 @@ export default function AppPage() {
                     headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                     body: JSON.stringify({ value: false }),
                   }).then(() => {
+                    localStorage.removeItem("setup_completed");
                     setIsSetupRedo(true);
                     setSetupStatus("needed");
                     setIsSettingsOpen(false);

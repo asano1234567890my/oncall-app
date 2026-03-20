@@ -133,11 +133,6 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
             <Lock className={`h-3 w-3 ${locked ? "text-amber-600" : "text-gray-400"}`} />
           </button>
         </div>
-        {violation && swapSource && (
-          <div className="mt-0.5 text-[9px] leading-tight text-red-500 truncate" title={violation}>
-            {violation.split("\n")[0]}
-          </div>
-        )}
       </td>
     );
   };

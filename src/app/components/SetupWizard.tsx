@@ -55,13 +55,14 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     if (!isRedo) return;
     fetch(`${apiUrl}/api/doctors/`, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then((data: Array<{ name: string }>) => {
-        setCurrentDoctorCount(data.length);
-        setExistingDoctorNames(data.map((d) => d.name));
+      .then((data: Array<{ name: string; is_active: boolean }>) => {
+        const active = data.filter((d) => d.is_active);
+        setCurrentDoctorCount(active.length);
+        setExistingDoctorNames(active.map((d) => d.name));
         setState((s) => ({
           ...s,
-          doctorCount: data.length,
-          doctorNames: data.map((d) => d.name),
+          doctorCount: active.length,
+          doctorNames: active.map((d) => d.name),
         }));
       })
       .catch(() => {/* ignore */});
@@ -129,11 +130,14 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
       });
 
       // 3. Mark setup as completed
-      await fetch(`${apiUrl}/api/settings/kv/setup_completed`, {
+      const setupRes = await fetch(`${apiUrl}/api/settings/kv/setup_completed`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ value: true }),
       });
+      if (!setupRes.ok) {
+        throw new Error("初期設定の保存に失敗しました");
+      }
 
       const needsDoctorManage = isRedo && currentDoctorCount !== null && state.doctorCount < currentDoctorCount;
       onComplete({
