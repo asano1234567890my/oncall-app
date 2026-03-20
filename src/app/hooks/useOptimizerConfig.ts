@@ -5,11 +5,13 @@ import { getAuthHeaders } from "./useAuth";
 type UseOptimizerConfigParams = {
   scoreMin: number;
   scoreMax: number;
+  scoreTargetDefault: number | null;
   shiftScores: ShiftScores;
   objectiveWeights: ObjectiveWeights;
   hardConstraints: HardConstraints;
   setScoreMin: (v: number) => void;
   setScoreMax: (v: number) => void;
+  setScoreTargetDefault: (v: number | null) => void;
   setShiftScores: (v: ShiftScores) => void;
   setObjectiveWeights: (v: ObjectiveWeights) => void;
   setHardConstraints: (v: HardConstraints) => void;
@@ -18,11 +20,13 @@ type UseOptimizerConfigParams = {
 export function useOptimizerConfig({
   scoreMin,
   scoreMax,
+  scoreTargetDefault,
   shiftScores,
   objectiveWeights,
   hardConstraints,
   setScoreMin,
   setScoreMax,
+  setScoreTargetDefault,
   setShiftScores,
   setObjectiveWeights,
   setHardConstraints,
@@ -43,6 +47,7 @@ export function useOptimizerConfig({
         const cfg = data as Record<string, unknown>;
         if (typeof cfg.score_min === "number") setScoreMin(cfg.score_min);
         if (typeof cfg.score_max === "number") setScoreMax(cfg.score_max);
+        if (cfg.score_target_default === null || typeof cfg.score_target_default === "number") setScoreTargetDefault(cfg.score_target_default as number | null);
         if (cfg.shift_scores && typeof cfg.shift_scores === "object") {
           setShiftScores({ ...DEFAULT_SHIFT_SCORES, ...(cfg.shift_scores as Partial<ShiftScores>) });
         }
@@ -75,6 +80,7 @@ export function useOptimizerConfig({
         body: JSON.stringify({
           score_min: scoreMin,
           score_max: scoreMax,
+          score_target_default: scoreTargetDefault,
           shift_scores: shiftScores,
           objective_weights: objectiveWeights,
           hard_constraints: hardConstraints,

@@ -42,3 +42,16 @@ body {
 .swap-flash {
   animation: swap-flash 1.5s ease-out forwards;
 }
+
+/* モバイルボトムシート スライドアップ */
+@keyframes slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+.animate-slide-up {
+  animation: slide-up 0.25s ease-out forwards;
+}

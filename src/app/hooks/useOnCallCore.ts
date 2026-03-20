@@ -33,6 +33,7 @@ export function useOnCallCore() {
     setDoctors, holidays, setHolidays,
     holidayWorkdayOverrides, setHolidayWorkdayOverrides,
     scoreMin, setScoreMin, scoreMax, setScoreMax,
+    scoreTargetDefault, setScoreTargetDefault,
     shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
     isWeightsOpen, setIsWeightsOpen,
@@ -60,13 +61,14 @@ export function useOnCallCore() {
     handlePrevMonthLastDayChange, getPreviousMonthShiftDoctorId,
     setPreviousMonthShift,
     handleMinScoreChange, handleMaxScoreChange, handleTargetScoreChange,
+    resetDoctorScores,
     prevMonthTailDays,
   } = dashboardState;
 
   // ── 最適化設定 ──
   const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig, hasUnsavedWeights, hasUnsavedHardConstraints } = useOptimizerConfig({
-    scoreMin, scoreMax, shiftScores, objectiveWeights, hardConstraints,
-    setScoreMin, setScoreMax, setShiftScores, setObjectiveWeights, setHardConstraints,
+    scoreMin, scoreMax, scoreTargetDefault, shiftScores, objectiveWeights, hardConstraints,
+    setScoreMin, setScoreMax, setScoreTargetDefault, setShiftScores, setObjectiveWeights, setHardConstraints,
   });
 
   // ── 祝日 ──
@@ -409,6 +411,7 @@ export function useOnCallCore() {
     manualHolidaySetInMonth, autoHolidayDaysInMonth,
     isHolidayLikeDay,
     scoreMin, setScoreMin, scoreMax, setScoreMax,
+    scoreTargetDefault, setScoreTargetDefault,
     shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
     isWeightsOpen, setIsWeightsOpen,
@@ -439,7 +442,7 @@ export function useOnCallCore() {
     getPreviousMonthShiftDoctorId, setPreviousMonthShift,
     handlePrevMonthLastDayChange,
     toggleUnavailable, toggleAllUnavailable, toggleFixedWeekday,
-    handleMinScoreChange, handleMaxScoreChange, handleTargetScoreChange,
+    handleMinScoreChange, handleMaxScoreChange, handleTargetScoreChange, resetDoctorScores,
 
     // 祝日
     isLoadingCustom, isSavingCustom, customError,

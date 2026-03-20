@@ -52,6 +52,7 @@ export default function useDashboardState() {
   const [holidayWorkdayOverrides, setHolidayWorkdayOverrides] = useState<Set<string>>(() => new Set());
   const [scoreMin, setScoreMin] = useState<number>(0.5);
   const [scoreMax, setScoreMax] = useState<number>(4.5);
+  const [scoreTargetDefault, setScoreTargetDefault] = useState<number | null>(null);
   const [shiftScores, setShiftScores] = useState<ShiftScores>(DEFAULT_SHIFT_SCORES);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
@@ -265,6 +266,12 @@ export default function useDashboardState() {
     setTargetScoreMap((prev) => ({ ...prev, [doctorId]: value }));
   };
 
+  const resetDoctorScores = (doctorId: string) => {
+    setMinScoreMap((prev) => { const next = { ...prev }; delete next[doctorId]; return next; });
+    setMaxScoreMap((prev) => { const next = { ...prev }; delete next[doctorId]; return next; });
+    setTargetScoreMap((prev) => { const next = { ...prev }; delete next[doctorId]; return next; });
+  };
+
   const prevMonthTailDays = useMemo(() => {
     const start = Math.max(1, prevMonthLastDay - 3);
     const days: number[] = [];
@@ -289,6 +296,8 @@ export default function useDashboardState() {
     setScoreMin,
     scoreMax,
     setScoreMax,
+    scoreTargetDefault,
+    setScoreTargetDefault,
     shiftScores,
     setShiftScores,
     objectiveWeights,
@@ -354,6 +363,7 @@ export default function useDashboardState() {
     handleMinScoreChange,
     handleMaxScoreChange,
     handleTargetScoreChange,
+    resetDoctorScores,
     prevMonthTailDays,
   };
 }

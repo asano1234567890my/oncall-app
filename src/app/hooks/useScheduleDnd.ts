@@ -1023,6 +1023,44 @@ export function useScheduleDnd({
     return swapViolationMap.get(`${day}-${shiftType}`) ?? null;
   };
 
+  // --- モバイル用命令的アクション ---
+
+  const placeDoctorInShift = (day: number, shiftType: ShiftType, doctorId: string): boolean => {
+    const result = buildAssignSchedule(day, shiftType, doctorId);
+    if (result.errorMessage) { showToast(result.errorMessage); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); return true; }
+    return false;
+  };
+
+  const removeDoctorFromShift = (day: number, shiftType: ShiftType): boolean => {
+    const result = buildClearSchedule(day, shiftType);
+    if (result.errorMessage) { showToast(result.errorMessage); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); return true; }
+    return false;
+  };
+
+  const startSwapFrom = (day: number, shiftType: ShiftType): boolean => {
+    const doctorId = getScheduleDoctorId(day, shiftType);
+    if (!doctorId) { showToast("入れ替え元に医師がいません"); return false; }
+    if (isShiftLocked(day, shiftType)) { showToast("ロック済みの枠は入れ替え元にできません"); return false; }
+    clearDragState();
+    setSelectedListSelection(null);
+    setSwapSource({ day, shiftType, doctorId });
+    return true;
+  };
+
+  const executeSwapTo = (day: number, shiftType: ShiftType): boolean => {
+    if (!swapSource) return false;
+    if (swapSource.day === day && swapSource.shiftType === shiftType) {
+      setSwapSource(null);
+      return false;
+    }
+    const result = buildSwapSchedule(swapSource.day, swapSource.shiftType, day, shiftType);
+    if (result.errorMessage) { showToast(result.errorMessage); cancelSwapSelection(); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); cancelSwapSelection(); return true; }
+    return false;
+  };
+
   return {
     toastMessage,
     hoverErrorMessage,
@@ -1042,6 +1080,7 @@ export function useScheduleDnd({
     getSwapViolation,
     isHighlightedDoctorBlockedDay,
     isHighlightedDoctorBlockedShift,
+    getPlacementConstraintMessage,
     toggleHighlightedDoctor,
     selectManualDoctor,
     toggleEraseSelection,
@@ -1069,5 +1108,9 @@ export function useScheduleDnd({
     handleUnlockAll,
     buildLockedShiftsPayload,
     validateScheduleViolations,
+    placeDoctorInShift,
+    removeDoctorFromShift,
+    startSwapFrom,
+    executeSwapTo,
   };
 }
