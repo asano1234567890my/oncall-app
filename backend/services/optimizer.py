@@ -13,20 +13,21 @@ import random
 @dataclass
 class ObjectiveWeights:
     # Objective weights. Larger values penalize the corresponding violations more strongly.
-    month_fairness: int = 100
-    sat_month_fairness: int = 100
-    past_sat_gap: int = 10
-    past_sunhol_gap: int = 5
-    gap5: int = 100
-    gap6: int = 50
-
-    sat_consec: int = 80
+    # Active: target score + weekend/holiday equalization
+    target: int = 100
     score_balance: int = 30
-    target: int = 10
-    sunhol_fairness: int = 200
-    sunhol_3rd: int = 80
+    sunhol_fairness: int = 100
+    sat_month_fairness: int = 100
+    past_sunhol_gap: int = 50
+    past_sat_gap: int = 50
+    # Deactivated (to be redesigned: auto-follow hard constraints)
+    month_fairness: int = 0
+    gap5: int = 0
+    gap6: int = 0
+    sat_consec: int = 0
+    sunhol_3rd: int = 0
     weekend_hol_3rd: int = 0
-    soft_unavailable: int = 100
+    soft_unavailable: int = 0
 
 
 class OnCallOptimizer:
@@ -123,19 +124,21 @@ class OnCallOptimizer:
 
         ow = objective_weights or {}
         self.objective_weights = ObjectiveWeights(
-            month_fairness=int(ow.get("month_fairness", 100)),
-            past_sat_gap=int(ow.get("past_sat_gap", 10)),
-            past_sunhol_gap=int(ow.get("past_sunhol_gap", 5)),
-            gap5=int(ow.get("gap5", 100)),
-            gap6=int(ow.get("gap6", 50)),
-            sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
-            sat_consec=int(ow.get("sat_consec", 80)),
+            # Active
+            target=int(ow.get("target", 100)),
             score_balance=int(ow.get("score_balance", 30)),
-            target=int(ow.get("target", 10)),
-            sunhol_fairness=int(ow.get("sunhol_fairness", 200)),
-            sunhol_3rd=int(ow.get("sunhol_3rd", 80)),
+            sunhol_fairness=int(ow.get("sunhol_fairness", 100)),
+            sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
+            past_sunhol_gap=int(ow.get("past_sunhol_gap", 50)),
+            past_sat_gap=int(ow.get("past_sat_gap", 50)),
+            # Deactivated
+            month_fairness=int(ow.get("month_fairness", 0)),
+            gap5=int(ow.get("gap5", 0)),
+            gap6=int(ow.get("gap6", 0)),
+            sat_consec=int(ow.get("sat_consec", 0)),
+            sunhol_3rd=int(ow.get("sunhol_3rd", 0)),
             weekend_hol_3rd=int(ow.get("weekend_hol_3rd", 0)),
-            soft_unavailable=int(ow.get("soft_unavailable", 100)),
+            soft_unavailable=int(ow.get("soft_unavailable", 0)),
         )
 
         self.model = cp_model.CpModel()

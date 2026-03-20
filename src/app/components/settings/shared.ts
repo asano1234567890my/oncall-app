@@ -8,6 +8,7 @@ export type WeightChangeSummary = {
   top: string[];
 };
 
+/** 旧: 個別ウェイト一覧（/app 用に残す） */
 export const weightInputs = [
   { key: "gap5", label: "間隔ルール+1日のペナルティ", min: 0, max: 200, step: 5, hint: "勤務間隔ルールの直上を抑制" },
   { key: "soft_unavailable", label: "不可日の回避優先度", min: 0, max: 200, step: 5, hint: "不可日を守れない場合の回避強度" },
@@ -29,6 +30,55 @@ export const weightInputs = [
   step: number;
   hint: string;
 }>;
+
+/** 新: 4軸グループ（/dashboard 用） */
+export type WeightGroup = {
+  id: string;
+  label: string;
+  hint: string;
+  primaryKey: keyof ObjectiveWeights;
+  childMapping: Partial<Record<keyof ObjectiveWeights, number>>;
+  min: number;
+  max: number;
+  step: number;
+};
+
+export const weightGroups: WeightGroup[] = [
+  {
+    id: "target_score",
+    label: "目標スコアへの近さ",
+    hint: "各医師の目標スコアに寄せます。目標が全員同じなら公平性と同義です。",
+    primaryKey: "target",
+    childMapping: { target: 1.0, score_balance: 0.3 },
+    min: 0, max: 200, step: 5,
+  },
+  {
+    id: "weekend_holiday_fairness",
+    label: "土日祝の均等化",
+    hint: "土日祝シフトの回数を医師間で均等にします。過去数か月の実績も考慮します。将来は加重累積方式に移行予定。",
+    primaryKey: "sunhol_fairness",
+    childMapping: {
+      sunhol_fairness: 1.0, sat_month_fairness: 1.0,
+      past_sunhol_gap: 0.5, past_sat_gap: 0.5,
+    },
+    min: 0, max: 200, step: 5,
+  },
+];
+
+/** グループスライダーの値からObjectiveWeightsを一括生成 */
+export function expandWeightGroups(
+  currentWeights: ObjectiveWeights,
+  groupId: string,
+  newValue: number,
+): ObjectiveWeights {
+  const group = weightGroups.find((g) => g.id === groupId);
+  if (!group) return currentWeights;
+  const next = { ...currentWeights };
+  for (const [key, ratio] of Object.entries(group.childMapping)) {
+    next[key as keyof ObjectiveWeights] = Math.round(newValue * (ratio as number));
+  }
+  return next;
+}
 
 export type WeightMeta = {
   label: string;
@@ -99,42 +149,42 @@ export function getWeightMeta(
 }
 
 export const hardConstraintNumberInputs = [
-  { key: "interval_days", label: "勤務間隔ルール", min: 0, max: 10, step: 1, unit: "日", hint: "0でOFF / 既定4" },
+  { key: "interval_days", label: "勤務間隔", min: 0, max: 10, step: 1, unit: "日", hint: "0で制限なし / 既定4" },
   {
     key: "max_weekend_holiday_works",
     label: "土日祝の合算勤務上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定3",
+    hint: "既定3",
   },
   {
     key: "max_saturday_nights",
     label: "土曜当直上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定1",
+    hint: "既定1",
   },
   {
     key: "max_sunhol_days",
     label: "日祝・日直上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定2",
+    hint: "既定2",
   },
   {
     key: "max_sunhol_works",
     label: "日祝勤務上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定3",
+    hint: "既定3",
   },
 ] as const satisfies ReadonlyArray<{
   key: keyof HardConstraints;

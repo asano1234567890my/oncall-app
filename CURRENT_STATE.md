@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1 完成・mainプッシュ済み。プロダクト戦略策定済み → Phase1（売り物化）着手準備中**
+**V2.1 ダッシュボードD&D特化リデザイン + 設定UI/制約ルール大整理完了（feature/v2.1-dashboard）→ Phase1（売り物化）着手準備中**
 
 ---
 
@@ -197,6 +197,9 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-20 | ダッシュボードUI改善: スケジュール表2カラム化（前半/後半横並び）・医師名中央配置・行高さ固定（h-8+overflow-hidden+td overflow-hidden）・全設定モーダルヘッダー統一リデザイン（閉じる→×アイコン・保存/リセットをタイトル下コンパクトボタン化・モバイルでの全幅ブロック崩壊を解消） |
+| 2026-03-20 | 設定UI/制約ルール大整理: 基本ルール統合（勤務間隔・土日祝上限・土曜当直上限・シフトモード・スコア設定を1セクションに）、優先度13個→2軸グループスライダー化（目標スコア近似・土日祝均等化）、不要ウェイト7個不活化（gap5/gap6/sat_consec/sunhol_3rd/weekend_hol_3rd/month_fairness/soft_unavailable）、不可日は常にハード制約、prevent_sunhol_consecutive/respect_unavailable_days/max_sunhol_days/max_sunhol_worksをUI非公開化、FE/BEデフォルト値統一、回数上限の最小値を1に修正（0=配置不可の罠を解消）、V3 Optimizer再設計計画をdocs/optimizer.mdに記載（加重累積均等化・理想間隔方式・累積目標乖離） |
+| 2026-03-20 | V2.1 ダッシュボードD&D特化リデザイン: レイアウト反転（左=スケジュール全幅+右=医師パレット200px）・設定を右スライドインオーバーレイ化・1カラム全幅テーブル（14pxフォント）・ドラッグ中全セル緑/グレー色分け（cellValidityMap）・ツールバー整理（生成ドロップダウン）・ゴミ箱をパレット内統合・スワップボタン削除（セル→セルD&Dで自動スワップ）・新規4コンポーネント（DashboardScheduleTable/DashboardToolbar/DoctorPalette/SettingsSlidePanel） |
 | 2026-03-20 | ヘッダー統一リデザイン: AppHeader をタブナビゲーション方式に全面刷新（かんたん/一覧/当直表）・全認証ページで共通使用・/view は公開ページ化（未認証時はシンプルヘッダー） |
 | 2026-03-20 | 設定UI整理: パスワード変更・初期画面設定を共通コンポーネント化（PasswordChangeForm/DefaultPageSetting）・/app と /dashboard の設定モーダルに統合 |
 | 2026-03-20 | ナビゲーションガード修正: デフォルト値との比較→保存済み値との比較に変更（savedWeightsRef/savedHardRef）・誤警告の解消 |

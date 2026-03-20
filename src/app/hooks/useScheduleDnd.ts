@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayMap,
@@ -966,6 +966,39 @@ export function useScheduleDnd({
     return () => window.clearTimeout(timeoutId);
   }, [toastMessage]);
 
+  // ── ドラッグ中の全セル配置可否マップ（dashboard用） ──
+  // 関数参照はrefで保持し、データ値のみをuseMemoの依存配列に入れることで
+  // 毎レンダーの再計算を防ぐ
+  const constraintFnsRef = useRef({ isHolidayLikeDay, isShiftLocked, getPlacementIgnoreShiftKeys, getPlacementConstraintMessage });
+  constraintFnsRef.current = { isHolidayLikeDay, isShiftLocked, getPlacementIgnoreShiftKeys, getPlacementConstraintMessage };
+
+  const cellValidityMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    if (!draggingDoctorId || dragSourceType !== "list") return map;
+    const fns = constraintFnsRef.current;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        const key = `${row.day}_${st}`;
+        const hlInfo = fns.isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) {
+          map.set(key, "平日の日直には配置できません");
+          continue;
+        }
+        if (fns.isShiftLocked(row.day, st)) {
+          map.set(key, "ロック済み");
+          continue;
+        }
+        const ignoreKeys = fns.getPlacementIgnoreShiftKeys(draggingDoctorId, row.day, st);
+        const msg = fns.getPlacementConstraintMessage(draggingDoctorId, row.day, st, {
+          ignoreShiftKeys: ignoreKeys,
+        });
+        map.set(key, msg);
+      }
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggingDoctorId, dragSourceType, schedule, lockedShiftKeys]);
+
   // ── スワップ違反プレビュー ──
   const swapViolationMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -995,6 +1028,8 @@ export function useScheduleDnd({
     hoverErrorMessage,
     dragSourceType,
     highlightedDoctorId,
+    draggingDoctorId,
+    cellValidityMap,
     invalidHoverShiftKey,
     touchHoverShiftKey,
     lockedShiftKeys,

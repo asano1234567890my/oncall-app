@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import { format } from "date-fns";
 import StepperNumberInput from "../inputs/StepperNumberInput";
 import type { Doctor, ShiftType } from "../../types/dashboard";
@@ -38,26 +39,24 @@ export default function PreviousMonthShiftsConfig({
     <SettingsModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
         <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-2xl sm:max-h-[90vh]">
-          <div className="flex items-start justify-between gap-4 border-b border-violet-100 bg-violet-50 px-4 py-4 sm:px-5">
-            <div>
-              <h3 className="text-base font-bold text-gray-900">前月の勤務実績</h3>
-              <p className="mt-1 text-xs text-gray-500">前月末の勤務を日付ごとに確認・修正します。</p>
+          <div className="flex items-start justify-between gap-2 border-b border-violet-100 bg-violet-50 px-4 py-3 sm:px-5">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-gray-900">前月の勤務実績</h3>
+                <span className="rounded-full border border-violet-200 bg-white px-2 py-0.5 text-[10px] font-bold text-violet-700">
+                  {previousMonthShiftCount}枠
+                </span>
+              </div>
+              <p className="mt-0.5 text-xs text-gray-500">前月末の勤務を日付ごとに確認・修正します</p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-700">
-                入力済み {previousMonthShiftCount}枠
-              </span>
-              {onShowGuide && (
-                <button type="button" onClick={onShowGuide} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-              >
-                閉じる
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white hover:text-gray-700"
+              aria-label="閉じる"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,220px)_1fr] sm:items-end">

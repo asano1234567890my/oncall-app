@@ -15,6 +15,7 @@ import { useNavigationGuard, getScheduleSignature } from "./useNavigationGuard";
 import { useAuth, getAuthHeaders } from "./useAuth";
 import { useDraftSchedule } from "./useDraftSchedule";
 import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, type ObjectiveWeights, type PreviousMonthShift, type ScheduleRow } from "../types/dashboard";
+import { weightGroups } from "../components/settings/shared";
 
 export function useOnCallCore() {
   // ── 履歴管理 ──
@@ -372,8 +373,9 @@ export function useOnCallCore() {
 
   // ── 派生値 ──
   const weightChanges = useMemo(() => {
-    const keys = Object.keys(DEFAULT_OBJECTIVE_WEIGHTS) as (keyof ObjectiveWeights)[];
-    const changed = keys
+    // グループの primaryKey だけを比較（内部連動値や不活化ウェイトは無視）
+    const primaryKeys = weightGroups.map((g) => g.primaryKey);
+    const changed = primaryKeys
       .map((key) => ({ key, base: DEFAULT_OBJECTIVE_WEIGHTS[key], now: objectiveWeights[key] }))
       .filter((item) => item.base !== item.now);
     return {

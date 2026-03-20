@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import StepperNumberInput from "../inputs/StepperNumberInput";
 import type { ShiftScores } from "../../types/dashboard";
 import { DEFAULT_SHIFT_SCORES } from "../../types/dashboard";
@@ -64,43 +65,41 @@ export default function ShiftScoresConfig({
     <SettingsModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
         <div className="flex max-h-[85dvh] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-2xl border border-amber-100 bg-white shadow-2xl sm:max-h-[90vh]">
-          <div className="flex items-start justify-between gap-4 border-b border-amber-100 bg-amber-50 px-4 py-4 sm:px-5">
-            <div>
+          <div className="flex items-start justify-between gap-2 border-b border-amber-100 bg-amber-50 px-4 py-3 sm:px-5">
+            <div className="min-w-0 flex-1">
               <h3 className="text-base font-bold text-gray-900">シフトスコア</h3>
-              <p className="mt-1 text-xs text-gray-500">シフト種別ごとの負担度を設定します。平日当直 = 1.0 を基準に調整してください。</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onSave && (
+              <p className="mt-0.5 text-xs text-gray-500">平日当直 = 1.0 を基準に調整</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {onSave && (
+                  <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving}
+                    className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? "保存中…" : "保存"}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={onSave}
-                  disabled={isSaving}
-                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={onReset}
+                  className="rounded-md border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
                 >
-                  {isSaving ? "保存中..." : "保存"}
+                  既定値に戻す
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={onReset}
-                className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-xs font-bold text-amber-700 transition hover:bg-amber-50"
-              >
-                既定値に戻す
-              </button>
-              {onShowGuide && (
-                <button type="button" onClick={onShowGuide} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
-              )}
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-              >
-                閉じる
-              </button>
-              {saveMessage && (
-                <span className="text-xs font-bold text-emerald-700">{saveMessage}</span>
-              )}
+                {saveMessage && (
+                  <span className="text-xs font-bold text-emerald-700">{saveMessage}</span>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white hover:text-gray-700"
+              aria-label="閉じる"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 sm:p-5">
             {SHIFT_SCORE_ITEMS.map((item) => (

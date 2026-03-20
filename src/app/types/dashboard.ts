@@ -139,16 +139,19 @@ export const DEFAULT_SHIFT_SCORES: ShiftScores = {
 };
 
 export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
-  gap5: 100,
-  soft_unavailable: 100,
-  sat_consec: 80,
+  // 軸1: 目標スコアへの近さ（primaryKey: target = 100）
+  target: 100,
+  score_balance: 30,
+  // 軸2: 土日祝の均等化（primaryKey: sunhol_fairness = 100）
+  sunhol_fairness: 100,
   sat_month_fairness: 100,
-  weekend_hol_3rd: 80,
-  gap6: 50,
-  month_fairness: 50,
-  target: 30,
-  score_balance: 10,
-  sunhol_fairness: 10,
-  past_sat_gap: 10,
-  past_sunhol_gap: 5,
+  past_sunhol_gap: 50,
+  past_sat_gap: 50,
+  // 不活化（将来バックエンド再設計時に廃止予定）
+  month_fairness: 0,
+  gap5: 0,
+  gap6: 0,
+  sat_consec: 0,
+  weekend_hol_3rd: 0,
+  soft_unavailable: 0,
 };
