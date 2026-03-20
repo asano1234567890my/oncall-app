@@ -67,7 +67,7 @@ export default function useDashboardState() {
   const [previousMonthShifts, setPreviousMonthShifts] = useState<PreviousMonthShift[]>([]);
   const [minScoreMap, setMinScoreMap] = useState<Record<string, number>>({});
   const [maxScoreMap, setMaxScoreMap] = useState<Record<string, number>>({});
-  const [targetScoreMap, setTargetScoreMap] = useState<Record<string, number>>({});
+  const [targetScoreMap, setTargetScoreMap] = useState<Record<string, number | null>>({});
   const [prevMonthLastDay, setPrevMonthLastDay] = useState<number>(() => calcPrevMonthLastDay(defaultTargetMonth.year, defaultTargetMonth.month));
 
   const weekdaysJp = ["日", "月", "火", "水", "木", "金", "土"];
@@ -261,9 +261,8 @@ export default function useDashboardState() {
     setMaxScoreMap((prev) => ({ ...prev, [doctorId]: nextValue }));
   };
 
-  const handleTargetScoreChange = (doctorId: string, value: number) => {
-    const nextValue = Number.isFinite(value) ? value : 0;
-    setTargetScoreMap((prev) => ({ ...prev, [doctorId]: nextValue }));
+  const handleTargetScoreChange = (doctorId: string, value: number | null) => {
+    setTargetScoreMap((prev) => ({ ...prev, [doctorId]: value }));
   };
 
   const prevMonthTailDays = useMemo(() => {

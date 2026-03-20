@@ -731,7 +731,7 @@ class OnCallOptimizer:
 
         target_penalties = []
         for d in doctors:
-            if d in self.target_score_by_doctor:
+            if d in self.target_score_by_doctor and self.target_score_by_doctor[d] > 0:
                 t_score = int(round(self.target_score_by_doctor[d] * 10))
                 diff = self.model.NewIntVar(-2000, 2000, f"diff_target_d{d}")
                 abs_diff = self.model.NewIntVar(0, 2000, f"abs_diff_target_d{d}")

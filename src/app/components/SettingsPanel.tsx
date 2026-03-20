@@ -100,13 +100,13 @@ type DoctorSettingsPanelProps = {
   activeDoctors: Doctor[];
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
   scoreMin: number;
   scoreMax: number;
   onSaveAllDoctorsSettings: () => void;
   onMinScoreChange: (doctorId: string, value: number) => void;
   onMaxScoreChange: (doctorId: string, value: number) => void;
-  onTargetScoreChange: (doctorId: string, value: number) => void;
+  onTargetScoreChange: (doctorId: string, value: number | null) => void;
   hideSaveButton?: boolean;
 };
 

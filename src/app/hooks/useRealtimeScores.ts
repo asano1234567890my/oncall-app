@@ -15,7 +15,7 @@ type UseRealtimeScoresParams = {
   shiftScores: ShiftScores;
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
 };
 
 const formatDayKey = (year: number, month: number, day: number) =>
@@ -76,7 +76,8 @@ export function useRealtimeScores({
       const score = Number((liveScores[doctor.id] ?? 0).toFixed(1));
       const min = isFiniteNumber(minScoreMap[doctor.id]) ? minScoreMap[doctor.id] : scoreMin;
       const max = isFiniteNumber(maxScoreMap[doctor.id]) ? maxScoreMap[doctor.id] : scoreMax;
-      const target = isFiniteNumber(targetScoreMap[doctor.id]) ? targetScoreMap[doctor.id] : null;
+      const rawTarget = targetScoreMap[doctor.id];
+      const target = rawTarget != null && isFiniteNumber(rawTarget) ? rawTarget : null;
       const targetGap = target === null ? null : Math.abs(score - target);
 
       let tone: DoctorScoreEntry["tone"] = "default";

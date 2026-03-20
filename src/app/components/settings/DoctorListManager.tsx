@@ -8,13 +8,13 @@ type DoctorListManagerProps = {
   activeDoctors: Doctor[];
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
   scoreMin: number;
   scoreMax: number;
   onSaveAllDoctorsSettings: () => void;
   onMinScoreChange: (doctorId: string, value: number) => void;
   onMaxScoreChange: (doctorId: string, value: number) => void;
-  onTargetScoreChange: (doctorId: string, value: number) => void;
+  onTargetScoreChange: (doctorId: string, value: number | null) => void;
   hideSaveButton?: boolean;
 };
 
@@ -65,6 +65,7 @@ export default function DoctorListManager({
                       value={minScoreMap[doctor.id] ?? scoreMin}
                       onCommit={(value) => onMinScoreChange(doctor.id, value)}
                       fallbackValue={scoreMin}
+                      min={0}
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
@@ -77,6 +78,7 @@ export default function DoctorListManager({
                       value={maxScoreMap[doctor.id] ?? scoreMax}
                       onCommit={(value) => onMaxScoreChange(doctor.id, value)}
                       fallbackValue={scoreMax}
+                      min={0}
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
@@ -86,10 +88,12 @@ export default function DoctorListManager({
                   </td>
                   <td className="px-2 py-2 md:px-3">
                     <StepperNumberInput
-                      value={targetScoreMap[doctor.id] ?? 0}
+                      value={targetScoreMap[doctor.id] ?? null}
                       onCommit={(value) => onTargetScoreChange(doctor.id, value)}
                       fallbackValue={0}
+                      min={0.5}
                       step={0.5}
+                      nullPlaceholder="--"
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
                       inputClassName="max-md:!w-[2.2rem] max-md:!flex-none bg-blue-50 text-[12px] md:w-12"

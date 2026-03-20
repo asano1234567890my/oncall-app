@@ -33,7 +33,7 @@ type UseDoctorSettingsParams = {
   fixedUnavailableWeekdaysMap: FixedUnavailableWeekdayMap;
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
   doctorUnavailableYear: number;
   doctorUnavailableMonth: number;
   setDoctors: Dispatch<SetStateAction<Doctor[]>>;
@@ -42,7 +42,7 @@ type UseDoctorSettingsParams = {
   setFixedUnavailableWeekdaysMap: Dispatch<SetStateAction<FixedUnavailableWeekdayMap>>;
   setMinScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
   setMaxScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
-  setTargetScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
+  setTargetScoreMap: Dispatch<SetStateAction<Record<string, number | null>>>;
   setIsBulkSavingDoctors: Dispatch<SetStateAction<boolean>>;
   setError: Dispatch<SetStateAction<string>>;
   setSaveMessage: Dispatch<SetStateAction<string>>;
