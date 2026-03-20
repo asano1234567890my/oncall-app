@@ -87,6 +87,7 @@ uvicorn main:app --reload   # http://localhost:8000
 | `docs/optimizer.md` | 最適化ロジックの詳細（制約・重み・スコア） |
 | `docs/database.md` | DBテーブル設計・マイグレーション履歴 |
 | `docs/development.md` | 開発環境セットアップ・よく使うコマンド |
+| `docs/product_strategy.md` | プロダクト戦略・ロードマップ・価格・GTM |
 
 ---
 
