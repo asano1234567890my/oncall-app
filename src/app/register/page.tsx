@@ -1,18 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { auth, isLoading: isAuthLoading, login } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // ログイン済みならリダイレクト
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (auth.isAuthenticated) {
+      router.replace("/app");
+    }
+  }, [auth.isAuthenticated, isAuthLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,13 +49,22 @@ export default function RegisterPage() {
 
       // 登録成功後そのままログイン
       await login(name, password);
-      router.push("/");
+      // New users always start with /app (setup wizard)
+      router.push("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました");
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (isAuthLoading || auth.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">

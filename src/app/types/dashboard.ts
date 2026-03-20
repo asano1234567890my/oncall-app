@@ -124,6 +124,20 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   holiday_shift_mode: "split",
 };
 
+export type ShiftScores = {
+  weekday_night: number;
+  saturday_night: number;
+  holiday_day: number;
+  holiday_night: number;
+};
+
+export const DEFAULT_SHIFT_SCORES: ShiftScores = {
+  weekday_night: 1.0,
+  saturday_night: 1.5,
+  holiday_day: 0.5,
+  holiday_night: 1.0,
+};
+
 export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   gap5: 100,
   soft_unavailable: 100,

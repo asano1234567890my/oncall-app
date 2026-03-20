@@ -15,6 +15,7 @@ type PreviousMonthShiftsConfigProps = {
   previousMonthShiftCount: number;
   getPreviousMonthShiftDoctorId: (prevDay: number, shiftType: ShiftType) => string;
   onClose: () => void;
+  onShowGuide?: () => void;
   onPrevMonthLastDayChange: (value: number) => void;
   onSetPreviousMonthShift: (prevDay: number, shiftType: ShiftType, doctorId: string) => void;
 };
@@ -29,6 +30,7 @@ export default function PreviousMonthShiftsConfig({
   previousMonthShiftCount,
   getPreviousMonthShiftDoctorId,
   onClose,
+  onShowGuide,
   onPrevMonthLastDayChange,
   onSetPreviousMonthShift,
 }: PreviousMonthShiftsConfigProps) {
@@ -38,13 +40,16 @@ export default function PreviousMonthShiftsConfig({
         <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-violet-100 bg-white shadow-2xl sm:max-h-[90vh]">
           <div className="flex items-start justify-between gap-4 border-b border-violet-100 bg-violet-50 px-4 py-4 sm:px-5">
             <div>
-              <h3 className="text-base font-bold text-gray-900">前月末勤務</h3>
+              <h3 className="text-base font-bold text-gray-900">前月の勤務実績</h3>
               <p className="mt-1 text-xs text-gray-500">前月末の勤務を日付ごとに確認・修正します。</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full border border-violet-200 bg-white px-2 py-1 text-[11px] font-bold text-violet-700">
                 入力済み {previousMonthShiftCount}枠
               </span>
+              {onShowGuide && (
+                <button type="button" onClick={onShowGuide} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
+              )}
               <button
                 type="button"
                 onClick={onClose}

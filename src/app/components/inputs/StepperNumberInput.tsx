@@ -20,9 +20,7 @@ const formatStepValue = (value: number, step: number) => {
   return Number(value.toFixed(precision)).toString();
 };
 
-type StepperNumberInputProps = {
-  value: number;
-  onCommit: (value: number) => void;
+type BaseProps = {
   fallbackValue: number;
   min?: number;
   max?: number;
@@ -35,42 +33,73 @@ type StepperNumberInputProps = {
   buttonClassName?: string;
 };
 
-export default function StepperNumberInput({
-  value,
-  onCommit,
-  fallbackValue,
-  min,
-  max,
-  step = 1,
-  disabled = false,
-  placeholder,
-  inputMode,
-  className = "",
-  inputClassName = "",
-  buttonClassName = "",
-}: StepperNumberInputProps) {
-  const [draft, setDraft] = useState(() => formatStepValue(value, step));
+type NonNullableProps = BaseProps & {
+  value: number;
+  onCommit: (value: number) => void;
+  nullPlaceholder?: undefined;
+};
+
+type NullableProps = BaseProps & {
+  value: number | null;
+  onCommit: (value: number | null) => void;
+  nullPlaceholder: string;
+};
+
+type StepperNumberInputProps = NonNullableProps | NullableProps;
+
+export default function StepperNumberInput(props: StepperNumberInputProps) {
+  const {
+    value,
+    onCommit,
+    fallbackValue,
+    min,
+    max,
+    step = 1,
+    disabled = false,
+    placeholder,
+    inputMode,
+    className = "",
+    inputClassName = "",
+    buttonClassName = "",
+  } = props;
+  const nullPlaceholder = "nullPlaceholder" in props ? props.nullPlaceholder : undefined;
+
+  const [draft, setDraft] = useState(() =>
+    value === null && nullPlaceholder ? nullPlaceholder : formatStepValue(value ?? fallbackValue, step),
+  );
 
   useEffect(() => {
-    setDraft(formatStepValue(value, step));
-  }, [step, value]);
+    setDraft(
+      value === null && nullPlaceholder ? nullPlaceholder : formatStepValue(value ?? fallbackValue, step),
+    );
+  }, [step, value, nullPlaceholder, fallbackValue]);
 
   const commitDraft = (raw: string) => {
     const trimmed = raw.trim();
+    if (nullPlaceholder && (trimmed === "" || trimmed === nullPlaceholder)) {
+      setDraft(nullPlaceholder);
+      (onCommit as (v: number | null) => void)(null);
+      return;
+    }
     const parsed = trimmed === "" ? fallbackValue : Number(trimmed);
     const nextValue = clampNumber(Number.isFinite(parsed) ? parsed : fallbackValue, min, max);
     const nextText = formatStepValue(nextValue, step);
     setDraft(nextText);
-    onCommit(nextValue);
+    onCommit(nextValue as never);
   };
 
   const handleStep = (direction: -1 | 1) => {
-    const parsed = draft.trim() === "" ? fallbackValue : Number(draft);
-    const baseValue = Number.isFinite(parsed) ? parsed : fallbackValue;
-    const nextValue = clampNumber(baseValue + direction * step, min, max);
+    const base = value ?? 0;
+    const nextRaw = base + direction * step;
+    if (nullPlaceholder && nextRaw <= 0) {
+      setDraft(nullPlaceholder);
+      (onCommit as (v: number | null) => void)(null);
+      return;
+    }
+    const nextValue = clampNumber(nextRaw, min, max);
     const nextText = formatStepValue(nextValue, step);
     setDraft(nextText);
-    onCommit(nextValue);
+    onCommit(nextValue as never);
   };
 
   return (

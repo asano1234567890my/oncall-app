@@ -36,7 +36,7 @@ type UseScheduleApiParams = {
   previousMonthShifts: PreviousMonthShift[];
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
   schedule: ScheduleRow[];
   setSchedule: (nextSchedule: ScheduleRow[]) => void;
   commitSchedule: (nextSchedule: ScheduleRow[]) => void;
@@ -48,7 +48,7 @@ type UseScheduleApiParams = {
   setFixedUnavailableWeekdaysMap: Dispatch<SetStateAction<FixedUnavailableWeekdayMap>>;
   setMinScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
   setMaxScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
-  setTargetScoreMap: Dispatch<SetStateAction<Record<string, number>>>;
+  setTargetScoreMap: Dispatch<SetStateAction<Record<string, number | null>>>;
   toYmd: (year: number, month: number, day: number) => string;
   getWeekday: (year: number, month: number, day: number) => string;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
@@ -131,7 +131,7 @@ export function useScheduleApi({
   const [saveMessage, setSaveMessage] = useState("");
   const [error, setError] = useState("");
 
-  const { getUnsavedDoctorNames, saveAllDoctorsSettings } = useDoctorSettings({
+  const { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors } = useDoctorSettings({
     activeDoctors,
     unavailableMap,
     fixedUnavailableWeekdaysMap,
@@ -302,7 +302,9 @@ export function useScheduleApi({
       const formattedHardConstraints = formatHardConstraintsForOptimize();
       const formattedMinScore = filterRecordByActiveDoctors(minScoreMap);
       const formattedMaxScore = filterRecordByActiveDoctors(maxScoreMap);
-      const formattedTargetScore = filterRecordByActiveDoctors(targetScoreMap);
+      const formattedTargetScore = Object.fromEntries(
+        Object.entries(filterRecordByActiveDoctors(targetScoreMap)).filter(([, v]) => v != null && v > 0),
+      );
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${apiUrl}/api/optimize/`, {
@@ -412,5 +414,6 @@ export function useScheduleApi({
     handleDeleteMonthSchedule,
     handleGenerate,
     handleSaveToDB,
+    refetchDoctors,
   };
 }

@@ -8,13 +8,14 @@ type DoctorListManagerProps = {
   activeDoctors: Doctor[];
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
-  targetScoreMap: Record<string, number>;
+  targetScoreMap: Record<string, number | null>;
   scoreMin: number;
   scoreMax: number;
   onSaveAllDoctorsSettings: () => void;
   onMinScoreChange: (doctorId: string, value: number) => void;
   onMaxScoreChange: (doctorId: string, value: number) => void;
-  onTargetScoreChange: (doctorId: string, value: number) => void;
+  onTargetScoreChange: (doctorId: string, value: number | null) => void;
+  hideSaveButton?: boolean;
 };
 
 export default function DoctorListManager({
@@ -29,26 +30,10 @@ export default function DoctorListManager({
   onMinScoreChange,
   onMaxScoreChange,
   onTargetScoreChange,
+  hideSaveButton = false,
 }: DoctorListManagerProps) {
   return (
     <>
-      <div className="mb-4 md:mb-6">
-        <button
-          type="button"
-          onClick={onSaveAllDoctorsSettings}
-          disabled={isBulkSavingDoctors || activeDoctors.length === 0}
-          className={`w-full rounded-xl py-3 font-bold text-white shadow-lg transition ${
-            isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
-          }`}
-          title="全医師の Min / Max / 目標値と不可設定を保存します。"
-        >
-          {isBulkSavingDoctors ? "保存中..." : "全員の設定を保存"}
-        </button>
-        <div className="mt-2 text-[11px] text-gray-500">
-          各医師の Min / Max / 目標値に加えて、医師別不可日設定と個別不可曜日の設定もまとめて保存できます。重み・ルール設定は上記の「スコア・重み・ルールを保存」ボタンをご使用ください。
-        </div>
-      </div>
-
       <div className="mb-4 rounded-lg border border-orange-100 bg-orange-50 p-3 shadow-sm md:mb-5 md:p-4">
         <h3 className="mb-3 flex flex-wrap items-center gap-2 text-sm font-bold text-orange-800 md:text-base">
           <span>医師別スコア設定</span>
@@ -80,6 +65,7 @@ export default function DoctorListManager({
                       value={minScoreMap[doctor.id] ?? scoreMin}
                       onCommit={(value) => onMinScoreChange(doctor.id, value)}
                       fallbackValue={scoreMin}
+                      min={0}
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
@@ -92,6 +78,7 @@ export default function DoctorListManager({
                       value={maxScoreMap[doctor.id] ?? scoreMax}
                       onCommit={(value) => onMaxScoreChange(doctor.id, value)}
                       fallbackValue={scoreMax}
+                      min={0}
                       step={0.5}
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
@@ -101,10 +88,12 @@ export default function DoctorListManager({
                   </td>
                   <td className="px-2 py-2 md:px-3">
                     <StepperNumberInput
-                      value={targetScoreMap[doctor.id] ?? 0}
+                      value={targetScoreMap[doctor.id] ?? null}
                       onCommit={(value) => onTargetScoreChange(doctor.id, value)}
                       fallbackValue={0}
+                      min={0.5}
                       step={0.5}
+                      nullPlaceholder="--"
                       inputMode="decimal"
                       className="mx-auto justify-center whitespace-nowrap"
                       inputClassName="max-md:!w-[2.2rem] max-md:!flex-none bg-blue-50 text-[12px] md:w-12"
@@ -116,6 +105,19 @@ export default function DoctorListManager({
             </tbody>
           </table>
         </div>
+
+        {!hideSaveButton && (
+          <button
+            type="button"
+            onClick={onSaveAllDoctorsSettings}
+            disabled={isBulkSavingDoctors || activeDoctors.length === 0}
+            className={`mt-3 w-full rounded-lg py-2.5 text-sm font-bold text-white transition ${
+              isBulkSavingDoctors ? "bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            {isBulkSavingDoctors ? "保存中..." : "スコア設定を保存"}
+          </button>
+        )}
       </div>
     </>
   );

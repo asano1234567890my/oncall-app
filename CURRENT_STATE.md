@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1 完成・mainプッシュ済み。Renderデプロイ作業中（Python 3.14→3.12固定対応中）**
+**V1.1 完成・mainプッシュ済み。プロダクト戦略策定済み → Phase1（売り物化）着手準備中**
 
 ---
 
@@ -104,71 +104,74 @@
 | 3-5 | `page.tsx` に認証ガード（未認証→/loginリダイレクト）・ログアウトボタン追加 | `src/app/page.tsx` | ✅ 完了 |
 | 3-6 | 全APIフックに `getAuthHeaders()` (Authorization: Bearer) を追加 | `useScheduleApi.ts`, `useDoctorSettings.ts`, `useOptimizerConfig.ts`, `useCustomHolidays.ts` | ✅ 完了 |
 
-### 【後で】Task4（旧Task3）：仮保存機能
+### 【完了】Task4（旧Task3）：仮保存機能
 
 **目的：** 作業中シフトを下書きとしてDBに保存し、別デバイス・別日でも続きから作業できるようにする。
+**方式：** `system_settings` KVストア利用（キー: `draft_schedule_YYYY_MM`、値: JSONB）— テーブル新設不要
 
 | # | 内容 | 状態 |
 |---|------|------|
-| 4-1 | `draft_schedules` テーブル作成・マイグレーション | 未着手 |
-| 4-2 | `POST/GET /api/schedule/draft` API | 未着手 |
-| 4-3 | 「仮保存」「仮保存を読み込む」ボタン | 未着手 |
+| 4-1 | `settings_service.py` に `get/upsert/delete_draft_schedule` 追加 | ✅ 完了 |
+| 4-2 | `GET/PUT/DELETE /api/schedule/draft/{year}/{month}` API | ✅ 完了 |
+| 4-3 | `useDraftSchedule.ts` フック新設 + `useOnCallCore` 統合 | ✅ 完了 |
+| 4-4 | `/app` `/dashboard` 両方に仮保存/確定保存ボタン・読み込み・確定→仮保存コピー | ✅ 完了 |
 
 ---
 
-### 【後々】Task4：V1.1新機能（出勤可能人数の可視化）
+### 【次】Phase1: 売り物にする（プロダクト戦略 `docs/product_strategy.md` 参照）
 
-| # | 内容 | スコープ | 状態 |
-|---|------|---------|------|
-| 3-1 | `availability_service.py` 新設（日付ごとの出勤可能人数算出） | `backend/services/` | 未着手 |
-| 3-2 | APIレスポンスに `availability_summary` を追加 | `backend/routers/` | 未着手 |
-| 3-3 | フロントの日付セルに空き枠数バッジをレンダリング | `src/app/components/` | 未着手 |
+**テーマ：「自分の病院以外にも使える状態にする」**
 
----
-
-### 【後々】Task5：AI診断機能（制約競合の可視化）
-
-**目的：** 「解なし」エラーを「A先生とB先生の希望がぶつかっています」という具体的なアドバイスに変える。
-
-| # | 内容 | 状態 |
-|---|------|------|
-| 3-1 | 制約をソフト化して「妥協解」を出力させる | 未着手 |
-| 3-2 | 競合している制約を特定して統計レポートを生成 | 未着手 |
+| # | 内容 | 優先度 | 状態 |
+|---|------|--------|------|
+| P1-1 | PDF/Excel出力（`reportlab`/`openpyxl`） | P0 | 未着手 |
+| P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 未着手 |
+| P1-3 | プライバシーポリシー・利用規約ページ | P0 | 未着手 |
+| P1-4 | 不可日ソフト化UI（is_soft_penaltyのUI公開） | P1 | 未着手 |
+| P1-5 | マジックリンク一斉送信（メール or LINE） | P1 | 未着手 |
+| P1-6 | 自院での実運用（2ヶ月以上） | P0 | 🔄 準備中 |
+| P1-7 | 簡易分析ページ（スコア分布グラフ） | P1 | 未着手 |
+| P1-8 | Stripe決済 + プラン別機能制限 | P0 | 未着手 |
+| P1-9 | データエクスポート/アカウント削除 | P1 | 未着手 |
 
 ---
 
-### 【後回し】Task6：リファクタリングPhase2〜5
+### 【後】Phase2: 定着させる（3〜6ヶ月目）
 
-- Phase2: 医師更新ロジックの重複排除（Admin/Public）
-- Phase3: `page.tsx`, `useScheduleDnd.ts` のHook分割
-- Phase4: `optimizer.py` のモジュール化（V2マルチシフト対応準備）
-- Phase5: pytestの修復
+| 内容 | 状態 |
+|------|------|
+| カスタムシフト種別（`shift_types`テーブル・optimizer汎用化） | 未着手 |
+| LINE連携（確定通知プッシュ） | 未着手 |
+| Googleカレンダー同期（ICSフィード） | 未着手 |
+| シフト交換リクエスト | 未着手 |
+| 複数月一括最適化（逐次carry-forward） | 未着手 |
 
 ---
 
-### 【次期V2】UXリデザイン（初心者対応・オンボーディング）
+### 【将来】Phase3: 拡大する（6〜12ヶ月目）
 
-**目的：** 初見ユーザーがアプリの目的・操作を理解できるようにする。
-**詳細仕様:** `docs/ux_redesign.md` を参照
+| 内容 | 状態 |
+|------|------|
+| 複数診療科対応（`department_id`追加） | 未着手 |
+| HIS連携API | 未着手 |
+| ISMS/セキュリティ文書 | 未着手 |
 
-| # | 内容 | 状態 |
-|---|------|------|
-| UX-1 | ランディングページ `/`（商品説明・ログイン/登録CTA） | 未着手 |
-| UX-2 | `/app` 初心者向けメイン画面（生成+D&D+設定フルスクリーンモーダル+ドロワー） | 未着手 |
-| UX-3 | セットアップウィザード（初回ログイン時の質問形式初期設定・仮医師自動生成） | 未着手 |
-| UX-4 | オンボーディング（各セクション初回訪問時の説明・localstorage管理） | 未着手 |
-| UX-5 | 初期画面設定（ユーザーが `/dashboard` を初期画面に変更可能） | 未着手 |
-| UX-6 | 公開デモ `/demo`（ログイン不要・DB書き込みなし・LP埋め込み） | 未着手 |
+---
 
-**ページ構成（変更後）:**
+### 【完了済み】V2 UXリデザイン
 
-```
-/              → ランディングページ（現行/ → 移動）
-/app           → 【新規】初心者向けメイン
-/dashboard     → 【既存】管理者ダッシュボード（現行page.tsxをそのまま移動）
-/demo          → 【新規】公開デモ
-/login, /register, /entry/[token] → 変わらず
-```
+✅ LP / ✅ /app / ✅ /dashboard / ✅ セットアップウィザード / ✅ オンボーディング / ✅ 初期画面設定 / ✅ 公開デモ / ✅ ヘッダー統一 / ✅ 仮保存機能
+
+---
+
+### 【保留】技術的負債
+
+| 内容 | 状態 |
+|------|------|
+| optimizer.py mixin分割（Task 2.6-5） | 未着手（Phase2のカスタムシフト前に実施） |
+| pytest修復 | 未着手（Phase1中に実施） |
+| CORS本番設定（`*` → ドメイン限定） | 未着手 |
+| 医師更新ロジック重複排除（Admin/Public） | 未着手 |
 
 ---
 
@@ -178,7 +181,7 @@
 |--------|------|------|
 | タスクA | 自院でのV1.1実戦投入・実績獲得 | 🔄 進行中 |
 | タスクB | 他院へのヒアリング（V2要件定義） | タスクA完了後 |
-| タスクC | UXリデザイン（LP・/app・オンボーディング・公開デモ） | 設計確定・実装未着手 |
+| タスクC | UXリデザイン（LP・/app・オンボーディング・公開デモ） | ✅ 全フェーズ完了 |
 
 ---
 
@@ -194,6 +197,23 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-20 | ヘッダー統一リデザイン: AppHeader をタブナビゲーション方式に全面刷新（かんたん/一覧/当直表）・全認証ページで共通使用・/view は公開ページ化（未認証時はシンプルヘッダー） |
+| 2026-03-20 | 設定UI整理: パスワード変更・初期画面設定を共通コンポーネント化（PasswordChangeForm/DefaultPageSetting）・/app と /dashboard の設定モーダルに統合 |
+| 2026-03-20 | ナビゲーションガード修正: デフォルト値との比較→保存済み値との比較に変更（savedWeightsRef/savedHardRef）・誤警告の解消 |
+| 2026-03-20 | 確定シフト閲覧: /app ヘッダーに「確定シフト」ボタン追加・確定済みスケジュールの読み取り専用テーブル表示・「仮保存にコピーして編集」ボタン |
+| 2026-03-19 | 仮保存機能: system_settings KVストアで仮保存CRUD（GET/PUT/DELETE /api/schedule/draft/{year}/{month}）・useDraftScheduleフック・/app＋/dashboard両対応・確定→仮保存コピー |
+| 2026-03-19 | シフト表UX強化: 医師タップハイライト（青）・不可日/不可曜日per-shift赤ハイライト・スワップ時フラッシュアニメーション・ステータスバー固定高さ |
+| 2026-03-19 | ガイドボタン: 全ドロワー＋MobileScheduleBoard toolbar に「?」ボタン追加（per-section onShowGuide）・DoctorManageDrawerにマジックリンクコピー＋ロック機能追加 |
+| 2026-03-19 | MobileScheduleBoard新設: /app専用モバイルスケジュール表（タップ操作・coreプロップ1つ・スティッキーツールバー・DoctorSettingsPanel分離） |
+| 2026-03-19 | UI改善: ラベル統一（一覧モード/かんたんモード）・オンボーディング全セクション対応・シフトスコア設定UI・優先度説明文修正 |
+| 2026-03-18 | UX改善: SetupGuideの各ステップが対応するドロワーに直接遷移・SetupWizard間隔スライダー0-7日対応・/app↔/dashboardナビ追加・初期設定やり直しボタン・ブラウザ戻りAuth修正・InlineDemoタップ入替/年次モード/combined対応 |
+| 2026-03-18 | V2 UX Phase6完了: 初期画面設定（/app vs /dashboard トグル・ログイン後リダイレクト分岐） |
+| 2026-03-18 | V2 UX Phase5完了: 公開デモ（POST /api/demo/optimize + LP埋め込みInlineDemo） |
+| 2026-03-18 | V2 UX Phase4完了: オンボーディング（useOnboarding + OnboardingModal + DB永続化） |
+| 2026-03-18 | V2 UX Phase3完了: セットアップウィザード（5ステップ質問→仮医師生成→設定保存）実装 |
+| 2026-03-18 | V2 UX Phase2b完了: `/app`初心者向けメイン画面（ステップガイド+設定フルスクリーンモーダル+ドロワー）実装 |
+| 2026-03-18 | V2 UX Phase2a完了: `useOnCallCore`統合フック抽出・`/dashboard`簡素化 |
+| 2026-03-18 | V2 UX Phase1a-1b完了: `/dashboard`分離・LP作成・ログイン後遷移先を`/app`に変更 |
 | 2026-03-18 | Renderデプロイ修正: requirements.txt最小化・.python-version追加（Python 3.12.9固定） |
 | 2026-03-18 | 同月土曜回数平準化（sat_month_fairness: 100）追加・ソフト制約の自動無効化UI実装 |
 | 2026-03-18 | V1.1バグ修正3件: gap重み動的化・土曜上限ソフトペナルティ・unavailableゲート分離（respect=OFF時にソフト化） |
@@ -217,6 +237,6 @@
 - 本番DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
 - 開発DB: Neon devブランチ（取得後 `.env` の `DATABASE_URL` に設定）
 - マイグレーション: `$env:DATABASE_URL="<dev_branch_url>"; alembic upgrade head`
-- 認証: JWT HS256 / 24h有効 / `JWT_SECRET_KEY` を `.env` に設定必須
+- 認証: JWT HS256 / 30日有効 / `JWT_SECRET_KEY` を `.env` に設定必須
 - パスワードハッシュ: `bcrypt` 直接使用（passlib 非対応のため）
 - 既存Ebina HospitalデータはID `a0000000-0000-4000-8000-000000000001`、初期PW: `EbinaHospital2024!`

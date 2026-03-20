@@ -176,20 +176,33 @@ export const dayPickerBaseClassName = [
   "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
 ].join(" ");
 
-export const dayPickerClassNames = {
+const dayPickerClassNamesBase = {
   root: "w-full",
   months: "block w-full max-w-none",
   month: "w-full space-y-3",
   month_caption: "flex min-w-0 items-center justify-center text-center",
   caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
-  nav: "hidden",
   month_grid: "w-full table-fixed border-collapse",
   weekdays: "border-b border-slate-200/80",
-  weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
+  weekday: "pb-2 text-center text-[11px] font-medium tracking-[0.18em] text-slate-400",
   week: "border-b border-slate-100 last:border-b-0",
   day: "p-0 text-center align-middle",
   day_button:
     "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+};
+
+/** ナビ非表示（ダッシュボード等、外部で月を制御する場合） */
+export const dayPickerClassNames = {
+  ...dayPickerClassNamesBase,
+  nav: "hidden",
+};
+
+/** ナビ表示（ドロワー内など、カレンダー単体で月移動させたい場合） */
+export const dayPickerWithNavClassNames = {
+  ...dayPickerClassNamesBase,
+  nav: "flex items-center gap-1",
+  button_previous: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
+  button_next: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
 };
 
 export const baseCalendarModifierClasses = {

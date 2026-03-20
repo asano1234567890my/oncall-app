@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Download } from "lucide-react";
 import { domToPng } from "modern-screenshot";
+import AppHeader from "../components/AppHeader";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
 import { useHolidays } from "../hooks/useHolidays";
-import { getAuthHeaders } from "../hooks/useAuth";
+import { getAuthHeaders, useAuth } from "../hooks/useAuth";
 import { getDefaultTargetMonth } from "../utils/dateUtils";
 
 type ScheduleRow = {
@@ -33,30 +35,6 @@ const isUuidLike = (value: string) =>
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const toDateKey = (year: number, month: number, day: number) => `${year}-${pad2(month)}-${pad2(day)}`;
 
-const getRowTone = (weekday: string, isHolidayLike: boolean) => {
-  if (isHolidayLike) {
-    return {
-      weekdayClass: "text-red-600",
-      rowClass: "bg-red-50",
-      labelClass: "text-red-700",
-    };
-  }
-
-  if (weekday === "土") {
-    return {
-      weekdayClass: "text-blue-600",
-      rowClass: "bg-white",
-      labelClass: "text-blue-700",
-    };
-  }
-
-  return {
-    weekdayClass: "text-slate-700",
-    rowClass: "bg-white",
-    labelClass: "text-slate-600",
-  };
-};
-
 export default function ViewSchedulePage() {
   const defaultTargetMonth = getDefaultTargetMonth();
   const [year, setYear] = useState(defaultTargetMonth.year);
@@ -66,6 +44,9 @@ export default function ViewSchedulePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const { auth, logout } = useAuth();
+  const [isCopying, setIsCopying] = useState(false);
+  const [copyMessage, setCopyMessage] = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
   const { manualSet, disabledSet, customError } = useCustomHolidays(year);
@@ -78,23 +59,13 @@ export default function ViewSchedulePage() {
   const mergedHolidaySet = useMemo(() => {
     const next = new Set<string>(standardHolidaySet);
     const prefix = `${year}-`;
-
-    if (customError) {
-      return next;
-    }
-
+    if (customError) return next;
     for (const date of disabledSet) {
-      if (date.startsWith(prefix)) {
-        next.delete(date);
-      }
+      if (date.startsWith(prefix)) next.delete(date);
     }
-
     for (const date of manualSet) {
-      if (date.startsWith(prefix)) {
-        next.add(date);
-      }
+      if (date.startsWith(prefix)) next.add(date);
     }
-
     return next;
   }, [customError, disabledSet, manualSet, standardHolidaySet, year]);
 
@@ -107,207 +78,210 @@ export default function ViewSchedulePage() {
 
   useEffect(() => {
     let cancelled = false;
-
     const fetchDoctors = async () => {
       try {
         const response = await fetch(`${API_BASE}/api/doctors/`, { cache: "no-store", headers: getAuthHeaders() });
         if (!response.ok) return;
-
         const data: Doctor[] = await response.json();
-        if (!cancelled) {
-          setDoctors(Array.isArray(data) ? data : []);
-        }
+        if (!cancelled) setDoctors(Array.isArray(data) ? data : []);
       } catch {
-        if (!cancelled) {
-          setDoctors([]);
-        }
+        if (!cancelled) setDoctors([]);
       }
     };
-
     void fetchDoctors();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-
     const fetchSchedule = async () => {
       setLoading(true);
       setError("");
-
       try {
         const response = await fetch(`${API_BASE}/api/schedule/${year}/${month}`, { cache: "no-store", headers: getAuthHeaders() });
-        if (!response.ok) {
-          throw new Error("failed_to_fetch_schedule");
-        }
-
+        if (!response.ok) throw new Error("failed");
         const data: ScheduleRow[] = await response.json();
         if (!cancelled) {
-          const nextRows = Array.isArray(data) ? [...data].sort((left, right) => left.day - right.day) : [];
-          setSchedule(nextRows);
+          setSchedule(Array.isArray(data) ? [...data].sort((a, b) => a.day - b.day) : []);
         }
-      } catch (fetchError) {
-        console.error(fetchError);
+      } catch {
         if (!cancelled) {
           setSchedule([]);
-          setError("当直表を読み込めませんでした。時間をおいて再度お試しください。");
+          setError("当直表を読み込めませんでした。");
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     };
-
     void fetchSchedule();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [month, year]);
 
   const scheduleColumns = useMemo(() => {
-    if (schedule.length === 0) {
-      return [];
-    }
-
-    const rowsPerColumn = Math.ceil(schedule.length / 2);
-    const left = schedule.slice(0, rowsPerColumn);
-    const right = schedule.slice(rowsPerColumn);
-
-    return [left, right];
+    if (schedule.length === 0) return [];
+    const mid = Math.ceil(schedule.length / 2);
+    return [schedule.slice(0, mid), schedule.slice(mid)];
   }, [schedule]);
 
   const handleDownloadImage = async () => {
     if (!tableRef.current || isDownloading || schedule.length === 0) return;
-
     setIsDownloading(true);
     try {
-      const dataUrl = await domToPng(tableRef.current, {
-        scale: 3,
-        backgroundColor: "#ffffff",
-        quality: 1,
-      });
-
+      const dataUrl = await domToPng(tableRef.current, { scale: 3, backgroundColor: "#ffffff", quality: 1 });
       const link = document.createElement("a");
       link.href = dataUrl;
-      link.download = `oncall-${year}-${String(month).padStart(2, "0")}.png`;
+      link.download = `oncall-${year}-${pad2(month)}.png`;
       link.click();
-    } catch (downloadError) {
-      console.error(downloadError);
+    } catch {
       window.alert("画像の保存に失敗しました。");
     } finally {
       setIsDownloading(false);
     }
   };
 
-  return (
-    <div className="flex min-h-dvh flex-col overflow-x-hidden bg-white text-slate-900">
-      <header className="shrink-0 border-b border-slate-300 px-2 py-2">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-2">
-          <div className="min-w-0">
-            <h1 className="text-sm font-semibold tracking-tight text-slate-900 sm:text-base">確定当直表</h1>
-            <p className="text-[10px] leading-tight text-slate-500 sm:text-xs">
-              保存ボタンを押すと、PNG 画像として保存することができます。
-            </p>
-          </div>
+  const handleCopyToDraft = async () => {
+    if (isCopying || schedule.length === 0) return;
+    setIsCopying(true);
+    setCopyMessage("");
+    try {
+      const res = await fetch(`${API_BASE}/api/schedule/draft/${year}/${month}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ schedule }),
+      });
+      if (!res.ok) throw new Error("failed");
+      setCopyMessage("仮保存にコピーしました");
+      setTimeout(() => setCopyMessage(""), 3000);
+    } catch {
+      setCopyMessage("コピーに失敗しました");
+    } finally {
+      setIsCopying(false);
+    }
+  };
 
-          <div className="flex shrink-0 items-center gap-1 text-[11px] sm:text-xs">
+  const renderColumn = (rows: ScheduleRow[]) => (
+    <table className="w-full text-[11px] sm:text-[13px]">
+      <thead>
+        <tr className="border-b border-gray-300 bg-gray-50 text-[10px] sm:text-[11px] text-gray-500">
+          <th className="px-1.5 py-1.5 text-left font-medium">日付</th>
+          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-300">日直</th>
+          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-300">当直</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-200">
+        {rows.map((row) => {
+          const weekday = getWeekdayLabel(year, month, row.day);
+          const dateKey = toDateKey(year, month, row.day);
+          const isSun = weekday === "日";
+          const isSat = weekday === "土";
+          const isHolidayLike = isSun || Boolean(row.is_sunhol ?? row.is_holiday) || mergedHolidaySet.has(dateKey);
+          const showDayShift = isHolidayLike || isSat;
+          return (
+            <tr key={row.day} className={isHolidayLike ? "bg-red-50/40" : isSat ? "bg-blue-50/40" : ""}>
+              <td className={`px-1.5 py-1 font-medium whitespace-nowrap ${isHolidayLike ? "text-red-600" : isSat ? "text-blue-600" : "text-gray-800"}`}>
+                {row.day}({weekday})
+              </td>
+              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-200">
+                {showDayShift ? getDoctorLabel(row.day_shift) : ""}
+              </td>
+              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-200">
+                {getDoctorLabel(row.night_shift)}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <div className="min-h-dvh bg-gray-50">
+      {/* ── Header ── */}
+      {auth.isAuthenticated ? (
+        <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
+      ) : (
+        <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="text-base font-extrabold text-gray-800">シフらく</span>
+              <span className="text-sm text-gray-400">当直表</span>
+            </div>
+          </div>
+        </header>
+      )}
+
+      {/* ── Content ── */}
+      <main className="mx-auto max-w-3xl px-4 py-4">
+        {/* Year/Month selector + actions */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-sm">
             <input
               type="number"
               inputMode="numeric"
               value={year}
-              onChange={(event) => setYear(Number(event.target.value))}
-              className="h-8 w-[4.5rem] border border-slate-300 px-1 text-center outline-none"
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="h-8 w-[4.5rem] rounded-md border border-gray-300 px-2 text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="年"
             />
-            <span className="text-slate-600">年</span>
+            <span className="text-gray-500">年</span>
             <select
               value={month}
-              onChange={(event) => setMonth(Number(event.target.value))}
-              className="h-8 border border-slate-300 px-1 outline-none"
+              onChange={(e) => setMonth(Number(e.target.value))}
+              className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="月"
             >
-              {Array.from({ length: 12 }, (_, index) => index + 1).map((monthOption) => (
-                <option key={monthOption} value={monthOption}>
-                  {monthOption}月
-                </option>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>{m}月</option>
               ))}
             </select>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {auth.isAuthenticated && schedule.length > 0 && (
+              <>
+                <button
+                  onClick={() => { void handleCopyToDraft(); }}
+                  disabled={isCopying}
+                  className="text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                >
+                  {isCopying ? "コピー中..." : "仮保存にコピー"}
+                </button>
+                {copyMessage && (
+                  <span className="text-xs text-green-600">{copyMessage}</span>
+                )}
+              </>
+            )}
             <button
-              type="button"
-              onClick={handleDownloadImage}
+              onClick={() => { void handleDownloadImage(); }}
               disabled={isDownloading || schedule.length === 0}
-              className="h-8 border border-slate-300 px-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:text-slate-400"
+              className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
             >
-              {isDownloading ? "保存中" : "保存"}
+              <Download className="h-3.5 w-3.5" />
+              {isDownloading ? "保存中..." : "画像保存"}
             </button>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-2 py-2">
+        {/* Schedule table */}
         {error ? (
-          <div className="flex h-full items-center justify-center border border-red-300 px-3 text-center text-xs text-red-700">
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-8 text-center text-sm text-red-600">
             {error}
           </div>
         ) : loading ? (
-          <div className="flex h-full items-center justify-center border border-slate-300 text-xs text-slate-500">
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">
             読み込み中...
           </div>
         ) : schedule.length === 0 ? (
-          <div className="flex h-full items-center justify-center border border-slate-300 px-3 text-center text-xs text-slate-500">
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">
             この月の当直表はまだ保存されていません。
           </div>
         ) : (
-          <div ref={tableRef} className="flex min-h-0 flex-col border border-slate-300">
-            <div className="grid grid-cols-[1fr_auto] border-b border-slate-300 bg-slate-100 px-2 py-1 text-[11px] font-semibold tracking-wide text-slate-700 sm:px-3 sm:py-1.5 sm:text-[13px]">
-              <div>{year}年 {month}月</div>
-              <div>{schedule.length}日分</div>
-            </div>
-
-            <div className="grid grid-cols-2">
-              {scheduleColumns.map((rows, columnIndex) => (
-                <div
-                  key={columnIndex === 0 ? "left" : "right"}
-                  className={columnIndex === 0 ? "border-r border-slate-300" : ""}
-                  style={{ display: "grid", gridTemplateRows: `repeat(${rows.length}, minmax(0, 1fr))` }}
-                >
-                  {rows.map((row) => {
-                    const weekday = getWeekdayLabel(year, month, row.day);
-                    const dateKey = toDateKey(year, month, row.day);
-                    const isHolidayLike =
-                      weekday === "日" ||
-                      Boolean(row.is_sunhol ?? row.is_holiday) ||
-                      mergedHolidaySet.has(dateKey);
-                    const { weekdayClass, rowClass, labelClass } = getRowTone(weekday, isHolidayLike);
-
-                    return (
-                      <div
-                        key={row.day}
-                        className={`grid min-h-[2.2rem] h-full grid-cols-[3rem_minmax(0,1fr)_minmax(0,1fr)] items-center border-b border-slate-300 px-1.5 py-0.5 text-[11px] leading-tight last:border-b-0 sm:min-h-[3rem] sm:grid-cols-[3.5rem_minmax(0,1fr)_minmax(0,1fr)] sm:px-2 sm:py-1 sm:text-[13px] ${rowClass}`}
-                      >
-                        <div className={`flex items-center gap-0.5 font-semibold ${weekdayClass}`}>
-                          <span className="tabular-nums">{row.day}</span>
-                          <span>{weekday}</span>
-                        </div>
-                        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
-                          <span className={`shrink-0 font-semibold ${labelClass}`}>日:</span>
-                          <span className="truncate">{getDoctorLabel(row.day_shift)}</span>
-                        </div>
-                        <div className="flex min-w-0 items-center gap-0.5 overflow-hidden">
-                          <span className={`shrink-0 font-semibold ${labelClass}`}>当:</span>
-                          <span className="truncate">{getDoctorLabel(row.night_shift)}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
+          <div ref={tableRef} className="grid grid-cols-2 gap-2">
+            {scheduleColumns.map((rows, i) => (
+              <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                {renderColumn(rows)}
+              </div>
+            ))}
           </div>
         )}
       </main>
