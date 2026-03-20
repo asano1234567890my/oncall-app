@@ -105,7 +105,27 @@ alembic upgrade head
 
 ---
 
-## Renderデプロイ注意事項
+## デプロイ構成
+
+| サービス | ホスティング | URL |
+|---------|------------|-----|
+| フロントエンド | Vercel | `https://oncall-8pxrfeoch-asano1234567890mys-projects.vercel.app` |
+| バックエンド | Render | `https://oncall-app-preview.onrender.com` |
+
+### フロントエンド → バックエンド接続（NEXT_PUBLIC_API_URL）
+
+- フロントエンドは `NEXT_PUBLIC_API_URL` でバックエンドのURLを参照する
+- **この値はリポジトリルートの `.env.production` に記載されている**（Vercelの環境変数設定に依存しない）
+- バックエンドのURLが変わった場合は **`.env.production` を更新してpush** すること
+- `NEXT_PUBLIC_*` はNext.jsのビルド時に静的に埋め込まれるため、変更後は再デプロイが必要
+
+### バックエンドCORS設定
+
+- `backend/main.py` で `FRONTEND_URL` 環境変数を参照してCORSオリジンを許可している
+- Renderの環境変数に `FRONTEND_URL=*`（全許可）を設定済み
+- 本番運用時はVercelのURLに絞ること
+
+### Renderデプロイ注意事項
 
 - リポジトリルートに `.python-version`（内容: `3.12.9`）を置くことで Python バージョンを固定
 - Renderダッシュボードで `PYTHON_VERSION=3.12.9` 環境変数を追加しておくと二重固定になり安全
