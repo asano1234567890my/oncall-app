@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
-import { getAuthHeaders } from "../../hooks/useAuth";
+import { getAuthHeaders, useAuth } from "../../hooks/useAuth";
+import AppHeader from "../../components/AppHeader";
 
 type Doctor = {
   id: string;
@@ -51,6 +53,8 @@ const copyText = async (value: string) => {
 };
 
 export default function DoctorManagerPage() {
+  const { auth, isLoading: isAuthLoading, logout } = useAuth();
+  const router = useRouter();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [newName, setNewName] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -268,9 +272,17 @@ export default function DoctorManagerPage() {
     }
   };
 
+  useEffect(() => {
+    if (!isAuthLoading && !auth.isAuthenticated) {
+      router.push("/login");
+    }
+  }, [auth.isAuthenticated, isAuthLoading, router]);
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-md sm:p-6">
+    <div className="min-h-screen bg-gray-50">
+      <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
+      <div className="mx-auto w-full max-w-3xl p-4 md:p-8">
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white p-4 shadow-md sm:p-6">
         <h1 className="mb-6 border-b pb-2 text-xl font-bold text-gray-800 md:text-2xl">医師一覧</h1>
 
         <div className="mb-8 rounded-lg border border-blue-100 bg-blue-50 p-4">
@@ -499,6 +511,7 @@ export default function DoctorManagerPage() {
               )}
             </div>
           ) : null}
+        </div>
         </div>
       </div>
     </div>

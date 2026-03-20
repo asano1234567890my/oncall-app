@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, DEFAULT_SHIFT_SCORES, type HardConstraints, type ObjectiveWeights, type ShiftScores } from "../types/dashboard";
 import { getAuthHeaders } from "./useAuth";
 
@@ -29,6 +29,8 @@ export function useOptimizerConfig({
 }: UseOptimizerConfigParams) {
   const [isSavingOptimizerConfig, setIsSavingOptimizerConfig] = useState(false);
   const [optimizerSaveMessage, setOptimizerSaveMessage] = useState("");
+  const savedWeightsRef = useRef<string>(JSON.stringify(DEFAULT_OBJECTIVE_WEIGHTS));
+  const savedHardRef = useRef<string>(JSON.stringify(DEFAULT_HARD_CONSTRAINTS));
 
   useEffect(() => {
     const load = async () => {
@@ -45,10 +47,14 @@ export function useOptimizerConfig({
           setShiftScores({ ...DEFAULT_SHIFT_SCORES, ...(cfg.shift_scores as Partial<ShiftScores>) });
         }
         if (cfg.objective_weights && typeof cfg.objective_weights === "object") {
-          setObjectiveWeights({ ...DEFAULT_OBJECTIVE_WEIGHTS, ...(cfg.objective_weights as Partial<ObjectiveWeights>) });
+          const merged = { ...DEFAULT_OBJECTIVE_WEIGHTS, ...(cfg.objective_weights as Partial<ObjectiveWeights>) };
+          setObjectiveWeights(merged);
+          savedWeightsRef.current = JSON.stringify(merged);
         }
         if (cfg.hard_constraints && typeof cfg.hard_constraints === "object") {
-          setHardConstraints({ ...DEFAULT_HARD_CONSTRAINTS, ...(cfg.hard_constraints as Partial<HardConstraints>) });
+          const merged = { ...DEFAULT_HARD_CONSTRAINTS, ...(cfg.hard_constraints as Partial<HardConstraints>) };
+          setHardConstraints(merged);
+          savedHardRef.current = JSON.stringify(merged);
         }
       } catch {
         // サイレントに失敗（初回設定がなければデフォルト値のまま）
@@ -75,6 +81,8 @@ export function useOptimizerConfig({
         }),
       });
       if (!res.ok) throw new Error("保存に失敗しました");
+      savedWeightsRef.current = JSON.stringify(objectiveWeights);
+      savedHardRef.current = JSON.stringify(hardConstraints);
       setOptimizerSaveMessage("保存しました");
       setTimeout(() => setOptimizerSaveMessage(""), 3000);
     } catch {
@@ -85,5 +93,8 @@ export function useOptimizerConfig({
     }
   };
 
-  return { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig };
+  const hasUnsavedWeights = JSON.stringify(objectiveWeights) !== savedWeightsRef.current;
+  const hasUnsavedHardConstraints = JSON.stringify(hardConstraints) !== savedHardRef.current;
+
+  return { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig, hasUnsavedWeights, hasUnsavedHardConstraints };
 }

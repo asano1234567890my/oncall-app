@@ -99,7 +99,7 @@ uvicorn main:app --reload   # http://localhost:8000
 - 実装完了後は**必ず**docsを更新してからユーザーに報告する
 - 会話の中で決まったことはその場で反映する
 - docsが古い・漏れていると感じたら先に読み直して確認してから作業する
-- 作業完了後は `CURRENT_STATE.md`（プロジェクト内）→ 親ファイル（`C:\Users\user\CURRENT_STATE.md`）の順で更新し、Claude.ai Project への再アップロードをユーザーに案内する
+- 作業完了後は `CURRENT_STATE.md`（プロジェクト内）→ 親ファイル（`C:\Users\user\CURRENT_STATE.md`）の順で更新する（親ファイルはOneDriveで自動同期されるため手動アップロード不要）
 
 ---
 
@@ -147,7 +147,8 @@ uvicorn main:app --reload   # http://localhost:8000
 
 1. `CURRENT_STATE.md`（このプロジェクト内）を更新した
 2. **`C:\Users\user\CURRENT_STATE.md`（親ファイル）も必要に応じて更新する**
-3. **更新した親ファイルを Claude.ai Project に再アップロードする**
+
+> 親ファイルは OneDrive で自動同期されるため手動アップロード不要。
 
 ---
 

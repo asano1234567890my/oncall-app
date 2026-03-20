@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings, ChevronRight, X, ClipboardCheck } from "lucide-react";
+import { Loader2, Settings, ChevronRight, X } from "lucide-react";
+import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
 import MobileScheduleBoard from "../components/MobileScheduleBoard";
 import SetupWizard from "../components/SetupWizard";
@@ -16,12 +17,14 @@ import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
 import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
 import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
+import PasswordChangeForm from "../components/settings/PasswordChangeForm";
+import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import { getAuthHeaders } from "../hooks/useAuth";
 import { useOnboarding } from "../hooks/useOnboarding";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
-type SettingsDrawer = "shift-scores" | "rules" | "weights" | "doctor-manage" | "doctor-scores" | "doctors" | "holidays" | "previous" | "other" | null;
+type SettingsDrawer = "shift-scores" | "rules" | "weights" | "doctor-manage" | "doctor-scores" | "doctors" | "holidays" | "previous" | "other" | "password" | null;
 
 export default function AppPage() {
   const core = useOnCallCore();
@@ -31,9 +34,6 @@ export default function AppPage() {
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
   const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
   const [isSetupRedo, setIsSetupRedo] = useState(false);
-  const [viewMode, setViewMode] = useState<"edit" | "confirmed">("edit");
-  const [confirmedSchedule, setConfirmedSchedule] = useState<Array<{ day: number; day_shift: string | null; night_shift: string | null }>>([]);
-  const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
   const onboarding = useOnboarding(core.auth.isAuthenticated);
   const prevHadSchedule = useRef(false);
 
@@ -92,31 +92,6 @@ export default function AppPage() {
 
   const hasSchedule = core.schedule.length > 0;
 
-  // ── 確定シフト読み込み ──
-  const loadConfirmedSchedule = useCallback(async () => {
-    setIsLoadingConfirmed(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/schedule/${core.year}/${core.month}`, { headers: getAuthHeaders() });
-      if (!res.ok) { setConfirmedSchedule([]); return; }
-      const data = (await res.json()) as Array<{ day: number; day_shift: string | null; night_shift: string | null }>;
-      setConfirmedSchedule(data.filter((r) => r.day_shift || r.night_shift));
-    } catch {
-      setConfirmedSchedule([]);
-    } finally {
-      setIsLoadingConfirmed(false);
-    }
-  }, [core.year, core.month]);
-
-  const handleShowConfirmed = useCallback(() => {
-    setViewMode("confirmed");
-    void loadConfirmedSchedule();
-  }, [loadConfirmedSchedule]);
-
-  const handleCopyToEditMode = useCallback(async () => {
-    await core.handleCopyConfirmedToDraft();
-    setViewMode("edit");
-  }, [core.handleCopyConfirmedToDraft]);
 
   // Trigger onboarding when schedule first appears
   useEffect(() => {
@@ -171,61 +146,24 @@ export default function AppPage() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
       {/* ── ヘッダー ── */}
-      <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-          <span className="text-lg font-extrabold text-gray-800">シフらく</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setIsSettingsOpen(true); setActiveDrawer(null); }}
-              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              <Settings className="h-4 w-4" />
-              設定
-            </button>
-            <button
-              onClick={handleShowConfirmed}
-              className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm transition-colors ${
-                viewMode === "confirmed"
-                  ? "border-blue-400 bg-blue-50 text-blue-700"
-                  : "border-gray-300 text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              <ClipboardCheck className="h-4 w-4" />
-              確定シフト
-            </button>
-            <button
-              onClick={() => { if (core.confirmMoveWithUnsavedChanges()) router.push("/dashboard"); }}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              一覧モード
-            </button>
-            <span className="hidden text-sm text-gray-400 sm:inline">{core.auth.hospitalName}</span>
-            <button
-              onClick={() => { if (core.confirmMoveWithUnsavedChanges()) core.logout(); }}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              ログアウト
-            </button>
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        hospitalName={core.auth.hospitalName}
+        onLogout={core.logout}
+        onBeforeNavigate={() => core.confirmMoveWithUnsavedChanges()}
+        rightExtra={
+          <button
+            onClick={() => { setIsSettingsOpen(true); setActiveDrawer(null); }}
+            className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            設定
+          </button>
+        }
+      />
 
       {/* ── メインコンテンツ ── */}
       <main className="mx-auto w-full max-w-5xl px-4 py-6">
-        {viewMode === "confirmed" ? (
-          /* ── 確定シフト表示 ── */
-          <ConfirmedScheduleView
-            year={core.year}
-            month={core.month}
-            schedule={confirmedSchedule}
-            isLoading={isLoadingConfirmed}
-            doctors={core.activeDoctors}
-            isHolidayLikeDay={core.isHolidayLikeDay}
-            onBack={() => setViewMode("edit")}
-            onCopyToDraft={() => { void handleCopyToEditMode(); }}
-            isDraftSaving={core.isDraftSaving}
-          />
-        ) : !hasSchedule && !core.isLoading ? (
+        {!hasSchedule && !core.isLoading ? (
           /* ── 生成前：ステップガイド ── */
           <SetupGuide core={core} onOpenDrawer={(drawer) => openDrawer(drawer)} />
         ) : (
@@ -317,6 +255,12 @@ export default function AppPage() {
               title="その他"
               subtitle="日当直モード・初期画面設定"
               onClick={() => openDrawer("other", true)}
+            />
+            <SettingsMenuItem
+              emoji="🔑"
+              title="パスワード変更"
+              subtitle="ログインパスワードの変更"
+              onClick={() => openDrawer("password", true)}
             />
 
             <div className="px-6 py-4 space-y-2">
@@ -517,6 +461,21 @@ export default function AppPage() {
         </div>
       </SettingsModalPortal>
 
+      {/* ── パスワード変更ドロワー ── */}
+      <SettingsModalPortal isOpen={activeDrawer === "password"}>
+        <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
+          <div className="flex max-h-[85dvh] min-h-0 w-full max-w-md flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[90vh]">
+            <div className="flex items-center justify-between border-b bg-gray-50 px-4 py-4 sm:px-5">
+              <h3 className="text-base font-bold text-gray-900">パスワード変更</h3>
+              <button type="button" onClick={closeDrawer} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50">閉じる</button>
+            </div>
+            <div className="overflow-y-auto p-4 sm:p-5">
+              <PasswordChangeForm />
+            </div>
+          </div>
+        </div>
+      </SettingsModalPortal>
+
       {/* ── オンボーディング ── */}
       <OnboardingModal section={onboarding.pendingSection} onDismiss={onboarding.dismissOnboarding} />
     </div>
@@ -662,170 +621,4 @@ function StepItem({ done, title, description, onAction, optional = false }: {
   );
 }
 
-/* ── 確定シフトビュー ── */
-function ConfirmedScheduleView({ year, month, schedule, isLoading, doctors, isHolidayLikeDay, onBack, onCopyToDraft, isDraftSaving }: {
-  year: number;
-  month: number;
-  schedule: Array<{ day: number; day_shift: string | null; night_shift: string | null }>;
-  isLoading: boolean;
-  doctors: Array<{ id: string; name: string }>;
-  isHolidayLikeDay: (day: number) => { isSun: boolean; isHolidayLike: boolean };
-  onBack: () => void;
-  onCopyToDraft: () => void;
-  isDraftSaving: boolean;
-}) {
-  const doctorMap = useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const d of doctors) m[d.id] = d.name;
-    return m;
-  }, [doctors]);
 
-  const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-  const getWeekday = (day: number) => new Date(year, month - 1, day).getDay();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  if (schedule.length === 0) {
-    return (
-      <div className="mx-auto max-w-lg py-12 text-center">
-        <div className="mb-4 text-5xl">📋</div>
-        <h2 className="text-lg font-bold text-gray-800 mb-2">{year}年{month}月の確定シフトはありません</h2>
-        <p className="text-sm text-gray-500 mb-6">シフトを生成・保存すると、ここに表示されます。</p>
-        <button onClick={onBack} className="rounded-xl border border-gray-300 px-6 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors">
-          編集に戻る
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mx-auto max-w-lg">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-bold text-gray-800">
-          {year}年{month}月 確定シフト
-        </h2>
-        <button onClick={onBack} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors">
-          編集に戻る
-        </button>
-      </div>
-
-      {/* テーブル */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50 text-xs text-gray-500">
-              <th className="px-3 py-2.5 text-left font-medium">日付</th>
-              <th className="px-3 py-2.5 text-center font-medium">日直</th>
-              <th className="px-3 py-2.5 text-center font-medium">当直</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {schedule.map((row) => {
-              const wd = getWeekday(row.day);
-              const dayInfo = isHolidayLikeDay(row.day);
-              const isSat = wd === 6;
-              const isSun = wd === 0;
-              const showDayShift = dayInfo.isHolidayLike || isSat;
-              return (
-                <tr key={row.day} className={dayInfo.isHolidayLike || isSun ? "bg-red-50/40" : isSat ? "bg-blue-50/40" : ""}>
-                  <td className={`px-3 py-2.5 font-medium ${isSun || dayInfo.isHolidayLike ? "text-red-600" : isSat ? "text-blue-600" : "text-gray-800"}`}>
-                    {row.day}({WEEKDAY_LABELS[wd]})
-                  </td>
-                  <td className="px-3 py-2.5 text-center text-gray-700">
-                    {showDayShift ? (row.day_shift ? doctorMap[row.day_shift] || "−" : "−") : ""}
-                  </td>
-                  <td className="px-3 py-2.5 text-center text-gray-700">
-                    {row.night_shift ? doctorMap[row.night_shift] || "−" : "−"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* 仮保存にコピーボタン */}
-      <div className="mt-6 space-y-3">
-        <button
-          onClick={onCopyToDraft}
-          disabled={isDraftSaving}
-          className="w-full rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {isDraftSaving ? "コピー中..." : "仮保存にコピーして編集する"}
-        </button>
-        <p className="text-center text-xs text-gray-400">
-          確定シフトを仮保存にコピーし、編集モードで調整できます
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/* ── 初期画面設定 ── */
-function DefaultPageSetting() {
-  const [defaultPage, setDefaultPage] = useState<"/app" | "/dashboard">("/app");
-  const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-    fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
-      .then((res) => res.json())
-      .then((data: unknown) => {
-        const value = (data as Record<string, unknown>)?.value;
-        if (value === "/dashboard") setDefaultPage("/dashboard");
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleToggle = async (page: "/app" | "/dashboard") => {
-    setDefaultPage(page);
-    setIsSaving(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      await fetch(`${apiUrl}/api/settings/kv/default_page`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ value: page }),
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      <h4 className="text-sm font-bold text-gray-800 mb-2">ログイン後の初期画面</h4>
-      <p className="text-xs text-gray-500 mb-3">ログイン後に表示される画面を選択できます。</p>
-      <div className="flex gap-2">
-        <button
-          onClick={() => { void handleToggle("/app"); }}
-          disabled={isSaving}
-          className={`flex-1 rounded-lg border-2 py-2.5 text-sm font-bold transition-colors ${
-            defaultPage === "/app"
-              ? "border-blue-600 bg-blue-50 text-blue-700"
-              : "border-gray-200 text-gray-600 hover:border-blue-200"
-          }`}
-        >
-          かんたんモード
-        </button>
-        <button
-          onClick={() => { void handleToggle("/dashboard"); }}
-          disabled={isSaving}
-          className={`flex-1 rounded-lg border-2 py-2.5 text-sm font-bold transition-colors ${
-            defaultPage === "/dashboard"
-              ? "border-blue-600 bg-blue-50 text-blue-700"
-              : "border-gray-200 text-gray-600 hover:border-blue-200"
-          }`}
-        >
-          一覧モード
-        </button>
-      </div>
-    </div>
-  );
-}

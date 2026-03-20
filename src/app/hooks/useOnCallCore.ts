@@ -63,7 +63,7 @@ export function useOnCallCore() {
   } = dashboardState;
 
   // ── 最適化設定 ──
-  const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig } = useOptimizerConfig({
+  const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig, hasUnsavedWeights, hasUnsavedHardConstraints } = useOptimizerConfig({
     scoreMin, scoreMax, shiftScores, objectiveWeights, hardConstraints,
     setScoreMin, setScoreMax, setShiftScores, setObjectiveWeights, setHardConstraints,
   });
@@ -153,7 +153,7 @@ export function useOnCallCore() {
   useNavigationGuard({
     dirtyRef, savedScheduleSignatureRef, latestScheduleRef,
     setIsDirty, getUnsavedDoctorNames, hasUnsavedCustomChanges,
-    objectiveWeights, hardConstraints,
+    hasUnsavedWeights, hasUnsavedHardConstraints,
   });
 
   // ── 認証 ──
@@ -277,6 +277,8 @@ export function useOnCallCore() {
     const unsavedDoctors = getUnsavedDoctorNames();
     if (unsavedDoctors.length > 0) lines.push(`${unsavedDoctors.join("、")}先生の設定が未登録です。`);
     if (hasUnsavedCustomChanges) lines.push("祝日設定が保存されていません。");
+    if (hasUnsavedWeights) lines.push("重みづけ設定が保存されていません。");
+    if (hasUnsavedHardConstraints) lines.push("ハード制約設定が保存されていません。");
     if (lines.length === 0) return true;
     lines.push("そのまま移動してよいですか？");
     const confirmed = window.confirm(lines.join("\n"));

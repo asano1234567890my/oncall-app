@@ -3,12 +3,14 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Settings, X } from "lucide-react";
+import AppHeader from "../components/AppHeader";
 import { GenerationSettingsPanel, DoctorSettingsPanel } from "../components/SettingsPanel";
 import ScheduleBoard from "../components/ScheduleBoard";
 import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
+import PasswordChangeForm from "../components/settings/PasswordChangeForm";
+import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
-import { getAuthHeaders } from "../hooks/useAuth";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
@@ -18,6 +20,7 @@ export default function DashboardPage() {
   // ── シフトスコア設定 ──
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
   const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleLoadConfirmedForEdit = async () => {
     setIsLoadingConfirmed(true);
@@ -25,43 +28,6 @@ export default function DashboardPage() {
       await core.handleCopyConfirmedToDraft();
     } finally {
       setIsLoadingConfirmed(false);
-    }
-  };
-
-  // ── パスワード変更（ダッシュボード固有UI） ──
-  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
-  const [pwCurrent, setPwCurrent] = useState("");
-  const [pwNew, setPwNew] = useState("");
-  const [pwConfirm, setPwConfirm] = useState("");
-  const [pwError, setPwError] = useState("");
-  const [pwSuccess, setPwSuccess] = useState("");
-  const [isSavingPw, setIsSavingPw] = useState(false);
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPwError("");
-    setPwSuccess("");
-    if (pwNew !== pwConfirm) { setPwError("新しいパスワードが一致しません"); return; }
-    if (pwNew.length < 8) { setPwError("8文字以上必要です"); return; }
-    setIsSavingPw(true);
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(`${apiUrl}/api/auth/password`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ current_password: pwCurrent, new_password: pwNew }),
-      });
-      const data: unknown = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const detail = (data as Record<string, unknown>)?.detail;
-        throw new Error(typeof detail === "string" ? detail : "変更に失敗しました");
-      }
-      setPwSuccess("パスワードを変更しました");
-      setPwCurrent(""); setPwNew(""); setPwConfirm("");
-    } catch (err) {
-      setPwError(err instanceof Error ? err.message : "変更に失敗しました");
-    } finally {
-      setIsSavingPw(false);
     }
   };
 
@@ -81,69 +47,21 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-2 md:p-8 font-sans">
-      <main className="mx-auto w-full max-w-7xl rounded-xl bg-white p-3 shadow-lg md:p-6 xl:p-8">
-        <div className="mb-4 flex items-center justify-between border-b pb-4 md:mb-8">
-          <h1 className="text-xl font-bold text-gray-800 md:text-3xl">一覧モード</h1>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">{core.auth.hospitalName}</span>
-            <button
-              onClick={() => router.push("/app")}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-blue-700 transition-colors"
-            >
-              かんたんモード
-            </button>
-            <button
-              onClick={() => { setIsPasswordModalOpen(true); setPwError(""); setPwSuccess(""); }}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              パスワード変更
-            </button>
-            <button
-              onClick={core.logout}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 transition-colors"
-            >
-              ログアウト
-            </button>
-          </div>
-        </div>
-
-        {isPasswordModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-sm rounded-xl bg-white shadow-xl p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">パスワード変更</h2>
-              <form onSubmit={(e) => { void handleChangePassword(e); }} className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">現在のパスワード</label>
-                  <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} required autoFocus
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">新しいパスワード</label>
-                  <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">新しいパスワード（確認）</label>
-                  <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} required
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                {pwError && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{pwError}</p>}
-                {pwSuccess && <p className="text-sm text-green-600 bg-green-50 rounded-lg px-3 py-2">{pwSuccess}</p>}
-                <div className="flex gap-2 pt-1">
-                  <button type="button" onClick={() => setIsPasswordModalOpen(false)}
-                    className="flex-1 rounded-lg border border-gray-300 py-2 text-sm text-gray-600 hover:bg-gray-100 transition-colors">
-                    キャンセル
-                  </button>
-                  <button type="submit" disabled={isSavingPw}
-                    className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                    {isSavingPw ? "変更中..." : "変更する"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
+    <div className="min-h-screen bg-gray-50 font-sans">
+      <AppHeader
+        hospitalName={core.auth.hospitalName}
+        onLogout={core.logout}
+        rightExtra={
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            設定
+          </button>
+        }
+      />
+      <main className="mx-auto w-full max-w-7xl p-3 md:p-6 xl:p-8">
 
         <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(340px,0.98fr)_minmax(0,1.32fr)] lg:items-start md:mb-6">
           <GenerationSettingsPanel
@@ -351,6 +269,26 @@ export default function DashboardPage() {
         onSave={() => { void core.saveOptimizerConfig(); }}
         onShiftScoreChange={(key, value) => core.setShiftScores({ ...core.shiftScores, [key]: value })}
       />
+
+      {/* ── 設定モーダル ── */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3">
+            <h2 className="text-lg font-bold text-gray-800">設定</h2>
+            <button onClick={() => setIsSettingsOpen(false)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="mx-auto max-w-md p-4 space-y-6">
+            <DefaultPageSetting />
+            <hr className="border-gray-200" />
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
+              <PasswordChangeForm />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
