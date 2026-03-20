@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V2.1 ダッシュボードD&D特化リデザイン + 設定UI/制約ルール大整理完了（feature/v2.1-dashboard）→ Phase1（売り物化）着手準備中**
+**V2.1完了 → Task5: ファイル整理（✅5-1完了）・UI統合（5-2着手予定）・V3 Optimizer（5-3後回し）**
 
 ---
 
@@ -61,33 +61,77 @@
 
 ---
 
-### 【後回し】Task2.6：巨大ファイルの分割リファクタリング
+### 【次】Task5: ファイル整理・UI統合・バックエンド大改修
 
-**目的：** 1ファイルに責務が集中しすぎているファイルを分割し、Task3以降の実装を安全に進める土台を作る。
-**方針：** 動作を変えない。型・インターフェースは変えない。分割後にTypeScript 0エラー・動作確認で完了。
-
----
-
-#### フロントエンド分割
-
-| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
-|---|------|---------|---------|------|
-| 2.6-1 | `useScheduleDnd.ts`（1380行） | 制約チェックロジック一式（`getPlacementConstraintMessage` / `validateScheduleViolations` / `isDoctorBlocked*` 等）を **`useScheduleConstraints.ts`** として分離 | ▲369行（1380→1011） | ✅ 完了 |
-| 2.6-2 | `useScheduleDnd.ts` | スケジュールミューテーション分離 — 2.6-1の方針で吸収済み | — | ✅ 完了（統合） |
-| 2.6-3 | `page.tsx`（804行） | ナビゲーションガードロジック（`confirmNavigationAway` useEffect + stale closure ref群 + `getScheduleSignature`）を **`useNavigationGuard.ts`** として分離 | ▲83行（804→721） | ✅ 完了 |
-| 2.6-4 | `useScheduleApi.ts`（590行） | 医師設定系（`fetchDoctors` / `saveAllDoctorsSettings` / `applyUnavailableDaysFromDoctors` / `applyScoresFromDoctors` / committed refs）を **`useDoctorSettings.ts`** として分離 | ▲178行（590→412） | ✅ 完了 |
-
-> ⚠️ 2.6-1・2.6-2は `useScheduleDnd` の内部state（`hardConstraints` / `schedule` 等）を参照するため、引数として渡す設計にすること
+3つのサブタスクで構成。順番に実施。
 
 ---
 
-#### バックエンド分割
+#### Task5-1: デッドコード削除（✅ 完了）
 
-| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
-|---|------|---------|---------|------|
-| 2.6-5 | `optimizer.py`（866行） | `build_model()` 内の制約追加メソッド群（spacing / weekend / score / unavailable 系）を **`optimizer_constraints.py`** に `OnCallOptimizerConstraints` mixin として分離 | ▲約400行 | 未着手 |
+| ファイル | 行数 | 理由 |
+|---------|------|------|
+| `ScheduleBoard.tsx` | 500行 | import 0件。DashboardScheduleTable + MobileScheduleBoard で完全置換済み |
+| `schedule/ScheduleCell.tsx` | 331行 | ScheduleBoard専用。ScheduleBoard削除に伴い不要 |
+| `test/page.tsx` | 65行 | デバッグページ。本番不要 |
+| **合計削除** | **896行** | |
 
-> ⚠️ 2.6-5は `self.model` / `self.shifts` 等を参照するため mixin パターンを使うこと。リスク高めなので最後に実施する。
+---
+
+#### Task5-2: /app と /dashboard のレスポンシブ統合（未着手）
+
+**目的:** /app と /dashboard を1つのページに統合。デバイス幅で自動切替。
+
+**方針:**
+- PC幅（≥1024px）: 現 /dashboard のレイアウト（2カラムスケジュール + 右パレット + スライドイン設定）
+- モバイル幅（<1024px）: 現 /app のモバイルUI（MobileScheduleBoard + ドロワー設定）
+- `useEffect` + `matchMedia` で `isDesktop` を判定、コンポーネントごと切替（不要なDOM生成しない）
+- ヘッダーの「かんたん/一覧」タブ切り替え → 不要に（デバイス自動切替）
+
+**削除・統合予定:**
+
+| ファイル | 行数 | 方針 |
+|---------|------|------|
+| `/dashboard/page.tsx` | 271行 | `/app/page.tsx` に統合 |
+| `SettingsPanel.tsx` | 490行 | DashboardSettingsPanel に統合（DoctorSettingsPanel部分は残す or 移動） |
+| `useDashboardState.ts` | 359行 | useOnCallCore に統合済みなら削除 |
+| ヘッダーのタブ切り替え | — | 「かんたん/一覧」→ 不要に |
+
+**残すもの:**
+- `MobileScheduleBoard.tsx` — モバイル用として `/app` 内で使用継続
+- `DashboardScheduleTable.tsx` — PC用として `/app` 内で使用継続
+- `DashboardSettingsPanel.tsx` — PC用設定パネル
+- `DashboardToolbar.tsx` — PC用ツールバー
+- `DoctorPalette.tsx` — PC用右パレット
+
+---
+
+#### Task5-3: V3 Optimizer バックエンド大改修（未着手・後回し）
+
+**目的:** 不活化ウェイト・非公開設定のコード完全削除 + 新アルゴリズム実装
+
+**削除対象（コードごと消す）:**
+- 不活化ウェイト: `gap5`, `gap6`, `sat_consec`, `sunhol_3rd`, `weekend_hol_3rd`, `month_fairness`, `soft_unavailable`
+- 非公開ハード設定: `prevent_sunhol_consecutive`, `respect_unavailable_days`, `max_sunhol_days`, `max_sunhol_works`
+
+**新規実装（docs/optimizer.md 参照）:**
+- 加重累積均等化（土日祝均等化の置き換え）
+- 理想間隔方式（gap5/gap6の置き換え）
+- 累積目標乖離（score_balance/month_fairnessの置き換え）
+- optimizer.py mixin分割（旧Task 2.6-5）も同時実施
+
+> 詳細設計は `docs/optimizer.md` の「将来の再設計計画（V3 Optimizer）」セクション参照
+
+---
+
+#### 【旧Task2.6 フロントエンド分割 — 全完了】
+
+| # | 内容 | 状態 |
+|---|------|------|
+| 2.6-1 | useScheduleConstraints.ts 分離 | ✅ 完了 |
+| 2.6-2 | スケジュールミューテーション分離（2.6-1に統合） | ✅ 完了 |
+| 2.6-3 | useNavigationGuard.ts 分離 | ✅ 完了 |
+| 2.6-4 | useDoctorSettings.ts 分離 | ✅ 完了 |
 
 ---
 
@@ -168,7 +212,7 @@
 
 | 内容 | 状態 |
 |------|------|
-| optimizer.py mixin分割（Task 2.6-5） | 未着手（Phase2のカスタムシフト前に実施） |
+| optimizer.py mixin分割 + V3大改修 | Task5-3で実施予定 |
 | pytest修復 | 未着手（Phase1中に実施） |
 | CORS本番設定（`*` → ドメイン限定） | 未着手 |
 | 医師更新ロジック重複排除（Admin/Public） | 未着手 |
@@ -197,6 +241,7 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-20 | Task5-1完了: デッドコード削除 — ScheduleBoard.tsx(500行)+ScheduleCell.tsx(331行)+test/page.tsx(65行)=896行削除。Task5ロードマップ策定（UI統合・V3 Optimizer計画） |
 | 2026-03-20 | ダッシュボードUI改善: スケジュール表2カラム化（前半/後半横並び）・医師名中央配置・行高さ固定（h-8+overflow-hidden+td overflow-hidden）・全設定モーダルヘッダー統一リデザイン（閉じる→×アイコン・保存/リセットをタイトル下コンパクトボタン化・モバイルでの全幅ブロック崩壊を解消） |
 | 2026-03-20 | 設定UI/制約ルール大整理: 基本ルール統合（勤務間隔・土日祝上限・土曜当直上限・シフトモード・スコア設定を1セクションに）、優先度13個→2軸グループスライダー化（目標スコア近似・土日祝均等化）、不要ウェイト7個不活化（gap5/gap6/sat_consec/sunhol_3rd/weekend_hol_3rd/month_fairness/soft_unavailable）、不可日は常にハード制約、prevent_sunhol_consecutive/respect_unavailable_days/max_sunhol_days/max_sunhol_worksをUI非公開化、FE/BEデフォルト値統一、回数上限の最小値を1に修正（0=配置不可の罠を解消）、V3 Optimizer再設計計画をdocs/optimizer.mdに記載（加重累積均等化・理想間隔方式・累積目標乖離） |
 | 2026-03-20 | V2.1 ダッシュボードD&D特化リデザイン: レイアウト反転（左=スケジュール全幅+右=医師パレット200px）・設定を右スライドインオーバーレイ化・1カラム全幅テーブル（14pxフォント）・ドラッグ中全セル緑/グレー色分け（cellValidityMap）・ツールバー整理（生成ドロップダウン）・ゴミ箱をパレット内統合・スワップボタン削除（セル→セルD&Dで自動スワップ）・新規4コンポーネント（DashboardScheduleTable/DashboardToolbar/DoctorPalette/SettingsSlidePanel） |
