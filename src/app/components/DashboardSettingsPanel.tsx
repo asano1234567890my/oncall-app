@@ -127,6 +127,8 @@ type DashboardSettingsPanelProps = {
   onCloseWeights: () => void;
   onWeightChange: (key: keyof ObjectiveWeights, value: number) => void;
   onSetWeights: (weights: ObjectiveWeights) => void;
+  ratioOverrides?: import("./settings/shared").WeightRatioOverrides;
+  onRatioOverridesChange?: (overrides: import("./settings/shared").WeightRatioOverrides) => void;
   onToggleHardConstraints: () => void;
   onResetHardConstraints: () => void;
   onCloseHardConstraints: () => void;
@@ -167,6 +169,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
     onSaveAllDoctorsSettings, isBulkSavingDoctors,
     objectiveWeights, weightChanges, isWeightsOpen, isHardConstraintsOpen,
     onToggleWeights, onResetWeights, onCloseWeights, onWeightChange, onSetWeights,
+    ratioOverrides, onRatioOverridesChange,
     onToggleHardConstraints, onResetHardConstraints, onCloseHardConstraints,
     shiftScores, setShiftScores,
     isPreviousMonthShiftsOpen, onTogglePreviousMonthShifts, onClosePreviousMonthShifts,
@@ -524,6 +527,8 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
         onReset={onResetWeights}
         onSave={onSaveOptimizerConfig}
         onSetWeights={onSetWeights}
+        ratioOverrides={ratioOverrides}
+        onRatioOverridesChange={onRatioOverridesChange}
         grouped
       />
       <RulesConfig

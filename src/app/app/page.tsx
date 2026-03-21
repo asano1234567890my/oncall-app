@@ -348,6 +348,8 @@ export default function AppPage() {
         onSave={() => { void core.saveOptimizerConfig(); }}
         onSetWeights={core.setObjectiveWeights}
         onShowGuide={() => onboarding.showGuide("weights")}
+        ratioOverrides={core.weightRatioOverrides}
+        onRatioOverridesChange={core.setWeightRatioOverrides}
         grouped
       />
 
@@ -427,6 +429,18 @@ export default function AppPage() {
 /* ━━━━━━ 共通コンポーネント ━━━━━━ */
 
 function LoadingOverlay() {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    // 段階的にプログレスを進める（フェイク）
+    // 0→30%: 0.5秒, 30→60%: 2.5秒, 60→85%: 5秒, 85→90%: じわじわ
+    const t1 = setTimeout(() => setProgress(30), 500);
+    const t2 = setTimeout(() => setProgress(60), 3000);
+    const t3 = setTimeout(() => setProgress(85), 8000);
+    const t4 = setTimeout(() => setProgress(90), 12000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, []);
+
   return (
     <div className="fixed inset-x-0 top-[57px] bottom-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
       <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl">
@@ -435,7 +449,10 @@ function LoadingOverlay() {
           <div className="text-base font-bold text-gray-800">当直表を自動生成しています</div>
           <div className="mt-2 text-sm text-gray-500">完了までそのままお待ちください。</div>
           <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
+            <div
+              className="h-full rounded-full bg-blue-500 transition-all duration-1000 ease-out"
+              style={{ width: `${progress}%` }}
+            />
           </div>
         </div>
       </div>
@@ -488,22 +505,22 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage }: { cor
           <span className="text-sm font-bold text-gray-800">ルール設定</span>
           <button onClick={onOpenSettings} className="text-[11px] text-blue-500 hover:text-blue-700">変更</button>
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
-          <div className="flex justify-between">
-            <span className="text-gray-400">当直間隔</span>
-            <span className="font-medium">{hc.interval_days}日以上</span>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600">
+          <div className="flex justify-between min-w-0">
+            <span className="text-gray-400 shrink-0">間隔</span>
+            <span className="font-medium shrink-0">{hc.interval_days}日以上</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">モード</span>
-            <span className="font-medium">{modeLabel}</span>
+          <div className="flex justify-between min-w-0">
+            <span className="text-gray-400 shrink-0">モード</span>
+            <span className="font-medium truncate ml-1">{modeLabel}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">土日祝上限</span>
-            <span className="font-medium">月{hc.max_weekend_holiday_works}回</span>
+          <div className="flex justify-between min-w-0">
+            <span className="text-gray-400 shrink-0">土日祝</span>
+            <span className="font-medium shrink-0">{hc.max_weekend_holiday_works}回/月</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-gray-400">土曜上限</span>
-            <span className="font-medium">月{hc.max_saturday_nights}回</span>
+          <div className="flex justify-between min-w-0">
+            <span className="text-gray-400 shrink-0">土曜</span>
+            <span className="font-medium shrink-0">{hc.max_saturday_nights}回/月</span>
           </div>
         </div>
       </div>
@@ -676,9 +693,9 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
         <div>
           <div className="text-xs font-bold text-gray-700 mb-2">勤務間隔・回数制限</div>
           <div className="grid grid-cols-2 gap-2">
-            <InlineNumberSetting label="当直間隔" unit="日以上" value={hc.interval_days} min={0} max={10} onChange={(v) => onHardConstraintChange("interval_days", v)} />
-            <InlineNumberSetting label="土日祝上限" unit="回/月" value={hc.max_weekend_holiday_works} min={1} max={10} onChange={(v) => onHardConstraintChange("max_weekend_holiday_works", v)} />
-            <InlineNumberSetting label="土曜上限" unit="回/月" value={hc.max_saturday_nights} min={1} max={10} onChange={(v) => onHardConstraintChange("max_saturday_nights", v)} />
+            <InlineNumberSetting label="当直間隔" unit="日" value={hc.interval_days} min={0} max={10} onChange={(v) => onHardConstraintChange("interval_days", v)} />
+            <InlineNumberSetting label="土日祝上限" unit="回" value={hc.max_weekend_holiday_works} min={1} max={10} onChange={(v) => onHardConstraintChange("max_weekend_holiday_works", v)} />
+            <InlineNumberSetting label="土曜上限" unit="回" value={hc.max_saturday_nights} min={1} max={10} onChange={(v) => onHardConstraintChange("max_saturday_nights", v)} />
           </div>
         </div>
 

@@ -239,6 +239,10 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-22 | 小修正バッチ(A1-A5): ウィザード初期値修正（minShifts 3→1、下限max=4、上限max=8）・確定保存の誤警告修正（全スロットnull=未作成扱い）・スコア一覧4列化・ルール表示崩れ修正（ラベル短縮+unit短縮）・フェイクプログレスバー段階的進行（0→30→60→85→90%、モバイル/PC両対応） |
+| 2026-03-22 | モバイルタップUX刷新(B-1): 1タップ=医師ハイライト（全配置日+制約違反色分け、PC版と同等のgetHighlightedViolation利用）・2タップ=ボトムシート表示・モザイク廃止（backdrop blur削除→薄い暗転のみ）・「解除」→「外す」文言変更 |
+| 2026-03-22 | docs/optimizer.md追記: 符号付き累積の原則（加重累積・累積目標乖離）・新規赴任医師の過去スコア補正ロジック再設計注記 |
+| 2026-03-21 | 上級設定: 「土日祝の均等化」グループに子要素の比率調整UI追加（?ボタン→説明パネル→0.0〜1.0比率スライダー）。比率はoptimizer_configのweight_ratiosとしてDB永続化。shared.tsにWeightChildMeta/WeightRatioOverrides型追加、expandWeightGroupsが動的比率対応、WeightsConfig/DashboardSettingsPanel/useOptimizerConfig/useDashboardState/useOnCallCoreに比率の状態管理追加 |
 | 2026-03-21 | ページ名変更: 「かんたん」→「モバイル版」・「一覧」→「PC版」（AppHeader/DefaultPageSetting/OnboardingModal）・ダッシュボード設定ボタン「設定」→「アカウント」 |
 | 2026-03-21 | スマホ検知バナー: /dashboardにモバイル検知（768px未満 or タッチデバイス）→「モバイル版が快適です」バナー表示（×で閉じれる） |
 | 2026-03-21 | 入れ替えボタン（⇄）: 各セルのロックボタン左に追加・タップで入れ替え元選択→別セル⇄タップで入れ替え実行・選択元は濃い紫塗りつぶし・入れ替え中に医師名クリックでキャンセル+新医師ハイライト |

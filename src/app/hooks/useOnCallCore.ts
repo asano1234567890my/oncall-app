@@ -36,6 +36,7 @@ export function useOnCallCore() {
     scoreTargetDefault, setScoreTargetDefault,
     shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
+    weightRatioOverrides, setWeightRatioOverrides,
     isWeightsOpen, setIsWeightsOpen,
     isHardConstraintsOpen, setIsHardConstraintsOpen,
     isPreviousMonthShiftsOpen, setIsPreviousMonthShiftsOpen,
@@ -67,8 +68,8 @@ export function useOnCallCore() {
 
   // ── 最適化設定 ──
   const { isSavingOptimizerConfig, optimizerSaveMessage, saveOptimizerConfig, hasUnsavedWeights, hasUnsavedHardConstraints } = useOptimizerConfig({
-    scoreMin, scoreMax, scoreTargetDefault, shiftScores, objectiveWeights, hardConstraints,
-    setScoreMin, setScoreMax, setScoreTargetDefault, setShiftScores, setObjectiveWeights, setHardConstraints,
+    scoreMin, scoreMax, scoreTargetDefault, shiftScores, objectiveWeights, hardConstraints, weightRatioOverrides,
+    setScoreMin, setScoreMax, setScoreTargetDefault, setShiftScores, setObjectiveWeights, setHardConstraints, setWeightRatioOverrides,
   });
 
   // ── 祝日 ──
@@ -449,6 +450,7 @@ export function useOnCallCore() {
     scoreTargetDefault, setScoreTargetDefault,
     shiftScores, setShiftScores,
     objectiveWeights, setObjectiveWeights, setWeight,
+    weightRatioOverrides, setWeightRatioOverrides,
     isWeightsOpen, setIsWeightsOpen,
     isHardConstraintsOpen, setIsHardConstraintsOpen,
     isPreviousMonthShiftsOpen, setIsPreviousMonthShiftsOpen,

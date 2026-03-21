@@ -81,7 +81,7 @@ export default function MobileActionSheet({
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 z-[200] bg-black/40 backdrop-blur-[2px]" onClick={handleClose} />
+      <div className="fixed inset-0 z-[200] bg-black/20" onClick={handleClose} />
 
       {/* Sheet */}
       <div className="fixed inset-x-0 bottom-0 z-[201] animate-slide-up">
@@ -133,7 +133,7 @@ export default function MobileActionSheet({
               />
               <ActionButton
                 icon={<Trash2 className="h-4 w-4" />}
-                label="解除"
+                label="外す"
                 color="red"
                 onClick={() => { handleClose(); onClear(); }}
                 disabled={isLocked}

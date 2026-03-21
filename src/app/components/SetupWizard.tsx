@@ -36,7 +36,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     holidayShiftMode: "",
     doctorCount: 8,
     doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
-    minShifts: 3,
+    minShifts: 1,
     maxShifts: 5,
     intervalDays: 1,
     maxSaturdayNights: 2,
@@ -284,7 +284,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
                 <input
                   type="range"
                   min={0}
-                  max={10}
+                  max={4}
                   step={1}
                   value={state.minShifts}
                   onChange={(e) => {
@@ -302,7 +302,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
                 <input
                   type="range"
                   min={1}
-                  max={15}
+                  max={8}
                   step={1}
                   value={state.maxShifts}
                   onChange={(e) => {

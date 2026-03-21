@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, DEFAULT_SHIFT_SCORES, type HardConstraints, type ObjectiveWeights, type ShiftScores } from "../types/dashboard";
 import { getAuthHeaders } from "./useAuth";
+import type { WeightRatioOverrides } from "../components/settings/shared";
 
 type UseOptimizerConfigParams = {
   scoreMin: number;
@@ -9,12 +10,14 @@ type UseOptimizerConfigParams = {
   shiftScores: ShiftScores;
   objectiveWeights: ObjectiveWeights;
   hardConstraints: HardConstraints;
+  weightRatioOverrides: WeightRatioOverrides;
   setScoreMin: (v: number) => void;
   setScoreMax: (v: number) => void;
   setScoreTargetDefault: (v: number | null) => void;
   setShiftScores: (v: ShiftScores) => void;
   setObjectiveWeights: (v: ObjectiveWeights) => void;
   setHardConstraints: (v: HardConstraints) => void;
+  setWeightRatioOverrides: (v: WeightRatioOverrides) => void;
 };
 
 export function useOptimizerConfig({
@@ -24,12 +27,14 @@ export function useOptimizerConfig({
   shiftScores,
   objectiveWeights,
   hardConstraints,
+  weightRatioOverrides,
   setScoreMin,
   setScoreMax,
   setScoreTargetDefault,
   setShiftScores,
   setObjectiveWeights,
   setHardConstraints,
+  setWeightRatioOverrides,
 }: UseOptimizerConfigParams) {
   const [isSavingOptimizerConfig, setIsSavingOptimizerConfig] = useState(false);
   const [optimizerSaveMessage, setOptimizerSaveMessage] = useState("");
@@ -61,6 +66,9 @@ export function useOptimizerConfig({
           setHardConstraints(merged);
           savedHardRef.current = JSON.stringify(merged);
         }
+        if (cfg.weight_ratios && typeof cfg.weight_ratios === "object") {
+          setWeightRatioOverrides(cfg.weight_ratios as WeightRatioOverrides);
+        }
       } catch {
         // サイレントに失敗（初回設定がなければデフォルト値のまま）
       }
@@ -84,6 +92,7 @@ export function useOptimizerConfig({
           shift_scores: shiftScores,
           objective_weights: objectiveWeights,
           hard_constraints: hardConstraints,
+          weight_ratios: weightRatioOverrides,
         }),
       });
       if (!res.ok) throw new Error("保存に失敗しました");

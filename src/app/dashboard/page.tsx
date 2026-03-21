@@ -125,20 +125,7 @@ export default function DashboardPage() {
       {/* Schedule area */}
       <main className="p-4">
           {/* Loading overlay */}
-          {core.isLoading && (
-            <div className="fixed inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-              <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-6 py-6 shadow-xl">
-                <div className="flex flex-col items-center text-center">
-                  <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
-                  <div className="text-base font-bold text-gray-800">当直表を自動生成しています</div>
-                  <div className="mt-2 text-sm text-gray-500">完了までそのままお待ちください。</div>
-                  <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {core.isLoading && <DashboardLoadingOverlay />}
 
           {/* Toolbar */}
           <DashboardToolbar
@@ -277,6 +264,8 @@ export default function DashboardPage() {
           onCloseWeights={() => core.setIsWeightsOpen(false)}
           onWeightChange={core.setWeight}
           onSetWeights={core.setObjectiveWeights}
+          ratioOverrides={core.weightRatioOverrides}
+          onRatioOverridesChange={core.setWeightRatioOverrides}
           onToggleHardConstraints={core.handleToggleHardConstraintsPanel}
           onResetHardConstraints={() => core.setHardConstraints(core.DEFAULT_HARD_CONSTRAINTS)}
           onCloseHardConstraints={() => core.setIsHardConstraintsOpen(false)}
@@ -354,5 +343,35 @@ export default function DashboardPage() {
       </div>
     </aside>
     </>
+  );
+}
+
+function DashboardLoadingOverlay() {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setProgress(30), 500);
+    const t2 = setTimeout(() => setProgress(60), 3000);
+    const t3 = setTimeout(() => setProgress(85), 8000);
+    const t4 = setTimeout(() => setProgress(90), 12000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+      <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-6 py-6 shadow-xl">
+        <div className="flex flex-col items-center text-center">
+          <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
+          <div className="text-base font-bold text-gray-800">当直表を自動生成しています</div>
+          <div className="mt-2 text-sm text-gray-500">完了までそのままお待ちください。</div>
+          <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-gray-100">
+            <div
+              className="h-full rounded-full bg-blue-500 transition-all duration-1000 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

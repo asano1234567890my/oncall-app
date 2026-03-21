@@ -358,11 +358,11 @@ export function useScheduleApi({
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-      // 既存データの確認（2-1 + 2-2）
+      // 既存データの確認（2-1 + 2-2）— 全スロットnullなら未作成扱い
       const checkRes = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { headers: getAuthHeaders() });
       if (checkRes.ok) {
         const existing: unknown = await checkRes.json();
-        if (Array.isArray(existing) && existing.length > 0) {
+        if (Array.isArray(existing) && existing.some((row: Record<string, unknown>) => row.day_shift != null || row.night_shift != null)) {
           const confirmed = window.confirm(
             `${year}年${month}月のシフトはすでに登録されています。\n上書きすると過去シフトの記録が変わり、スコア計算にも影響します。\n続行しますか？`
           );

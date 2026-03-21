@@ -32,12 +32,21 @@ export const weightInputs = [
 }>;
 
 /** 新: 4軸グループ（/dashboard 用） */
+export type WeightChildMeta = {
+  key: keyof ObjectiveWeights;
+  ratio: number;
+  label: string;
+  hint: string;
+};
+
 export type WeightGroup = {
   id: string;
   label: string;
   hint: string;
   primaryKey: keyof ObjectiveWeights;
   childMapping: Partial<Record<keyof ObjectiveWeights, number>>;
+  /** 子要素のメタデータ（比率調整UI用）。未定義のグループは比率調整不可 */
+  children?: WeightChildMeta[];
   min: number;
   max: number;
   step: number;
@@ -55,27 +64,40 @@ export const weightGroups: WeightGroup[] = [
   {
     id: "weekend_holiday_fairness",
     label: "土日祝の均等化",
-    hint: "土日祝シフトの回数を医師間で均等にします。過去数か月の実績も考慮します。将来は加重累積方式に移行予定。",
+    hint: "土日祝シフトの回数を医師間で均等にします。過去数か月の実績も考慮します。",
     primaryKey: "sunhol_fairness",
     childMapping: {
       sunhol_fairness: 1.0, sat_month_fairness: 1.0,
       past_sunhol_gap: 0.5, past_sat_gap: 0.5,
     },
+    children: [
+      { key: "sunhol_fairness", ratio: 1.0, label: "当月の日祝回数バランス", hint: "今月の日祝シフト回数を医師間で均等にします" },
+      { key: "sat_month_fairness", ratio: 1.0, label: "当月の土曜回数バランス", hint: "今月の土曜当直回数を医師間で均等にします" },
+      { key: "past_sunhol_gap", ratio: 0.5, label: "過去の日祝実績バランス", hint: "過去数か月の日祝シフト累積回数の差を縮めます" },
+      { key: "past_sat_gap", ratio: 0.5, label: "過去の土曜実績バランス", hint: "過去数か月の土曜当直累積回数の差を縮めます" },
+    ],
     min: 0, max: 200, step: 5,
   },
 ];
+
+/** 子要素の比率オーバーライド（グループID → キー → 比率） */
+export type WeightRatioOverrides = Partial<Record<string, Partial<Record<keyof ObjectiveWeights, number>>>>;
 
 /** グループスライダーの値からObjectiveWeightsを一括生成 */
 export function expandWeightGroups(
   currentWeights: ObjectiveWeights,
   groupId: string,
   newValue: number,
+  ratioOverrides?: WeightRatioOverrides,
 ): ObjectiveWeights {
   const group = weightGroups.find((g) => g.id === groupId);
   if (!group) return currentWeights;
+  const overrides = ratioOverrides?.[groupId];
   const next = { ...currentWeights };
-  for (const [key, ratio] of Object.entries(group.childMapping)) {
-    next[key as keyof ObjectiveWeights] = Math.round(newValue * (ratio as number));
+  for (const [key, defaultRatio] of Object.entries(group.childMapping)) {
+    const k = key as keyof ObjectiveWeights;
+    const ratio = overrides?.[k] ?? (defaultRatio as number);
+    next[k] = Math.round(newValue * ratio);
   }
   return next;
 }

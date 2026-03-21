@@ -28,20 +28,40 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
     placeDoctorInShift, removeDoctorFromShift, startSwapFrom, executeSwapTo,
     cancelSwapSelection, getPlacementConstraintMessage, getSwapViolation,
     highlightedDoctorId, toggleHighlightedDoctor,
+    getHighlightedViolation,
   } = core;
 
   const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
 
   // --- Cell tap handler ---
+  // 1st tap: highlight doctor (show all assignments + constraint violations)
+  // 2nd tap on same highlighted cell: open action sheet
   const handleCellTap = useCallback((day: number, shiftType: ShiftType) => {
     // If in swap mode (source selected), execute swap
     if (swapSource) {
       executeSwapTo(day, shiftType);
       return;
     }
-    // Otherwise open the action sheet
-    setSheetTarget({ day, shiftType });
-  }, [swapSource, executeSwapTo]);
+
+    // Find the doctor in this cell
+    const row = schedule.find((r) => r.day === day);
+    const doctorId = row ? (shiftType === "day" ? row.day_shift : row.night_shift) : null;
+
+    // If this cell's doctor is already highlighted → open action sheet
+    if (doctorId && doctorId === highlightedDoctorId) {
+      setSheetTarget({ day, shiftType });
+      return;
+    }
+
+    // If empty cell is tapped → open action sheet directly (to assign a doctor)
+    if (!doctorId) {
+      setSheetTarget({ day, shiftType });
+      return;
+    }
+
+    // Otherwise → highlight this doctor (1st tap)
+    toggleHighlightedDoctor(doctorId, day, shiftType);
+  }, [swapSource, executeSwapTo, schedule, highlightedDoctorId, toggleHighlightedDoctor]);
 
   // --- Action sheet callbacks ---
   const sheetRow = sheetTarget ? schedule.find((r) => r.day === sheetTarget.day) : null;
@@ -99,7 +119,8 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
 
   const handleSheetClose = useCallback(() => {
     setSheetTarget(null);
-  }, []);
+    toggleHighlightedDoctor(null);
+  }, [toggleHighlightedDoctor]);
 
   // --- Score display ---
   const fmt = (s: number | null) => (s === null ? "--" : s.toFixed(1));
@@ -176,8 +197,8 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
                           <span className={`text-xs font-bold ${dateC}`}>{row.day}</span>
                           <span className={`ml-0.5 text-[11px] font-bold ${wdC}`}>{wd}</span>
                         </td>
-                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation)}
-                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation)}
+                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation)}
+                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation)}
                       </tr>
                     );
                   })}
@@ -190,7 +211,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
 
       {/* Score summary */}
       <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
-        <div className="grid grid-cols-5 gap-1 text-[10px]">
+        <div className="grid grid-cols-4 gap-1 text-[10px]">
           {scoreEntries.map((e) => (
             <div key={e.doctorId} className="flex items-center justify-between rounded bg-white px-1.5 py-0.5 border border-gray-100">
               <span className="truncate font-semibold text-gray-700 max-w-[3.5rem]">{getDoctorName(e.doctorId)}</span>
@@ -280,11 +301,14 @@ function renderCell(
   highlightedDoctorId: string | null,
   swapSource: { day: number; shiftType: ShiftType; doctorId: string } | null,
   getSwapViolation: (day: number, st: ShiftType) => string | null,
+  getHighlightedViolation: (day: number, st: ShiftType) => string | null,
 ) {
   const locked = isShiftLocked(day, shiftType);
   const isDocHighlighted = Boolean(doctorId && highlightedDoctorId && doctorId === highlightedDoctorId);
   const isSwapSource = swapSource?.day === day && swapSource?.shiftType === shiftType;
   const swapViolation = swapSource ? getSwapViolation(day, shiftType) : null;
+  const highlightViolation = highlightedDoctorId ? getHighlightedViolation(day, shiftType) : null;
+  const isHighlightOk = Boolean(highlightedDoctorId && !highlightViolation && !isDocHighlighted);
 
   if (!enabled) {
     return (
@@ -297,12 +321,16 @@ function renderCell(
     : swapViolation
       ? "bg-red-50 ring-1 ring-inset ring-red-300"
       : isDocHighlighted
-        ? "bg-blue-50 ring-1 ring-inset ring-blue-300"
-        : locked
-          ? "bg-amber-50/50"
-          : swapSource
+        ? "bg-blue-100 ring-2 ring-inset ring-blue-400"
+        : highlightViolation
+          ? "bg-red-50/50"
+          : isHighlightOk
             ? "bg-green-50/50"
-            : "";
+            : locked
+              ? "bg-amber-50/50"
+              : swapSource
+                ? "bg-green-50/50"
+                : "";
 
   const textColor = isSwapSource
     ? "text-blue-700 font-black"
@@ -311,8 +339,12 @@ function renderCell(
       : doctorId
         ? isDocHighlighted
           ? "text-blue-700 font-black"
-          : shiftType === "day" ? "text-orange-800" : "text-indigo-800"
-        : "text-gray-400";
+          : highlightViolation
+            ? "text-red-400"
+            : shiftType === "day" ? "text-orange-800" : "text-indigo-800"
+        : highlightViolation
+          ? "text-red-300"
+          : "text-gray-400";
 
   return (
     <td className={`px-0.5 py-0.5 ${bgClass}`}>

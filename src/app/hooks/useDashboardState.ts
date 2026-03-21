@@ -55,6 +55,7 @@ export default function useDashboardState() {
   const [scoreTargetDefault, setScoreTargetDefault] = useState<number | null>(null);
   const [shiftScores, setShiftScores] = useState<ShiftScores>(DEFAULT_SHIFT_SCORES);
   const [objectiveWeights, setObjectiveWeights] = useState<ObjectiveWeights>(DEFAULT_OBJECTIVE_WEIGHTS);
+  const [weightRatioOverrides, setWeightRatioOverrides] = useState<import("../components/settings/shared").WeightRatioOverrides>({});
   const [isWeightsOpen, setIsWeightsOpen] = useState(false);
   const [isHardConstraintsOpen, setIsHardConstraintsOpen] = useState(false);
   const [isPreviousMonthShiftsOpen, setIsPreviousMonthShiftsOpen] = useState(false);
@@ -303,6 +304,8 @@ export default function useDashboardState() {
     objectiveWeights,
     setObjectiveWeights,
     setWeight,
+    weightRatioOverrides,
+    setWeightRatioOverrides,
     isWeightsOpen,
     setIsWeightsOpen,
     isHardConstraintsOpen,
