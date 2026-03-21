@@ -1,6 +1,7 @@
 "use client";
 
-import { Lock, Unlock } from "lucide-react";
+import { useState } from "react";
+import { ArrowLeftRight, Lock, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
 import type { ScheduleRow, ShiftType } from "../types/dashboard";
 
@@ -19,6 +20,7 @@ type DashboardScheduleTableProps = {
   hoverErrorMessage: string | null;
   isHighlightedDoctorBlockedDay: (day: number) => boolean;
   isHighlightedDoctorBlockedShift: (day: number, shiftType: ShiftType) => boolean;
+  getHighlightedViolation: (day: number, shiftType: ShiftType) => string | null;
   isShiftLocked: (day: number, shiftType: ShiftType) => boolean;
   invalidHoverShiftKey: string | null;
   touchHoverShiftKey: string | null;
@@ -50,7 +52,12 @@ type DashboardScheduleTableProps = {
   ) => void;
   onClearDragState: () => void;
   onToggleShiftLock: (day: number, shiftType: ShiftType) => void;
-  onToggleHighlightedDoctor: (doctorId: string | null | undefined) => void;
+  onToggleHighlightedDoctor: (doctorId: string | null | undefined, day?: number, shiftType?: ShiftType) => void;
+  // Swap
+  swapSource: { day: number; shiftType: ShiftType; doctorId: string } | null;
+  onStartSwapFrom: (day: number, shiftType: ShiftType) => boolean;
+  onExecuteSwapTo: (day: number, shiftType: ShiftType) => boolean;
+  onCancelSwap: () => void;
   // Messages
   toastMessage: string | null;
   error: string;
@@ -64,6 +71,8 @@ type DashboardScheduleTableProps = {
   draftMessage?: string;
   // Override
   isOverrideMode: boolean;
+  // Undo/Redo highlight
+  changedShiftKeys?: Set<string>;
 };
 
 export default function DashboardScheduleTable({
@@ -79,6 +88,7 @@ export default function DashboardScheduleTable({
   hoverErrorMessage,
   isHighlightedDoctorBlockedDay,
   isHighlightedDoctorBlockedShift,
+  getHighlightedViolation,
   isShiftLocked,
   invalidHoverShiftKey,
   touchHoverShiftKey,
@@ -93,6 +103,10 @@ export default function DashboardScheduleTable({
   onClearDragState,
   onToggleShiftLock,
   onToggleHighlightedDoctor,
+  swapSource,
+  onStartSwapFrom,
+  onExecuteSwapTo,
+  onCancelSwap,
   toastMessage,
   error,
   saveMessage,
@@ -102,8 +116,14 @@ export default function DashboardScheduleTable({
   onForceSaveToDB,
   draftMessage,
   isOverrideMode,
+  changedShiftKeys,
 }: DashboardScheduleTableProps) {
   const isDragging = draggingDoctorId !== null;
+
+  // Floating tooltip for drag constraint messages
+  const [dragMousePos, setDragMousePos] = useState<{ x: number; y: number } | null>(null);
+  // Floating tooltip for highlight violation hover
+  const [hoverViolation, setHoverViolation] = useState<{ x: number; y: number; message: string } | null>(null);
 
   if (!schedule.length && !isLoading && !error) {
     return (
@@ -113,13 +133,16 @@ export default function DashboardScheduleTable({
     );
   }
 
-  const renderShiftCell = (row: ScheduleRow, shiftType: ShiftType, isHolidayLike: boolean) => {
+  const renderShiftCell = (row: ScheduleRow, shiftType: ShiftType, isHolidayLike: boolean, isSaturday: boolean) => {
     const locked = isShiftLocked(row.day, shiftType);
     const doctorId = shiftType === "day" ? row.day_shift : row.night_shift;
     const shiftKey = `${row.day}_${shiftType}`;
     const hoverInvalid = invalidHoverShiftKey === shiftKey;
     const touchHovered = touchHoverShiftKey === shiftKey;
     const dayBlocked = isHighlightedDoctorBlockedShift(row.day, shiftType);
+    const swapViolation = getHighlightedViolation(row.day, shiftType);
+    const constraintBlocked = swapViolation !== null;
+    const blockReason = swapViolation ?? (dayBlocked ? "不可日" : null);
     const isCombined = isHolidayLike && row.day_shift != null && row.day_shift === row.night_shift;
 
     // Drag validity feedback
@@ -154,6 +177,8 @@ export default function DashboardScheduleTable({
       );
     }
 
+    const isChanged = changedShiftKeys?.has(shiftKey) ?? false;
+
     // Cell background based on drag state
     let cellBgClass: string;
     if (hoverInvalid) {
@@ -166,10 +191,12 @@ export default function DashboardScheduleTable({
       cellBgClass = "border-sky-300 bg-sky-50 ring-1 ring-sky-200";
     } else if (locked) {
       cellBgClass = dayBlocked
-        ? "border-amber-300 bg-red-500/30 ring-1 ring-inset ring-red-400"
-        : "border-amber-300 bg-amber-50";
-    } else if (dayBlocked) {
-      cellBgClass = "border-red-400 bg-red-500/30 ring-1 ring-inset ring-red-400";
+        ? "border-amber-300 bg-red-100 ring-1 ring-inset ring-red-300"
+        : constraintBlocked
+          ? "border-amber-300 bg-red-100 ring-1 ring-inset ring-red-300"
+          : "border-amber-300 bg-amber-50";
+    } else if (dayBlocked || constraintBlocked) {
+      cellBgClass = "border-red-300 bg-red-100 ring-1 ring-inset ring-red-300";
     } else if (isHolidayLike) {
       cellBgClass = "border-red-100 bg-red-50/60 hover:border-red-200";
     } else {
@@ -184,30 +211,34 @@ export default function DashboardScheduleTable({
           data-shift-type={shiftType}
           data-locked={locked ? "true" : "false"}
           data-holiday-like={isHolidayLike ? "true" : "false"}
-          onDragEnter={(event) => onHandleShiftDragOver(event, row.day, shiftType, locked, isHolidayLike)}
-          onDragOver={(event) => onHandleShiftDragOver(event, row.day, shiftType, locked, isHolidayLike)}
-          onDragLeave={() => onHandleShiftDragLeave(row.day, shiftType)}
-          onDrop={(event) => onHandleShiftDrop(event, row.day, shiftType, locked, isHolidayLike)}
-          className={`relative flex h-8 items-center justify-between gap-1 overflow-hidden rounded-md border px-1.5 py-1 ${cellBgClass}`}
+          onDragEnter={(event) => { onHandleShiftDragOver(event, row.day, shiftType, locked, isHolidayLike); setDragMousePos({ x: event.clientX, y: event.clientY }); }}
+          onDragOver={(event) => { onHandleShiftDragOver(event, row.day, shiftType, locked, isHolidayLike); setDragMousePos({ x: event.clientX, y: event.clientY }); }}
+          onDragLeave={() => { onHandleShiftDragLeave(row.day, shiftType); setDragMousePos(null); }}
+          onDrop={(event) => { onHandleShiftDrop(event, row.day, shiftType, locked, isHolidayLike); setDragMousePos(null); }}
+          onMouseEnter={(event) => { if (blockReason) setHoverViolation({ x: event.clientX, y: event.clientY, message: blockReason }); }}
+          onMouseMove={(event) => { if (blockReason && hoverViolation) setHoverViolation({ x: event.clientX, y: event.clientY, message: blockReason }); }}
+          onMouseLeave={() => setHoverViolation(null)}
+          className={`relative flex h-8 items-center justify-between gap-1 overflow-hidden rounded-md border px-1.5 py-1 ${cellBgClass}${isChanged ? " ring-2 ring-blue-400 bg-blue-50 animate-[undoFlash_1.5s_ease-out]" : ""}`}
         >
           {doctorId ? (
             <button
               type="button"
               draggable={!locked}
               onDragStart={(event) => onShiftDragStart(event, row.day, shiftType, doctorId)}
-              onDragEnd={onClearDragState}
+              onDragEnd={() => { onClearDragState(); setDragMousePos(null); }}
               onClick={(event) => {
                 event.stopPropagation();
-                onToggleHighlightedDoctor(doctorId);
+                onToggleHighlightedDoctor(doctorId, row.day, shiftType);
               }}
-              className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-0.5 text-center text-sm font-semibold transition ${
+              className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-0.5 text-center transition ${
                 locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
                 doctorId === highlightedDoctorId
-                  ? "bg-blue-100 text-blue-900 ring-2 ring-blue-500"
-                  : shiftType === "day"
-                    ? locked ? "bg-amber-100 text-amber-900" : "bg-orange-100 text-orange-800"
-                    : locked ? "bg-amber-100 text-amber-900" : "bg-indigo-100 text-indigo-800"
+                  ? "bg-blue-200 text-blue-900 text-base font-bold ring-2 ring-blue-500 shadow-sm"
+                  : `text-sm font-semibold ${locked ? "bg-amber-100 text-amber-900"
+                    : isHolidayLike ? "bg-stone-100 text-amber-700"
+                    : isSaturday ? "bg-stone-100 text-blue-800"
+                    : "bg-stone-100 text-gray-800"}`
               }`}
               title="クリックでハイライト / ドラッグで移動"
             >
@@ -223,6 +254,38 @@ export default function DashboardScheduleTable({
           ) : (
             <span className="min-w-0 flex-1 text-sm text-gray-400">-</span>
           )}
+          {/* Swap button */}
+          {(() => {
+            const isSwapSrc = swapSource?.day === row.day && swapSource?.shiftType === shiftType;
+            return (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (isSwapSrc) { onCancelSwap(); onToggleHighlightedDoctor(null); }
+                  else if (swapSource) { onExecuteSwapTo(row.day, shiftType); }
+                  else {
+                    // 既に同じ医師がハイライト中なら一旦解除してから再セット（トグルで消えるのを防ぐ）
+                    if (highlightedDoctorId === doctorId) onToggleHighlightedDoctor(null);
+                    onStartSwapFrom(row.day, shiftType);
+                    onToggleHighlightedDoctor(doctorId, row.day, shiftType);
+                  }
+                }}
+                disabled={!doctorId && !swapSource}
+                className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-30 ${
+                  isSwapSrc
+                    ? "border-violet-600 bg-violet-500 text-white ring-2 ring-violet-300 hover:bg-violet-600"
+                    : swapSource
+                      ? "border-violet-300 bg-violet-50 text-violet-500 hover:bg-violet-100"
+                      : "border-gray-200 bg-white text-gray-300 hover:text-violet-600 hover:border-gray-300"
+                }`}
+                title={isSwapSrc ? "入れ替えキャンセル" : swapSource ? "ここに入れ替え" : "入れ替え"}
+              >
+                <ArrowLeftRight className="h-3 w-3" />
+              </button>
+            );
+          })()}
+          {/* Lock button */}
           <button
             type="button"
             onClick={(event) => {
@@ -230,18 +293,16 @@ export default function DashboardScheduleTable({
               onToggleShiftLock(row.day, shiftType);
             }}
             disabled={!doctorId}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-400 transition hover:text-amber-600 disabled:cursor-not-allowed disabled:opacity-30"
+            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition disabled:cursor-not-allowed disabled:opacity-30 ${
+              locked
+                ? "border-amber-400 bg-amber-100 text-amber-700 hover:bg-amber-200"
+                : "border-gray-200 bg-white text-gray-300 hover:text-amber-600 hover:border-gray-300"
+            }`}
             title={locked ? "ロック解除" : "ロック"}
           >
-            {locked ? <Lock className="h-3.5 w-3.5 text-amber-600" /> : <Unlock className="h-3.5 w-3.5" />}
+            {locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
           </button>
 
-          {/* Hover tooltip */}
-          {(hoverInvalid || touchHovered) && hoverErrorMessage && (
-            <div className="pointer-events-none absolute left-1/2 top-full z-30 mt-1 w-48 -translate-x-1/2 rounded-md border border-red-200 bg-white/95 px-2 py-1 text-left text-xs font-semibold leading-tight whitespace-pre-line text-red-700 shadow-lg backdrop-blur">
-              {hoverErrorMessage}
-            </div>
-          )}
         </div>
       </td>
     );
@@ -249,6 +310,30 @@ export default function DashboardScheduleTable({
 
   return (
     <>
+      {/* Floating drag constraint tooltip */}
+      {hoverErrorMessage && dragMousePos && (
+        <div
+          className="pointer-events-none fixed z-[100] max-w-xs rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold leading-snug text-red-700 shadow-xl"
+          style={{ left: dragMousePos.x + 16, top: dragMousePos.y - 12 }}
+        >
+          {hoverErrorMessage.split("\n").map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Floating highlight violation tooltip */}
+      {hoverViolation && !isDragging && (
+        <div
+          className="pointer-events-none fixed z-[100] max-w-xs rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold leading-snug text-red-700 shadow-xl"
+          style={{ left: hoverViolation.x + 16, top: hoverViolation.y - 12 }}
+        >
+          {hoverViolation.message.split("\n").map((line, i) => (
+            <div key={i}>{line}</div>
+          ))}
+        </div>
+      )}
+
       {toastMessage && (
         <div className="pointer-events-none fixed left-1/2 top-1/2 z-[100] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 px-3">
           <div className="rounded-2xl bg-gray-900/90 px-6 py-4 text-center text-sm font-bold leading-snug whitespace-pre-line text-white shadow-2xl backdrop-blur">
@@ -319,8 +404,8 @@ export default function DashboardScheduleTable({
                     >
                       <td className={`whitespace-nowrap px-2 py-1 text-sm ${dateCellClass}`}>{row.day}日</td>
                       <td className={`whitespace-nowrap px-1 py-1 text-sm ${weekdayCellClass}`}>{wd}</td>
-                      {renderShiftCell(row, "day", isHolidayLike)}
-                      {renderShiftCell(row, "night", isHolidayLike)}
+                      {renderShiftCell(row, "day", isHolidayLike, isSat)}
+                      {renderShiftCell(row, "night", isHolidayLike, isSat)}
                     </tr>
                   );
                 })}

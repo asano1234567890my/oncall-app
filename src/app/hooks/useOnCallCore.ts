@@ -19,7 +19,7 @@ import { weightGroups } from "../components/settings/shared";
 
 export function useOnCallCore() {
   // ── 履歴管理 ──
-  const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo } = useScheduleHistory();
+  const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo, changedShiftKeys } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
   const savedScheduleSignatureRef = useRef<string>(getScheduleSignature([]));
   const latestScheduleRef = useRef<ScheduleRow[]>([]);
@@ -347,6 +347,13 @@ export function useOnCallCore() {
   // ── 仮保存ハンドラ ──
   const handleSaveDraft = async () => {
     if (schedule.length === 0) return;
+    if (draft.draftSavedAt) {
+      const ts = new Date(draft.draftSavedAt).toLocaleString("ja-JP");
+      const ok = typeof window !== "undefined"
+        ? window.confirm(`${ts} の仮保存を上書きしますか？`)
+        : false;
+      if (!ok) return;
+    }
     await draft.saveDraft(schedule);
   };
 
@@ -362,6 +369,9 @@ export function useOnCallCore() {
   };
 
   const handleCopyConfirmedToDraft = async () => {
+    if (schedule.some((r) => r.day_shift || r.night_shift)) {
+      if (!window.confirm("現在のシフトを破棄して確定済みシフトを読み込みますか？")) return;
+    }
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     try {
       const res = await fetch(`${apiUrl}/api/schedule/${year}/${month}`, { headers: getAuthHeaders() });
@@ -389,6 +399,31 @@ export function useOnCallCore() {
 
   const daysInMonth = getDaysInMonth(year, month);
 
+  // ── 白紙作成 ──
+  const handleCreateBlankSchedule = () => {
+    if (schedule.some((r) => r.day_shift || r.night_shift)) {
+      if (!window.confirm("現在のシフトを破棄して白紙にしますか？")) return;
+    }
+    const blank: ScheduleRow[] = Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1;
+      const { isHolidayLike } = isHolidayLikeDay(day);
+      return { day, day_shift: null, night_shift: null, is_sunhol: isHolidayLike };
+    });
+    dndState.handleUnlockAll();
+    commitSchedule(blank);
+  };
+
+  // ── 未固定枠クリア ──
+  const handleClearUnlocked = () => {
+    if (!window.confirm("未固定枠をクリアしますか？固定枠はそのまま残ります。")) return;
+    const cleared: ScheduleRow[] = schedule.map((row) => ({
+      ...row,
+      day_shift: dndState.lockedShiftKeys.has(`${row.day}_day`) ? row.day_shift : null,
+      night_shift: dndState.lockedShiftKeys.has(`${row.day}_night`) ? row.night_shift : null,
+    }));
+    commitSchedule(cleared);
+  };
+
   const scheduleColumns = useMemo(() => {
     if (schedule.length === 0) return [];
     const splitIndex = Math.ceil(schedule.length / 2);
@@ -402,7 +437,7 @@ export function useOnCallCore() {
 
     // スケジュール
     schedule, scheduleColumns, scoreEntries,
-    undo, redo, canUndo, canRedo,
+    undo, redo, canUndo, canRedo, changedShiftKeys,
 
     // ダッシュボード状態
     year, month, handleYearChange, handleMonthChange,
@@ -461,6 +496,8 @@ export function useOnCallCore() {
     handleGenerateWithGuard,
     handleSaveWithValidation,
     handleForceSaveToDB,
+    handleCreateBlankSchedule,
+    handleClearUnlocked,
 
     // ナビゲーションガード
     confirmMoveWithUnsavedChanges,

@@ -21,6 +21,24 @@ export default function DashboardPage() {
   const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerationSettingsOpen, setIsGenerationSettingsOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(true);
+  const [showMobileBanner, setShowMobileBanner] = useState(false);
+
+  // ── ビューポートに合わせて縮小 ──
+  const MIN_WIDTH = 1280;
+  const [viewportZoom, setViewportZoom] = useState(1);
+  useEffect(() => {
+    const update = () => setViewportZoom(Math.min(1, window.innerWidth / MIN_WIDTH));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  // ── モバイル検知バナー ──
+  useEffect(() => {
+    const isMobile = window.innerWidth < 768 || "ontouchstart" in window;
+    setShowMobileBanner(isMobile);
+  }, []);
 
   const handleLoadConfirmedForEdit = async () => {
     setIsLoadingConfirmed(true);
@@ -29,6 +47,27 @@ export default function DashboardPage() {
     } finally {
       setIsLoadingConfirmed(false);
     }
+  };
+
+  // ── 全固定解除（個別ロックがある場合は警告） ──
+  const handleUnlockAllWithConfirm = () => {
+    if (core.lockedShiftKeys.size > 0) {
+      const ok = window.confirm(`${core.lockedShiftKeys.size}件の固定をすべて解除しますか？`);
+      if (!ok) return;
+    }
+    core.handleUnlockAll();
+  };
+
+  // ── 全体を自動生成（ロック枠がある場合は警告→全解除→生成） ──
+  const handleGenerateAll = () => {
+    if (core.lockedShiftKeys.size > 0) {
+      const ok = window.confirm(
+        "固定した枠も含めて全体を作り直します。\n固定はすべて解除されます。\n\nシフトは「元に戻す」で復元できますが、固定の状態は戻りません。\n保存しておきたい場合は先に仮保存をご利用ください。"
+      );
+      if (!ok) return;
+      core.handleUnlockAll();
+    }
+    core.handleGenerateWithGuard();
   };
 
   // ── 認証ガード ──
@@ -46,8 +85,14 @@ export default function DashboardPage() {
     );
   }
 
+  const PALETTE_WIDTH = 288; // w-72 = 18rem = 288px
+
   return (
-    <div className="min-h-screen bg-gray-50 font-sans">
+    <>
+    <div
+      className="min-h-screen min-w-[1280px] bg-gray-50 font-sans"
+      style={{ zoom: viewportZoom, paddingRight: isPaletteOpen ? PALETTE_WIDTH + 20 : 0 }}
+    >
       <AppHeader
         hospitalName={core.auth.hospitalName}
         onLogout={core.logout}
@@ -56,19 +101,33 @@ export default function DashboardPage() {
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
           >
-            設定
+            アカウント
           </button>
         }
       />
 
-      {/* Main layout: schedule (left) + palette (right) */}
-      <div className="flex">
-        {/* Schedule area */}
-        <main className="flex-1 min-w-0 p-3 md:p-4 xl:p-6">
+      {/* Mobile banner */}
+      {showMobileBanner && (
+        <div className="sticky top-12 z-30 flex items-center justify-between gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2.5">
+          <div className="flex-1 text-xs font-bold text-blue-800">
+            スマートフォンでは<a href="/app" className="underline">モバイル版</a>が快適です
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowMobileBanner(false)}
+            className="shrink-0 rounded p-1 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Schedule area */}
+      <main className="p-4">
           {/* Loading overlay */}
           {core.isLoading && (
             <div className="fixed inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-              <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-4 py-6 shadow-xl md:px-6">
+              <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-6 py-6 shadow-xl">
                 <div className="flex flex-col items-center text-center">
                   <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />
                   <div className="text-base font-bold text-gray-800">当直表を自動生成しています</div>
@@ -95,12 +154,13 @@ export default function DashboardPage() {
             onUndo={core.undo}
             onRedo={core.redo}
             onOpenSettings={() => setIsGenerationSettingsOpen(true)}
-            onGenerate={core.handleGenerateWithGuard}
+            onGenerate={handleGenerateAll}
             onRegenerateUnlocked={core.handleGenerateWithGuard}
-            onDeleteMonthSchedule={core.handleDeleteMonthSchedule}
-            isDeletingMonthSchedule={core.isDeletingMonthSchedule}
             lockedShiftCount={core.lockedShiftKeys.size}
             activeDoctorsCount={core.activeDoctors.length}
+            onLockAll={core.handleLockAll}
+            onUnlockAll={handleUnlockAllWithConfirm}
+            hasShifts={core.schedule.length > 0}
             onSaveToDB={core.handleSaveWithValidation}
             isSaving={core.isSaving}
             onSaveDraft={() => { void core.handleSaveDraft(); }}
@@ -110,6 +170,8 @@ export default function DashboardPage() {
             draftSavedAt={core.draftSavedAt}
             onLoadConfirmedForEdit={() => { void handleLoadConfirmedForEdit(); }}
             isLoadingConfirmed={isLoadingConfirmed}
+            onClearUnlocked={core.handleClearUnlocked}
+            onCreateBlank={core.handleCreateBlankSchedule}
             hasSchedule={core.schedule.length > 0}
           />
 
@@ -128,6 +190,7 @@ export default function DashboardPage() {
               hoverErrorMessage={core.hoverErrorMessage}
               isHighlightedDoctorBlockedDay={core.isHighlightedDoctorBlockedDay}
               isHighlightedDoctorBlockedShift={core.isHighlightedDoctorBlockedShift}
+              getHighlightedViolation={core.getHighlightedViolation}
               isShiftLocked={core.isShiftLocked}
               invalidHoverShiftKey={core.invalidHoverShiftKey}
               touchHoverShiftKey={core.touchHoverShiftKey}
@@ -142,6 +205,10 @@ export default function DashboardPage() {
               onClearDragState={core.clearDragState}
               onToggleShiftLock={core.toggleShiftLock}
               onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
+              swapSource={core.swapSource}
+              onStartSwapFrom={core.startSwapFrom}
+              onExecuteSwapTo={core.executeSwapTo}
+              onCancelSwap={core.cancelSwapSelection}
               toastMessage={core.toastMessage}
               error={core.error}
               saveMessage={core.saveMessage}
@@ -151,31 +218,10 @@ export default function DashboardPage() {
               onForceSaveToDB={core.handleForceSaveToDB}
               draftMessage={core.draftMessage}
               isOverrideMode={core.isOverrideMode}
+              changedShiftKeys={core.changedShiftKeys}
             />
           </div>
         </main>
-
-        {/* Right sidebar: Doctor Palette */}
-        <aside className="hidden w-72 shrink-0 border-l border-gray-200 bg-gray-50 lg:block sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto">
-          <DoctorPalette
-            scoreEntries={core.scoreEntries}
-            getDoctorName={core.getDoctorName}
-            highlightedDoctorId={core.highlightedDoctorId}
-            dragSourceType={core.dragSourceType}
-            scoreMin={core.scoreMin}
-            scoreMax={core.scoreMax}
-            onDoctorListDragStart={core.handleDoctorListDragStart}
-            onClearDragState={core.clearDragState}
-            onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
-            onTrashDragOver={core.handleTrashDragOver}
-            onTrashDrop={core.handleTrashDrop}
-            onLockAll={core.handleLockAll}
-            onUnlockAll={core.handleUnlockAll}
-            lockedShiftCount={core.lockedShiftKeys.size}
-            hasShifts={core.schedule.some((row) => row.day_shift || row.night_shift)}
-          />
-        </aside>
-      </div>
 
       {/* Generation Settings Slide Panel */}
       <SettingsSlidePanel isOpen={isGenerationSettingsOpen} onClose={() => setIsGenerationSettingsOpen(false)}>
@@ -251,7 +297,7 @@ export default function DashboardPage() {
       {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3">
-            <h2 className="text-lg font-bold text-gray-800">設定</h2>
+            <h2 className="text-lg font-bold text-gray-800">アカウント</h2>
             <button onClick={() => setIsSettingsOpen(false)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 transition-colors">
               <X className="h-5 w-5" />
             </button>
@@ -267,5 +313,46 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+
+    {/* Palette toggle tab (viewport-fixed) */}
+    <button
+      type="button"
+      onClick={() => setIsPaletteOpen(!isPaletteOpen)}
+      className="fixed top-1/2 -translate-y-1/2 z-30 flex items-center justify-center rounded-l-md border border-r-0 border-gray-300 bg-white px-1.5 py-3 text-sm text-gray-500 shadow-sm hover:bg-gray-50"
+      style={{
+        right: isPaletteOpen ? PALETTE_WIDTH : 0,
+        zoom: viewportZoom,
+      }}
+      title={isPaletteOpen ? "パレットを閉じる" : "パレットを開く"}
+    >
+      {isPaletteOpen ? "▶" : "◀"}
+    </button>
+
+    {/* Right sidebar: Doctor Palette (viewport-fixed, zoom-scaled) */}
+    <aside
+      className={`fixed right-0 top-0 border-l border-gray-200 bg-gray-50 z-20 ${isPaletteOpen ? "" : "pointer-events-none opacity-0"}`}
+      style={{
+        width: PALETTE_WIDTH,
+        height: `${100 / viewportZoom}dvh`,
+        zoom: viewportZoom,
+      }}
+    >
+      <div className="flex h-full flex-col pt-16">
+        <DoctorPalette
+          scoreEntries={core.scoreEntries}
+          getDoctorName={core.getDoctorName}
+          highlightedDoctorId={core.highlightedDoctorId}
+          dragSourceType={core.dragSourceType}
+          scoreMin={core.scoreMin}
+          scoreMax={core.scoreMax}
+          onDoctorListDragStart={core.handleDoctorListDragStart}
+          onClearDragState={core.clearDragState}
+          onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
+          onTrashDragOver={core.handleTrashDragOver}
+          onTrashDrop={core.handleTrashDrop}
+        />
+      </div>
+    </aside>
+    </>
   );
 }

@@ -43,6 +43,18 @@ body {
   animation: swap-flash 1.5s ease-out forwards;
 }
 
+/* Undo/Redoで変更されたセルのハイライト（青→透明） */
+@keyframes undoFlash {
+  0% {
+    box-shadow: 0 0 0 2px rgb(96 165 250);
+    background-color: rgb(219 234 254);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(96 165 250 / 0);
+    background-color: transparent;
+  }
+}
+
 /* モバイルボトムシート スライドアップ */
 @keyframes slide-up {
   from {

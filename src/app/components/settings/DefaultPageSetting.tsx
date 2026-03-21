@@ -47,7 +47,7 @@ export default function DefaultPageSetting() {
               : "border-gray-200 text-gray-600 hover:border-blue-200"
           }`}
         >
-          かんたんモード
+          モバイル版
         </button>
         <button
           onClick={() => { void handleToggle("/dashboard"); }}
@@ -58,7 +58,7 @@ export default function DefaultPageSetting() {
               : "border-gray-200 text-gray-600 hover:border-blue-200"
           }`}
         >
-          一覧モード
+          PC版
         </button>
       </div>
     </div>

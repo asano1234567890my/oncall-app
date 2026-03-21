@@ -1,4 +1,4 @@
-// src/app/app/page.tsx — 統合メインページ（PC/モバイル自動切替）
+// src/app/app/page.tsx — モバイル版（モバイル特化）
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -11,13 +11,7 @@ import SetupWizard from "../components/SetupWizard";
 // Mobile
 import MobileScheduleBoard from "../components/MobileScheduleBoard";
 import DoctorUnavailableDetail from "../components/DoctorUnavailableDetail";
-// PC
-import DashboardScheduleTable from "../components/DashboardScheduleTable";
-import DashboardToolbar from "../components/DashboardToolbar";
-import DoctorPalette from "../components/DoctorPalette";
-import SettingsSlidePanel from "../components/SettingsSlidePanel";
-import DashboardSettingsPanel from "../components/DashboardSettingsPanel";
-// Settings modals (shared)
+// Settings modals
 import RulesConfig from "../components/settings/RulesConfig";
 import WeightsConfig from "../components/settings/WeightsConfig";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
@@ -42,22 +36,10 @@ export default function AppPage() {
   const core = useOnCallCore();
   const router = useRouter();
 
-  // ── レスポンシブ判定 ──
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia("(min-width: 1024px)");
-    setIsDesktop(mql.matches);
-    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, []);
-
   // ── 設定状態 ──
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAccountSettingsOpen, setIsAccountSettingsOpen] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
-  const [isGenSettingsOpen, setIsGenSettingsOpen] = useState(false);
-  const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
 
   // ── セットアップ ──
   const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
@@ -144,11 +126,6 @@ export default function AppPage() {
   }, [onboarding]);
   const closeDrawer = useCallback(() => setActiveDrawer(null), []);
 
-  const handleLoadConfirmedForEdit = useCallback(async () => {
-    setIsLoadingConfirmed(true);
-    try { await core.handleCopyConfirmedToDraft(); } finally { setIsLoadingConfirmed(false); }
-  }, [core.handleCopyConfirmedToDraft]);
-
   const handleRedoSetup = useCallback(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     void fetch(`${apiUrl}/api/settings/kv/setup_completed`, {
@@ -194,114 +171,8 @@ export default function AppPage() {
         }
       />
 
-      {isDesktop ? (
-        /* ━━━━━━━━━━ PC レイアウト ━━━━━━━━━━ */
-        <div className="flex">
-          <main className="flex-1 min-w-0 p-3 md:p-4 xl:p-6">
-            {core.isLoading && <LoadingOverlay />}
-
-            <DashboardToolbar
-              year={core.year}
-              month={core.month}
-              onYearChange={core.handleYearChange}
-              onMonthChange={core.handleMonthChange}
-              isLoading={core.isLoading}
-              isOverrideMode={core.isOverrideMode}
-              onToggleOverrideMode={core.handleToggleOverrideMode}
-              canUndo={core.canUndo}
-              canRedo={core.canRedo}
-              onUndo={core.undo}
-              onRedo={core.redo}
-              onOpenSettings={() => setIsGenSettingsOpen(true)}
-              onGenerate={core.handleGenerateWithGuard}
-              onRegenerateUnlocked={core.handleGenerateWithGuard}
-              onDeleteMonthSchedule={core.handleDeleteMonthSchedule}
-              isDeletingMonthSchedule={core.isDeletingMonthSchedule}
-              lockedShiftCount={core.lockedShiftKeys.size}
-              activeDoctorsCount={core.activeDoctors.length}
-              onSaveToDB={core.handleSaveWithValidation}
-              isSaving={core.isSaving}
-              onSaveDraft={() => { void core.handleSaveDraft(); }}
-              isDraftSaving={core.isDraftSaving}
-              onLoadDraft={() => { void core.handleLoadDraft(); }}
-              isDraftLoading={core.isDraftLoading}
-              draftSavedAt={core.draftSavedAt}
-              onLoadConfirmedForEdit={() => { void handleLoadConfirmedForEdit(); }}
-              isLoadingConfirmed={isLoadingConfirmed}
-              hasSchedule={hasSchedule}
-            />
-
-            <div className="mt-3">
-              {hasSchedule ? (
-                <DashboardScheduleTable
-                  schedule={core.schedule}
-                  year={core.year}
-                  month={core.month}
-                  holidaySet={core.holidaySet}
-                  manualHolidaySetInMonth={core.manualHolidaySetInMonth}
-                  toYmd={core.toYmd}
-                  getWeekday={core.getWeekday}
-                  getDoctorName={core.getDoctorName}
-                  highlightedDoctorId={core.highlightedDoctorId}
-                  hoverErrorMessage={core.hoverErrorMessage}
-                  isHighlightedDoctorBlockedDay={core.isHighlightedDoctorBlockedDay}
-                  isHighlightedDoctorBlockedShift={core.isHighlightedDoctorBlockedShift}
-                  isShiftLocked={core.isShiftLocked}
-                  invalidHoverShiftKey={core.invalidHoverShiftKey}
-                  touchHoverShiftKey={core.touchHoverShiftKey}
-                  draggingDoctorId={core.draggingDoctorId}
-                  cellValidityMap={core.cellValidityMap}
-                  onHandleShiftDragOver={core.handleShiftDragOver}
-                  onHandleShiftDragLeave={core.handleShiftDragLeave}
-                  onHandleShiftDrop={core.handleShiftDrop}
-                  onHandleDisabledDayDragOver={core.handleDisabledDayDragOver}
-                  onHandleDisabledDayDragLeave={core.handleDisabledDayDragLeave}
-                  onShiftDragStart={core.handleShiftDragStart}
-                  onClearDragState={core.clearDragState}
-                  onToggleShiftLock={core.toggleShiftLock}
-                  onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
-                  toastMessage={core.toastMessage}
-                  error={core.error}
-                  saveMessage={core.saveMessage}
-                  isLoading={core.isLoading}
-                  saveValidationMessages={core.saveValidationMessages}
-                  onDismissSaveValidation={core.handleDismissSaveValidation}
-                  onForceSaveToDB={core.handleForceSaveToDB}
-                  draftMessage={core.draftMessage}
-                  isOverrideMode={core.isOverrideMode}
-                />
-              ) : (
-                <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
-                  ツールバーの「生成」ボタンでスケジュールを作成してください
-                </div>
-              )}
-            </div>
-          </main>
-
-          <aside className="hidden w-72 shrink-0 border-l border-gray-200 bg-gray-50 lg:block sticky top-16 h-[calc(100dvh-4rem)] overflow-y-auto">
-            <DoctorPalette
-              scoreEntries={core.scoreEntries}
-              getDoctorName={core.getDoctorName}
-              highlightedDoctorId={core.highlightedDoctorId}
-              dragSourceType={core.dragSourceType}
-              scoreMin={core.scoreMin}
-              scoreMax={core.scoreMax}
-              onDoctorListDragStart={core.handleDoctorListDragStart}
-              onClearDragState={core.clearDragState}
-              onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
-              onTrashDragOver={core.handleTrashDragOver}
-              onTrashDrop={core.handleTrashDrop}
-              onLockAll={core.handleLockAll}
-              onUnlockAll={core.handleUnlockAll}
-              lockedShiftCount={core.lockedShiftKeys.size}
-              hasShifts={core.schedule.some((row) => row.day_shift || row.night_shift)}
-            />
-          </aside>
-        </div>
-      ) : (
-        /* ━━━━━━━━━━ モバイル レイアウト ━━━━━━━━━━ */
-        <>
-          {/* 年月バー */}
+      {/* ━━━━━━━━━━ メインレイアウト ━━━━━━━━━━ */}
+      {/* 年月バー */}
           <div className="flex items-center justify-between border-b bg-white px-4 py-2">
             <div className="flex items-center gap-2">
               <select
@@ -346,65 +217,9 @@ export default function AppPage() {
               <CompactGenerateCard core={core} onOpenSettings={openSettings} onOpenDoctorManage={() => openDrawer("doctor-manage")} />
             )}
           </main>
-        </>
-      )}
 
-      {/* ━━━━━━ PC: 生成設定スライドパネル ━━━━━━ */}
-      {isDesktop && (
-        <SettingsSlidePanel isOpen={isGenSettingsOpen} onClose={() => setIsGenSettingsOpen(false)}>
-          <DashboardSettingsPanel
-            year={core.year} month={core.month} daysInMonth={core.daysInMonth}
-            numDoctors={core.numDoctors} activeDoctors={core.activeDoctors}
-            scoreMin={core.scoreMin} scoreMax={core.scoreMax}
-            onScoreMinChange={core.setScoreMin} onScoreMaxChange={core.setScoreMax}
-            hardConstraints={core.hardConstraints} onHardConstraintChange={core.handleHardConstraintChange}
-            isSavingOptimizerConfig={core.isSavingOptimizerConfig}
-            optimizerSaveMessage={core.optimizerSaveMessage}
-            onSaveOptimizerConfig={() => { void core.saveOptimizerConfig(); }}
-            isLoadingCustom={core.isLoadingCustom} isSavingCustom={core.isSavingCustom}
-            customError={core.customError} customSaveMessage={core.customSaveMessage}
-            hasUnsavedCustomChanges={core.hasUnsavedCustomChanges}
-            holidayWorkdayOverrides={core.holidayWorkdayOverrides}
-            isHolidayLikeDay={core.isHolidayLikeDay}
-            onToggleHoliday={core.toggleHoliday} onToggleHolidayOverride={core.handleHolidayOverrideToggle}
-            onSaveCustomHolidays={() => { void core.saveCustomHolidays(); }}
-            doctorUnavailableMonth={core.doctorUnavailableMonth}
-            selectedDoctorId={core.selectedDoctorId}
-            unavailableMap={core.unavailableMap} fixedUnavailableWeekdaysMap={core.fixedUnavailableWeekdaysMap}
-            pyWeekdays={core.pyWeekdays}
-            onSelectedDoctorChange={core.setSelectedDoctorId}
-            onDoctorUnavailableMonthChange={core.setDoctorUnavailableMonth}
-            onToggleAllUnavailable={core.toggleAllUnavailable}
-            onToggleUnavailable={core.toggleUnavailable}
-            onToggleFixedWeekday={core.toggleFixedWeekday}
-            minScoreMap={core.minScoreMap} maxScoreMap={core.maxScoreMap} targetScoreMap={core.targetScoreMap}
-            onMinScoreChange={core.handleMinScoreChange} onMaxScoreChange={core.handleMaxScoreChange}
-            onTargetScoreChange={core.handleTargetScoreChange}
-            onSaveAllDoctorsSettings={() => { void core.saveAllDoctorsSettings(); }}
-            isBulkSavingDoctors={core.isBulkSavingDoctors}
-            objectiveWeights={core.objectiveWeights} weightChanges={core.weightChanges}
-            isWeightsOpen={core.isWeightsOpen} isHardConstraintsOpen={core.isHardConstraintsOpen}
-            onToggleWeights={core.handleToggleWeightsPanel}
-            onResetWeights={() => core.setObjectiveWeights(core.DEFAULT_OBJECTIVE_WEIGHTS)}
-            onCloseWeights={() => core.setIsWeightsOpen(false)}
-            onWeightChange={core.setWeight} onSetWeights={core.setObjectiveWeights}
-            onToggleHardConstraints={core.handleToggleHardConstraintsPanel}
-            onResetHardConstraints={() => core.setHardConstraints(core.DEFAULT_HARD_CONSTRAINTS)}
-            onCloseHardConstraints={() => core.setIsHardConstraintsOpen(false)}
-            shiftScores={core.shiftScores} setShiftScores={core.setShiftScores}
-            isPreviousMonthShiftsOpen={core.isPreviousMonthShiftsOpen}
-            onTogglePreviousMonthShifts={core.handleTogglePreviousMonthShiftsPanel}
-            onClosePreviousMonthShifts={() => core.setIsPreviousMonthShiftsOpen(false)}
-            prevMonthLastDay={core.prevMonthLastDay} prevMonthTailDays={core.prevMonthTailDays}
-            getPreviousMonthShiftDoctorId={core.getPreviousMonthShiftDoctorId}
-            onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
-            onSetPreviousMonthShift={core.setPreviousMonthShift}
-          />
-        </SettingsSlidePanel>
-      )}
-
-      {/* ━━━━━━ モバイル: 設定画面（1画面スクロール） ━━━━━━ */}
-      {isSettingsOpen && !isDesktop && (
+      {/* ━━━━━━ 設定画面（1画面スクロール） ━━━━━━ */}
+      {isSettingsOpen && (
         <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3">
             <h2 className="text-lg font-bold text-gray-800">設定</h2>

@@ -84,6 +84,7 @@ export function useScheduleDnd({
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
   const [draggingListMode, setDraggingListMode] = useState<DraggingListMode>(null);
   const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
+  const [highlightedShiftSource, setHighlightedShiftSource] = useState<{ day: number; shiftType: ShiftType } | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
   const [touchHoverShiftKey, setTouchHoverShiftKey] = useState<string | null>(null);
   const [hoverErrorMessage, setHoverErrorMessage] = useState<string | null>(null);
@@ -132,9 +133,30 @@ export function useScheduleDnd({
     setToastMessage(message);
   };
 
-  const toggleHighlightedDoctor = (doctorId: string | null | undefined) => {
-    if (!doctorId) return;
-    setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
+  const toggleHighlightedDoctor = (doctorId: string | null | undefined, day?: number, shiftType?: ShiftType) => {
+    // 入れ替え準備中に医師名クリック → 入れ替えをキャンセル
+    if (swapSource) {
+      cancelSwapSelection();
+    }
+    if (!doctorId) {
+      setHighlightedDoctorId(null);
+      setHighlightedShiftSource(null);
+      return;
+    }
+    setHighlightedDoctorId((prev) => {
+      if (prev === doctorId) {
+        // 同じ医師を再クリック → ハイライト解除
+        setHighlightedShiftSource(null);
+        return null;
+      }
+      // 新しい医師をクリック → セル情報があれば記録
+      if (day !== undefined && shiftType) {
+        setHighlightedShiftSource({ day, shiftType });
+      } else {
+        setHighlightedShiftSource(null);
+      }
+      return doctorId;
+    });
   };
 
   const parseDragPayload = (raw: string | null): DragPayload | null => {
@@ -1023,6 +1045,44 @@ export function useScheduleDnd({
     return swapViolationMap.get(`${day}-${shiftType}`) ?? null;
   };
 
+  // ── ハイライト元セルからの入れ替え違反マップ（dashboard用） ──
+  // テーブルで医師名をクリック → そのセルから各セルへの入れ替えシミュレーション
+  // パレットで医師名をクリック → 各セルへの配置可否チェック（入れ替え元なし）
+  const highlightedViolationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!highlightedDoctorId) return map;
+    const src = highlightedShiftSource;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        if (src && src.day === row.day && src.shiftType === st) continue;
+        const key = `${row.day}-${st}`;
+        if (lockedShiftKeys.has(getShiftKey(row.day, st))) {
+          map.set(key, "ロック済み");
+          continue;
+        }
+        const hlInfo = isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) continue;
+
+        if (src) {
+          // テーブルからクリック: 入れ替えシミュレーション
+          const msg = getSwapConstraintMessage(highlightedDoctorId, src.day, src.shiftType, row.day, st);
+          if (msg) map.set(key, msg);
+        } else {
+          // パレットからクリック: 配置可否チェック（追加配置）
+          const msg = getPlacementConstraintMessage(highlightedDoctorId, row.day, st, {
+            ignoreShiftKeys: new Set<string>(),
+          });
+          if (msg) map.set(key, formatConstraintForToast(highlightedDoctorId, msg));
+        }
+      }
+    }
+    return map;
+  }, [highlightedDoctorId, highlightedShiftSource, schedule, lockedShiftKeys, isHolidayLikeDay, getSwapConstraintMessage, getPlacementConstraintMessage, formatConstraintForToast]);
+
+  const getHighlightedViolation = (day: number, shiftType: ShiftType): string | null => {
+    return highlightedViolationMap.get(`${day}-${shiftType}`) ?? null;
+  };
+
   // --- モバイル用命令的アクション ---
 
   const placeDoctorInShift = (day: number, shiftType: ShiftType, doctorId: string): boolean => {
@@ -1080,6 +1140,7 @@ export function useScheduleDnd({
     getSwapViolation,
     isHighlightedDoctorBlockedDay,
     isHighlightedDoctorBlockedShift,
+    getHighlightedViolation,
     getPlacementConstraintMessage,
     toggleHighlightedDoctor,
     selectManualDoctor,

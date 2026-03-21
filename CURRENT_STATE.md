@@ -78,41 +78,12 @@
 
 ---
 
-#### Task5-2: /app + /dashboard レスポンシブ統合 + モバイルUI全面刷新（着手中）
+#### Task5-2: モバイルUI全面刷新 + PC/モバイル分離（✅ 完了）
 
-**目的:** /app と /dashboard を1つのページに統合。デバイス幅で自動切替。モバイルUIをタップ→ボトムシート方式に全面刷新。
-
-**方針:**
-- PC幅（≥1024px）: 現 /dashboard のレイアウト（2カラムスケジュール + 右パレット + スライドイン設定）
-- モバイル幅（<1024px）: 新モバイルUI（タップ→ボトムシート方式）
-- `useEffect` + `matchMedia` で `isDesktop` を判定、コンポーネントごと切替（不要DOM生成しない）
-- ヘッダーの「かんたん/一覧」タブ → 不要に（デバイス自動切替）
-
-##### モバイルUI設計（タップ→ボトムシート方式）
-
-**テーブル:**
-- 3列（日曜 | 日直 | 当直）— 日付+曜日を1列に結合
-- セル内にボタンなし（⇄/🔒を廃止）→ 医師名のみ、横幅最大活用
-- 13-14pxフォント（現10-11pxから大幅拡大）
-- ロックは小🔒アイコン表示のみ（操作はボトムシートから）
-- 1列レイアウト（縦スクロール）
-
-**タップ操作:**
-- 医師ありセルタップ → ボトムシート: 変更 / 入替え / 解除 / ロック
-- 空セルタップ → ボトムシート: 医師選択リスト（スコア付き・制約違反はグレーアウト+理由）
-- 入替えフロー: タップ→「入替え」→バナー表示→別セルタップ→スワップ完了
-
-**ボトムツールバー（4ボタンのみ）:**
-```
-[▶ 生成]   [仮保存] [確定保存] [⚙]
-```
-
-**廃止するもの:**
-- スワップモードトグル → ボトムシート「入替え」に統合
-- 削除モード → ボトムシート「解除」に統合
-- 手動配置モード → ボトムシート「医師選択」に統合
-- セル内⇄ボタン / セル内🔒ボタン → ボトムシートに移動
-- 全ロック/全解除/全削除 → ⚙設定内に移動
+**方針（確定）:**
+- `/app` = **モバイル版（モバイル特化）** — CompactGenerateCard + MobileScheduleBoard + セットアップウィザード + オンボーディング
+- `/dashboard` = **PC版（PC特化）** — DashboardScheduleTable + DoctorPalette + DashboardToolbar + SettingsSlidePanel + 警告ダイアログ + スマホ検知バナー
+- PC/モバイル自動切替（matchMedia）は廃止 — ヘッダーのタブ切替で明示的に遷移
 
 ##### 実装ステップ
 
@@ -120,24 +91,16 @@
 |---|------|------|
 | 5-2a | `MobileActionSheet.tsx` 新規作成（ボトムシートUI） | ✅ 完了 |
 | 5-2b | `MobileScheduleBoard.tsx` 全面書き換え（タップ→シート方式） | ✅ 完了 |
-| 5-2c | `/app/page.tsx` にPC/モバイル切替ロジック追加 | ✅ 完了 |
-| 5-2d | `/dashboard/page.tsx` の機能を `/app/page.tsx` に統合 | ✅ 完了 |
-| 5-2e | 不要ファイル削除（SettingsPanel.tsx / useDashboardState.ts / dashboard/page.tsx） | 未着手 |
-| 5-2f | AppHeader簡素化（タブ切替廃止） | 未着手 |
+| 5-2c | `/app/page.tsx` からPC用レイアウト（matchMedia/isDesktop/DashboardScheduleTable等）を完全削除・モバイル特化 | ✅ 完了 |
+| 5-2d | `/dashboard/page.tsx` にPC専用警告ダイアログ実装（全体生成時ロック警告・全解除確認・仮保存上書き確認・ツールバーロックトグル） | ✅ 完了 |
+| 5-2e | 不要ファイル削除（SettingsPanel.tsx / useDashboardState.ts） | 未着手 |
+| 5-2f | AppHeader簡素化（タブ切替廃止検討） | 未着手 |
 
-##### 削除・統合予定
-
-| ファイル | 行数 | 方針 |
-|---------|------|------|
-| `/dashboard/page.tsx` | 271行 | `/app/page.tsx` に統合 |
-| `SettingsPanel.tsx` | 490行 | DashboardSettingsPanel に統合（DoctorSettingsPanel部分は移動） |
-| `useDashboardState.ts` | 359行 | useOnCallCore に統合済みなら削除 |
-
-##### 残すもの（PC用）
+##### 残すもの（PC用: /dashboard）
 - `DashboardScheduleTable.tsx` / `DashboardToolbar.tsx` / `DoctorPalette.tsx` / `DashboardSettingsPanel.tsx` / `SettingsSlidePanel.tsx`
 
-##### 残すもの（モバイル用）
-- `MobileScheduleBoard.tsx`（全面書き換え） / `MobileActionSheet.tsx`（新規）
+##### 残すもの（モバイル用: /app）
+- `MobileScheduleBoard.tsx` / `MobileActionSheet.tsx` / `CompactGenerateCard` / セットアップウィザード・オンボーディング
 
 ---
 
@@ -276,7 +239,20 @@
 
 | 日付 | 内容 |
 |------|------|
-| 2026-03-20 | Task5-2c/d完了: /app/page.tsxにPC/モバイル統合レイアウト実装（matchMedia isDesktop切替）・PC=DashboardScheduleTable+DoctorPalette+SettingsSlidePanel・モバイル=CompactGenerateCard+MobileScheduleBoard・設定を4タブ化（ルール/医師/祝日/その他）・/dashboardの全機能を/appに統合 |
+| 2026-03-21 | ページ名変更: 「かんたん」→「モバイル版」・「一覧」→「PC版」（AppHeader/DefaultPageSetting/OnboardingModal）・ダッシュボード設定ボタン「設定」→「アカウント」 |
+| 2026-03-21 | スマホ検知バナー: /dashboardにモバイル検知（768px未満 or タッチデバイス）→「モバイル版が快適です」バナー表示（×で閉じれる） |
+| 2026-03-21 | 入れ替えボタン（⇄）: 各セルのロックボタン左に追加・タップで入れ替え元選択→別セル⇄タップで入れ替え実行・選択元は濃い紫塗りつぶし・入れ替え中に医師名クリックでキャンセル+新医師ハイライト |
+| 2026-03-21 | ハイライト違反マップ改善: テーブルクリック=swap simulation（クリックしたセルからの入れ替え可否）・パレットクリック=placement check（配置可否）・間隔/土曜上限/日祝上限/不可日等すべての制約を反映・赤セルホバーでフローティングツールチップ（医師ごとに改行表示） |
+| 2026-03-21 | 配色リデザイン: 曜日ベース（土曜=青/日祝=アンバー/平日=グレー）・制約違反=赤統一・ロックボタン明確化（ロック=アンバー塗り/未ロック=グレー枠線）・ハイライト=青太字+ring |
+| 2026-03-21 | パレットUI改善: ロック/解除ボタン削除（ツールバーに統合済み）・ゴミ箱を下部sticky固定・ハイライト時のカード目立ち強化 |
+| 2026-03-21 | ドラッグ中フローティングツールチップ: マウス追従で制約違反理由を表示（医師ごとに改行） |
+| 2026-03-21 | /dashboard固定レイアウト: min-w-1280px固定+自動zoom縮小（window.innerWidth/1280）・DoctorPaletteをposition:fixedで画面右端固定+トグル開閉ボタン（▶/◀）・paddingRightでメイン領域との重なり防止 |
+| 2026-03-21 | /dashboardツールバー再構築: 生成スプリットボタン（固定なし→「▶ 生成」全体生成、固定あり→「▶ 再生成」未固定枠のみ）・ドロップダウンに仮保存読込/確定済み読込/未固定枠クリアを統合・「白紙作成」独立ボタン追加・確定済み読込時に確認ダイアログ追加 |
+| 2026-03-21 | Undo/Redo強化: 最大15スナップショット保持（生成でもリセットされない）・生成時の中間状態（未固定枠クリア）をスキップ・変更セルに青ハイライト1.5秒フェード（undoFlashアニメーション）・D&D入替え時も同じハイライト |
+| 2026-03-21 | /app→モバイル専用: PC用レイアウト完全削除（matchMedia/isDesktop/DashboardScheduleTable/DoctorPalette/SettingsSlidePanel/DashboardSettingsPanel）・/dashboardはPC専用として独立維持 |
+| 2026-03-21 | /dashboard警告UX: 全体生成時ロック存在警告・ツールバーロックトグル・全解除確認ダイアログ・仮保存上書き確認（タイムスタンプ表示） |
+| 2026-03-21 | LP改善: InlineDemo初期値変更（医師12/間隔4/当直3/土曜1/日祝3）・月セレクタ追加・LP文言全面リライト（モバイル+PC訴求・専門用語排除） |
+| 2026-03-20 | Task5-2c/d: /app/page.tsxにPC/モバイル統合レイアウト実装（後に/appからPC部分削除） |
 | 2026-03-20 | Task5-2a/b完了: MobileActionSheet新規作成（タップ→ボトムシートUI・変更/入替え/解除/ロック・医師選択リスト+スコア+制約表示）・MobileScheduleBoard全面書き換え（3列テーブル・13-14pxフォント・セル内ボタン廃止・ツールバー4ボタン化）・useScheduleDndにモバイル用命令的API追加（placeDoctorInShift/removeDoctorFromShift/startSwapFrom/executeSwapTo） |
 | 2026-03-20 | Task5-1完了: デッドコード削除 — ScheduleBoard.tsx(500行)+ScheduleCell.tsx(331行)+test/page.tsx(65行)=896行削除。Task5ロードマップ策定（UI統合・V3 Optimizer計画） |
 | 2026-03-20 | ダッシュボードUI改善: スケジュール表2カラム化（前半/後半横並び）・医師名中央配置・行高さ固定（h-8+overflow-hidden+td overflow-hidden）・全設定モーダルヘッダー統一リデザイン（閉じる→×アイコン・保存/リセットをタイトル下コンパクトボタン化・モバイルでの全幅ブロック崩壊を解消） |

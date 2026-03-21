@@ -11,8 +11,8 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "かんたん", href: "/app", match: "/app" },
-  { label: "一覧", href: "/dashboard", match: "/dashboard" },
+  { label: "モバイル版", href: "/app", match: "/app" },
+  { label: "PC版", href: "/dashboard", match: "/dashboard" },
   { label: "当直表", href: "/view", match: "/view" },
 ];
 

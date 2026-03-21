@@ -190,6 +190,7 @@ export function useScheduleConstraints({
   const isHighlightedDoctorBlockedDay = (day: number) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day);
   const isHighlightedDoctorBlockedShift = (day: number, shiftType: ShiftType) => isDoctorBlockedByManualConstraints(highlightedDoctorId, day, shiftType);
 
+
   const getPlacementConstraintMessage = (
     doctorId: string | null | undefined,
     day: number,

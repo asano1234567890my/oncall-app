@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Settings, Undo2, Redo2, ChevronDown, Shield } from "lucide-react";
+import { Settings, Undo2, Redo2, ChevronDown, Shield, Lock, Unlock, FileSpreadsheet } from "lucide-react";
 
 type DashboardToolbarProps = {
   year: number;
@@ -18,21 +18,25 @@ type DashboardToolbarProps = {
   onOpenSettings: () => void;
   onGenerate: () => void;
   onRegenerateUnlocked: () => void;
-  onDeleteMonthSchedule: () => void;
-  isDeletingMonthSchedule: boolean;
   lockedShiftCount: number;
   activeDoctorsCount: number;
+  onLockAll: () => void;
+  onUnlockAll: () => void;
+  hasShifts: boolean;
   // 保存
   onSaveToDB: () => void;
   isSaving: boolean;
   onSaveDraft: () => void;
   isDraftSaving: boolean;
+  // ドロップダウン内
   onLoadDraft: () => void;
   isDraftLoading: boolean;
   draftSavedAt: string | null;
-  // 確定読み込み
   onLoadConfirmedForEdit: () => void;
   isLoadingConfirmed: boolean;
+  onClearUnlocked: () => void;
+  // 白紙作成
+  onCreateBlank: () => void;
   hasSchedule: boolean;
 };
 
@@ -51,10 +55,11 @@ export default function DashboardToolbar({
   onOpenSettings,
   onGenerate,
   onRegenerateUnlocked,
-  onDeleteMonthSchedule,
-  isDeletingMonthSchedule,
   lockedShiftCount,
   activeDoctorsCount,
+  onLockAll,
+  onUnlockAll,
+  hasShifts,
   onSaveToDB,
   isSaving,
   onSaveDraft,
@@ -64,6 +69,8 @@ export default function DashboardToolbar({
   draftSavedAt,
   onLoadConfirmedForEdit,
   isLoadingConfirmed,
+  onClearUnlocked,
+  onCreateBlank,
   hasSchedule,
 }: DashboardToolbarProps) {
   const [isGenMenuOpen, setIsGenMenuOpen] = useState(false);
@@ -80,9 +87,10 @@ export default function DashboardToolbar({
   }, [isGenMenuOpen]);
 
   const currentYear = new Date().getFullYear();
+  const hasLocks = lockedShiftCount > 0;
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
       {/* Year/Month selector */}
       <div className="flex items-center gap-1">
         <select
@@ -115,16 +123,16 @@ export default function DashboardToolbar({
         設定
       </button>
 
-      {/* Generate dropdown */}
+      {/* Generate split button + dropdown */}
       <div ref={genMenuRef} className="relative">
         <div className="flex">
           <button
             type="button"
-            onClick={onGenerate}
+            onClick={hasLocks ? onRegenerateUnlocked : onGenerate}
             disabled={isLoading || activeDoctorsCount === 0 || isOverrideMode}
             className="rounded-l-md bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
           >
-            {isLoading ? "生成中..." : "▶ 生成"}
+            {isLoading ? "生成中..." : hasLocks ? "▶ 再生成" : "▶ 生成"}
           </button>
           <button
             type="button"
@@ -136,7 +144,16 @@ export default function DashboardToolbar({
           </button>
         </div>
         {isGenMenuOpen && (
-          <div className="absolute left-0 top-full z-50 mt-1 w-48 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+          <div className="absolute left-0 top-full z-50 mt-1 w-52 rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+            {/* 生成系 */}
+            <button
+              type="button"
+              onClick={() => { onRegenerateUnlocked(); setIsGenMenuOpen(false); }}
+              disabled={isLoading || lockedShiftCount === 0}
+              className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+            >
+              未固定枠を再生成
+            </button>
             <button
               type="button"
               onClick={() => { onGenerate(); setIsGenMenuOpen(false); }}
@@ -145,13 +162,20 @@ export default function DashboardToolbar({
             >
               全体を自動生成
             </button>
+            {/* 読み込み系 */}
+            <hr className="my-1 border-gray-100" />
             <button
               type="button"
-              onClick={() => { onRegenerateUnlocked(); setIsGenMenuOpen(false); }}
-              disabled={isLoading || lockedShiftCount === 0}
+              onClick={() => { onLoadDraft(); setIsGenMenuOpen(false); }}
+              disabled={isLoading || isDraftLoading || !draftSavedAt}
               className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
-              未固定枠のみ再生成
+              {isDraftLoading ? "読込中..." : "仮保存を読み込む"}
+              {draftSavedAt && (
+                <span className="ml-1 text-gray-400">
+                  ({new Date(draftSavedAt).toLocaleDateString("ja-JP", { month: "short", day: "numeric" })})
+                </span>
+              )}
             </button>
             <button
               type="button"
@@ -159,20 +183,33 @@ export default function DashboardToolbar({
               disabled={isLoading || isLoadingConfirmed}
               className="w-full px-3 py-1.5 text-left text-xs text-gray-700 hover:bg-gray-100 disabled:opacity-50"
             >
-              {isLoadingConfirmed ? "読込中..." : "確定済みシフトを修正"}
+              {isLoadingConfirmed ? "読込中..." : "確定済みを読み込む"}
             </button>
+            {/* クリア系 */}
             <hr className="my-1 border-gray-100" />
             <button
               type="button"
-              onClick={() => { onDeleteMonthSchedule(); setIsGenMenuOpen(false); }}
-              disabled={isDeletingMonthSchedule}
+              onClick={() => { onClearUnlocked(); setIsGenMenuOpen(false); }}
+              disabled={!hasSchedule || lockedShiftCount === 0}
               className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
-              {isDeletingMonthSchedule ? "削除中..." : "全削除"}
+              未固定枠をクリア
             </button>
           </div>
         )}
       </div>
+
+      {/* Blank schedule */}
+      <button
+        type="button"
+        onClick={onCreateBlank}
+        disabled={isLoading || isOverrideMode}
+        className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+        title="白紙のシフトを作成"
+      >
+        <FileSpreadsheet className="h-3.5 w-3.5" />
+        白紙作成
+      </button>
 
       {/* Override mode */}
       <button
@@ -188,6 +225,31 @@ export default function DashboardToolbar({
         <Shield className="h-3.5 w-3.5" />
         強制
       </button>
+
+      {/* Lock toggle */}
+      {hasLocks ? (
+        <button
+          type="button"
+          onClick={onUnlockAll}
+          className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-bold text-amber-700 transition hover:bg-amber-100"
+          title="すべての固定を解除"
+        >
+          <Lock className="h-3.5 w-3.5" />
+          <span className="tabular-nums">{lockedShiftCount}</span>
+          <span className="inline">固定中</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onLockAll}
+          disabled={!hasShifts}
+          className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs font-bold text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+          title="すべてのシフトを固定"
+        >
+          <Unlock className="h-3.5 w-3.5" />
+          <span className="inline">全固定</span>
+        </button>
+      )}
 
       {/* Undo/Redo */}
       <div className="flex items-center gap-1">
@@ -213,16 +275,6 @@ export default function DashboardToolbar({
 
       {/* Save buttons */}
       <div className="ml-auto flex items-center gap-1.5">
-        {draftSavedAt && (
-          <button
-            type="button"
-            onClick={onLoadDraft}
-            disabled={isDraftLoading}
-            className="text-xs font-semibold text-blue-600 underline hover:text-blue-800 disabled:opacity-50"
-          >
-            {isDraftLoading ? "読込中..." : "仮保存を読込"}
-          </button>
-        )}
         <button
           type="button"
           onClick={onSaveDraft}

@@ -70,7 +70,7 @@ export default function LandingPage() {
           <p className="mt-4 text-base text-gray-600 md:text-lg max-w-xl mx-auto">
             条件を入れるだけで、公平な当直表を自動作成。
             <br />
-            あとはドラッグ&ドロップで微調整するだけ。
+            スマホでもPCでも、すぐに使えます。
           </p>
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
@@ -99,17 +99,17 @@ export default function LandingPage() {
             <PainCard
               emoji="⚖️"
               title="誰かに偏ってしまう"
-              description="当直回数・スコアを自動で公平に配分。手動で調整する必要はありません。"
+              description="当直回数・曜日の偏りを自動で均等に配分します。"
             />
             <PainCard
               emoji="📅"
-              title="希望日の調整が大変"
-              description="医師ごとに専用リンクを発行。各自がスマホで不可日を入力できます。"
+              title="希望日を集めるのが大変"
+              description="医師ごとの専用リンクを送るだけ。各自がスマホで不可日を入力できます。"
             />
             <PainCard
               emoji="🔄"
-              title="作り直しが面倒"
-              description="ドラッグ&ドロップで即修正。ロック機能で確定済み枠を保護しながら再生成できます。"
+              title="直すと別の所が崩れる"
+              description="1か所直すたびに別のルール違反が出る。Excelの終わらない修正ループ。"
             />
           </div>
         </div>
@@ -124,18 +124,18 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <StepCard
               number={1}
-              title="人数とルールを入力"
-              description="医師の人数・当直間隔・上限回数などを設定します。初回は質問形式でガイドします。"
+              title="人数とルールを設定"
+              description="医師の人数・当直間隔・上限回数などを、かんたんな質問形式で設定できます。"
             />
             <StepCard
               number={2}
-              title="自動生成ボタンを押す"
-              description="AI最適化エンジンが制約を満たす最適なシフトを自動で生成します。"
+              title="ボタンひとつで自動作成"
+              description="ルールに沿った公平なシフトを数秒で自動作成します。"
             />
             <StepCard
               number={3}
-              title="手動で微調整"
-              description="生成されたシフトをドラッグ&ドロップで調整。確定したらDBに保存できます。"
+              title="調整して保存・出力"
+              description="ルール違反を自動チェックしながら入れ替え。確定した枠だけ残して再作成もできます。"
             />
           </div>
         </div>

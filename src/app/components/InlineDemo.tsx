@@ -14,12 +14,12 @@ type ScheduleRow = {
 
 export default function InlineDemo() {
   // ── 基本設定 ──
-  const [numDoctors, setNumDoctors] = useState(8);
-  const [intervalDays, setIntervalDays] = useState(2);
+  const [numDoctors, setNumDoctors] = useState(12);
+  const [intervalDays, setIntervalDays] = useState(4);
   const [shiftsPerMonth, setShiftsPerMonth] = useState(3);
 
   // ── ハード制約 ──
-  const [maxSaturdayNights, setMaxSaturdayNights] = useState(2);
+  const [maxSaturdayNights, setMaxSaturdayNights] = useState(1);
   const [maxSunholWorks, setMaxSunholWorks] = useState<number | null>(3);
   const [holidayShiftMode, setHolidayShiftMode] = useState<"split" | "combined">("split");
 
@@ -39,8 +39,8 @@ export default function InlineDemo() {
   const [swapCount, setSwapCount] = useState(0);
 
   const now = new Date();
-  const [demoYear] = useState(now.getFullYear());
-  const [demoMonth] = useState(now.getMonth() + 1);
+  const [demoYear, setDemoYear] = useState(now.getFullYear());
+  const [demoMonth, setDemoMonth] = useState(now.getMonth() + 1);
 
   const WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"];
 
@@ -60,6 +60,16 @@ export default function InlineDemo() {
   };
 
   const intervalLabel = intervalDays === 0 ? "翌日OK" : `${intervalDays}日`;
+
+  // ── 月変更 ──
+  const changeMonth = (delta: number) => {
+    let y = demoYear;
+    let m = demoMonth + delta;
+    if (m > 12) { m = 1; y += 1; }
+    if (m < 1) { m = 12; y -= 1; }
+    setDemoYear(y);
+    setDemoMonth(m);
+  };
 
   // ── 適用中ルール数 ──
   const ruleCount = [
@@ -816,6 +826,28 @@ export default function InlineDemo() {
           </div>
         </div>
       )}
+
+      {/* 対象月 */}
+      <div>
+        <label className="block text-sm font-bold text-gray-700 mb-2">対象月</label>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => changeMonth(-1)}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            ←
+          </button>
+          <span className="text-lg font-bold text-gray-800 min-w-[8rem] text-center">
+            {demoYear}年{demoMonth}月
+          </span>
+          <button
+            onClick={() => changeMonth(1)}
+            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            →
+          </button>
+        </div>
+      </div>
 
       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
