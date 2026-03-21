@@ -94,7 +94,7 @@
 | 5-2c | `/app/page.tsx` からPC用レイアウト（matchMedia/isDesktop/DashboardScheduleTable等）を完全削除・モバイル特化 | ✅ 完了 |
 | 5-2d | `/dashboard/page.tsx` にPC専用警告ダイアログ実装（全体生成時ロック警告・全解除確認・仮保存上書き確認・ツールバーロックトグル） | ✅ 完了 |
 | 5-2e | 不要ファイル削除（SettingsPanel.tsx / useDashboardState.ts） | 未着手 |
-| 5-2f | AppHeader簡素化（タブ切替廃止検討） | 未着手 |
+| 5-2f | ~~AppHeader簡素化（タブ切替廃止検討）~~ | ✅ 不要 — モバイル版/PC版/当直表のタブ構成で確定 |
 
 ##### 残すもの（PC用: /dashboard）
 - `DashboardScheduleTable.tsx` / `DashboardToolbar.tsx` / `DoctorPalette.tsx` / `DashboardSettingsPanel.tsx` / `SettingsSlidePanel.tsx`
