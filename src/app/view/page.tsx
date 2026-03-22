@@ -272,7 +272,7 @@ export default function ViewSchedulePage() {
                 </button>
                 {copyMessage === "done" && (
                   <Link
-                    href="/app"
+                    href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?draft=${year}-${month}` : `/app?draft=${year}-${month}`}
                     className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors animate-pulse"
                   >
                     編集画面へ →

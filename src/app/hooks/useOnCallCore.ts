@@ -18,6 +18,8 @@ import { DEFAULT_HARD_CONSTRAINTS, DEFAULT_OBJECTIVE_WEIGHTS, type ObjectiveWeig
 import { weightGroups } from "../components/settings/shared";
 
 export function useOnCallCore() {
+  const autoLoadDraftRef = useRef<string | null>(null);
+
   // ── 履歴管理 ──
   const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo, changedShiftKeys } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
@@ -165,6 +167,31 @@ export function useOnCallCore() {
 
   // ── 仮保存 ──
   const draft = useDraftSchedule(year, month, auth.isAuthenticated);
+
+  // ── URL ?draft=YYYY-MM からの自動展開 ──
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const draftParam = params.get("draft");
+    if (!draftParam) return;
+    // 同じパラメータで二重実行しない
+    if (autoLoadDraftRef.current === draftParam) return;
+    autoLoadDraftRef.current = draftParam;
+
+    const [draftYear, draftMonth] = draftParam.split("-").map(Number);
+    if (draftYear && draftMonth) {
+      if (draftYear !== year) setYear(draftYear);
+      if (draftMonth !== month) setMonth(draftMonth);
+      // ドラフト読み込み（draft hookの年月切り替え反映を待つ）
+      setTimeout(async () => {
+        const loaded = await draft.loadDraft();
+        if (loaded) commitSchedule(loaded);
+        // URLからパラメータを消す
+        window.history.replaceState({}, "", window.location.pathname);
+      }, 500);
+    }
+  }, [auth.isAuthenticated]);
 
   // ── Effects ──
   useEffect(() => {
