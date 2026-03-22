@@ -13,6 +13,7 @@ import jpholiday
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from schemas.optimize import ConstraintDiagnostic, DiagnosticInfo
 from services.optimizer import OnCallOptimizer
 
 router = APIRouter(prefix="/api/demo", tags=["Demo"])
@@ -109,15 +110,27 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
             locked_shifts=[],
         )
 
+        # Pre-validation
+        pre_errors = optimizer.pre_validate()
+        if pre_errors:
+            _undo_rate_limit(client_ip)
+            return {
+                "success": False,
+                "message": "制約の設定に問題があります",
+                "diagnostics": DiagnosticInfo(
+                    pre_check_errors=[ConstraintDiagnostic(**e) for e in pre_errors]
+                ).model_dump(),
+            }
+
         optimizer.build_model()
         solve_result = optimizer.solve(time_limit_seconds=3.0)
 
         if not solve_result.get("success"):
             _undo_rate_limit(client_ip)
-            raise HTTPException(
-                status_code=400,
-                detail=solve_result.get("message", "生成に失敗しました"),
-            )
+            return {
+                "success": False,
+                "message": solve_result.get("message", "スケジュールを生成できませんでした"),
+            }
 
         # Map int indices to "demo_N" IDs for display
         if isinstance(solve_result.get("schedule"), list):

@@ -99,6 +99,17 @@ export type DoctorScoreEntry = {
   tone: ScoreTone;
 };
 
+export type ConstraintDiagnostic = {
+  id: string;
+  name_ja: string;
+  current_value?: string | null;
+  suggestion_ja?: string | null;
+};
+
+export type DiagnosticInfo = {
+  pre_check_errors: ConstraintDiagnostic[];
+};
+
 export type ObjectiveWeights = {
   gap5: number;
   soft_unavailable: number;

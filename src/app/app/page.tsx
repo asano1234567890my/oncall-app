@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -574,6 +574,23 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage }: { cor
           </span>
         ) : "シフトを生成する"}
       </button>
+
+      {/* エラー・診断表示 */}
+      {core.error && (
+        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+            <p className="font-bold">{core.error}</p>
+          </div>
+          {core.diagnostics?.pre_check_errors?.map((d, i) => (
+            <div key={i} className="mt-2 ml-6 pl-3 border-l-2 border-red-300">
+              <p className="font-semibold text-red-800">{d.name_ja}</p>
+              {d.current_value && <p className="text-xs text-red-600 mt-0.5">{d.current_value}</p>}
+              {d.suggestion_ja && <p className="text-xs text-red-500 mt-0.5">{d.suggestion_ja}</p>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         onClick={onOpenSettings}

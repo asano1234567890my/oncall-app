@@ -32,6 +32,7 @@ export default function InlineDemo() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [diagnosticErrors, setDiagnosticErrors] = useState<{ id: string; name_ja: string; current_value?: string | null; suggestion_ja?: string | null }[]>([]);
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [scores, setScores] = useState<Record<string, number>>({});
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -105,6 +106,7 @@ export default function InlineDemo() {
   const handleGenerate = async () => {
     setIsLoading(true);
     setError("");
+    setDiagnosticErrors([]);
     const t0 = performance.now();
     try {
       const objectiveWeights: Record<string, number> = {};
@@ -149,13 +151,18 @@ export default function InlineDemo() {
           max_score_by_doctor: seniorityMode ? seniority.max : undefined,
         }),
       });
+      const data: unknown = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data: unknown = await res.json().catch(() => ({}));
         const detail = (data as Record<string, unknown>)?.detail;
         throw new Error(typeof detail === "string" ? detail : "生成に失敗しました");
       }
-      const data: unknown = await res.json();
-      const result = data as { schedule?: ScheduleRow[]; scores?: Record<string, number> };
+      const result = data as { success?: boolean; message?: string; schedule?: ScheduleRow[]; scores?: Record<string, number>; diagnostics?: { pre_check_errors?: { id: string; name_ja: string; current_value?: string | null; suggestion_ja?: string | null }[] } };
+      if (result.success === false) {
+        if (result.diagnostics?.pre_check_errors) {
+          setDiagnosticErrors(result.diagnostics.pre_check_errors);
+        }
+        throw new Error(result.message || "スケジュールを生成できませんでした");
+      }
       setSchedule(result.schedule || []);
       setScores(result.scores || {});
       setElapsedMs(performance.now() - t0);
@@ -849,7 +856,18 @@ export default function InlineDemo() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
+          <p className="font-bold">{error}</p>
+          {diagnosticErrors.map((d, i) => (
+            <div key={i} className="mt-1.5 pl-2 border-l-2 border-red-300 text-xs">
+              <p className="font-semibold">{d.name_ja}</p>
+              {d.current_value && <p>{d.current_value}</p>}
+              {d.suggestion_ja && <p className="text-red-500">{d.suggestion_ja}</p>}
+            </div>
+          ))}
+        </div>
+      )}
 
       <button
         onClick={() => { void handleGenerate(); }}

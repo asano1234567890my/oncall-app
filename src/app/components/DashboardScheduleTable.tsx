@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ArrowLeftRight, Lock, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
-import type { ScheduleRow, ShiftType } from "../types/dashboard";
+import type { DiagnosticInfo, ScheduleRow, ShiftType } from "../types/dashboard";
 
 type CellValidityMap = Map<string, string | null>;
 
@@ -61,6 +61,7 @@ type DashboardScheduleTableProps = {
   // Messages
   toastMessage: string | null;
   error: string;
+  diagnostics?: DiagnosticInfo | null;
   saveMessage: string;
   isLoading: boolean;
   // Validation
@@ -111,6 +112,7 @@ export default function DashboardScheduleTable({
   onCancelSwap,
   toastMessage,
   error,
+  diagnostics,
   saveMessage,
   isLoading,
   saveValidationMessages,
@@ -349,7 +351,16 @@ export default function DashboardScheduleTable({
       )}
 
       {error && (
-        <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{error}</div>
+        <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <p className="font-bold">{error}</p>
+          {diagnostics?.pre_check_errors?.map((d, i) => (
+            <div key={i} className="mt-1.5 pl-3 border-l-2 border-red-300">
+              <p className="font-semibold">{d.name_ja}</p>
+              {d.current_value && <p className="text-red-600">{d.current_value}</p>}
+              {d.suggestion_ja && <p className="text-red-500">{d.suggestion_ja}</p>}
+            </div>
+          ))}
+        </div>
       )}
 
       {isOverrideMode && (

@@ -119,9 +119,21 @@ class OptimizeRequest(BaseModel):
         return constraints.model_dump(exclude_unset=True)
 
 
+class ConstraintDiagnostic(BaseModel):
+    id: str
+    name_ja: str
+    current_value: Optional[str] = None
+    suggestion_ja: Optional[str] = None
+
+
+class DiagnosticInfo(BaseModel):
+    pre_check_errors: List[ConstraintDiagnostic] = Field(default_factory=list)
+
+
 class OptimizeResponse(BaseModel):
     success: bool
     status: Optional[str] = None
     message: Optional[str] = None
     schedule: Optional[List[Dict[str, Any]]] = None
     scores: Optional[Dict[str, float]] = None
+    diagnostics: Optional[DiagnosticInfo] = None

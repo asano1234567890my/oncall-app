@@ -24,7 +24,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
     handleLockAll, handleUnlockAll, handleGenerateWithGuard,
     handleDeleteMonthSchedule, isDeletingMonthSchedule,
     handleSaveWithValidation, handleForceSaveToDB, handleDismissSaveValidation,
-    isSaving, saveMessage, saveValidationMessages, isLoading, error,
+    isSaving, saveMessage, saveValidationMessages, isLoading, error, diagnostics,
     placeDoctorInShift, removeDoctorFromShift, startSwapFrom, executeSwapTo,
     cancelSwapSelection, getPlacementConstraintMessage, getSwapViolation,
     highlightedDoctorId, toggleHighlightedDoctor,
@@ -136,7 +136,18 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
   if (!schedule.length) {
     return (
       <>
-        {error && <div className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700">{error}</div>}
+        {error && (
+          <div className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <p className="font-bold">{error}</p>
+            {diagnostics?.pre_check_errors?.map((d, i) => (
+              <div key={i} className="mt-1.5 pl-2 border-l-2 border-red-300">
+                <p className="font-semibold">{d.name_ja}</p>
+                {d.current_value && <p className="text-red-600">{d.current_value}</p>}
+                {d.suggestion_ja && <p className="text-red-500">{d.suggestion_ja}</p>}
+              </div>
+            ))}
+          </div>
+        )}
         {saveMessage && <div className="mb-2 rounded border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-800">{saveMessage}</div>}
       </>
     );
@@ -151,7 +162,18 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
         </div>
       )}
 
-      {error && <div className="mb-1 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700">{error}</div>}
+      {error && (
+        <div className="mb-1 rounded border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700">
+          <p className="font-bold">{error}</p>
+          {diagnostics?.pre_check_errors?.map((d, i) => (
+            <div key={i} className="mt-1 pl-2 border-l-2 border-red-300">
+              <p className="font-semibold">{d.name_ja}</p>
+              {d.current_value && <p className="text-red-600">{d.current_value}</p>}
+              {d.suggestion_ja && <p className="text-red-500">{d.suggestion_ja}</p>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Swap mode banner — fixed height to prevent layout shift */}
       <div className="mb-1 h-8 flex items-center overflow-hidden">

@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type {
+  DiagnosticInfo,
   Doctor,
   FixedUnavailableWeekdayMap,
   HardConstraints,
@@ -130,6 +131,7 @@ export function useScheduleApi({
   const [isBulkSavingDoctors, setIsBulkSavingDoctors] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [error, setError] = useState("");
+  const [diagnostics, setDiagnostics] = useState<DiagnosticInfo | null>(null);
 
   const { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors } = useDoctorSettings({
     activeDoctors,
@@ -276,6 +278,7 @@ export function useScheduleApi({
 
     setIsLoading(true);
     setError("");
+    setDiagnostics(null);
     setSaveMessage("");
 
     try {
@@ -334,12 +337,20 @@ export function useScheduleApi({
         }),
       });
 
+      const data = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "自動生成に失敗しました");
+        throw new Error(data.detail || "自動生成に失敗しました");
       }
 
-      const data = await res.json();
+      // Handle success=false (diagnostics / solver failure)
+      if (data.success === false) {
+        if (data.diagnostics) {
+          setDiagnostics(data.diagnostics as DiagnosticInfo);
+        }
+        throw new Error(data.message || "スケジュールを生成できませんでした");
+      }
+
       const nextSchedule = normalizeScheduleRows((data.schedule ?? []) as ScheduleRow[]);
       commitScheduleFrom(scheduleBeforeGenerate, nextSchedule);
       setScores(data.scores ?? {});
@@ -404,6 +415,7 @@ export function useScheduleApi({
 
   return {
     error,
+    diagnostics,
     isLoading,
     isSaving,
     getUnsavedDoctorNames,

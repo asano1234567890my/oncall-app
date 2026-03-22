@@ -186,6 +186,7 @@ export default function DashboardPage() {
               onCancelSwap={core.cancelSwapSelection}
               toastMessage={core.toastMessage}
               error={core.error}
+              diagnostics={core.diagnostics}
               saveMessage={core.saveMessage}
               isLoading={core.isLoading}
               saveValidationMessages={core.saveValidationMessages}

@@ -430,6 +430,404 @@ class OnCallOptimizer:
 
         return default
 
+    def pre_validate(self) -> List[Dict[str, Any]]:
+        """Run fast arithmetic checks before building the CP-SAT model.
+
+        Returns a list of diagnostic dicts (empty = OK).
+        Each dict: {id, name_ja, current_value?, suggestion_ja?}
+        """
+        errors: List[Dict[str, Any]] = []
+        days = range(1, self.num_days + 1)
+
+        holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
+        combined_mode = holiday_shift_mode == "combined"
+        respect_unavailable_days = not self._is_explicitly_disabled(
+            self.hard_constraints.get("respect_unavailable_days", True)
+        )
+        spacing_days = self._get_hard_constraint_value(
+            4, "interval_days", "min_interval_days", "spacing_days",
+            "min_gap_days", "work_interval_days",
+        )
+
+        # --- Check 1: doctors vs slots with spacing ---
+        # Total slots: night every day + day on sun/holidays (split mode)
+        sunhol_days = [day for day in days if self.is_sunday_or_holiday(day)]
+        night_slots = self.num_days
+        day_slots = 0 if combined_mode else len(sunhol_days)
+        total_slots = night_slots + day_slots
+
+        if spacing_days is not None and spacing_days > 0:
+            import math
+            max_per_doctor = math.ceil(self.num_days / (spacing_days + 1))
+            total_capacity = max_per_doctor * self.num_doctors
+            if total_capacity < total_slots:
+                # Recommended interval: find max that works, then subtract 1 for margin
+                recommended_interval = 0
+                for try_interval in range(spacing_days - 1, -1, -1):
+                    cap = math.ceil(self.num_days / (try_interval + 1)) * self.num_doctors
+                    if cap >= total_slots:
+                        recommended_interval = max(0, try_interval - 1)
+                        break
+                # Minimum doctors: add 1 for margin
+                min_doctors = math.ceil(total_slots / max_per_doctor) + 1
+
+                errors.append({
+                    "id": "insufficient_capacity",
+                    "name_ja": "医師数と勤務間隔",
+                    "current_value": f"現在: 医師{self.num_doctors}名・間隔{spacing_days}日",
+                    "suggestion_ja": f"→ 間隔を{recommended_interval}日以下にするか、勤務可能な医師を{min_doctors}名以上にしてください",
+                })
+
+        # --- Check 2: sun/holiday staffing ---
+        # For each sun/holiday, check that enough doctors are available
+        for day in sunhol_days:
+            available_night = set(range(self.num_doctors))
+            available_day = set(range(self.num_doctors))
+
+            if respect_unavailable_days:
+                for d in range(self.num_doctors):
+                    for item in self.unavailable.get(d, []):
+                        normalized = self._normalize_unavailable_entry(item)
+                        if normalized is None:
+                            continue
+                        if normalized["date"] != day:
+                            continue
+                        if normalized["is_soft_penalty"]:
+                            continue
+                        ts = normalized["target_shift"]
+                        if ts in ("all", "night"):
+                            available_night.discard(d)
+                        if ts in ("all", "day"):
+                            available_day.discard(d)
+
+                    for item in self.fixed_unavailable_weekdays.get(d, []):
+                        normalized = self._normalize_fixed_weekday_entry(item)
+                        if normalized is None:
+                            continue
+                        if not self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                            continue
+                        if normalized["is_soft_penalty"]:
+                            continue
+                        ts = normalized["target_shift"]
+                        if ts in ("all", "night"):
+                            available_night.discard(d)
+                        if ts in ("all", "day"):
+                            available_day.discard(d)
+
+            needed = 1 if combined_mode else 2  # night + day
+            date_str = f"{self.year}/{self.month}/{day}"
+            dt = datetime.date(self.year, self.month, day)
+            weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+
+            if combined_mode:
+                if len(available_night) < 1:
+                    errors.append({
+                        "id": "insufficient_doctors_for_day",
+                        "name_ja": "勤務可能な医師の不足",
+                        "current_value": f"{date_str}（{weekday_ja}）: 勤務可能0名",
+                        "suggestion_ja": "→ この日の不可日を減らすか、勤務可能な医師を増やしてください",
+                    })
+            else:
+                # Need at least 1 for night, 1 for day, and they must be different
+                # (if prevent_consecutive is on)
+                if len(available_night) < 1:
+                    errors.append({
+                        "id": "insufficient_doctors_for_day",
+                        "name_ja": "勤務可能な医師の不足",
+                        "current_value": f"{date_str}（{weekday_ja}）: 当直可能0名",
+                        "suggestion_ja": "→ この日の不可日を減らすか、勤務可能な医師を増やしてください",
+                    })
+                if len(available_day) < 1:
+                    errors.append({
+                        "id": "insufficient_doctors_for_day",
+                        "name_ja": "勤務可能な医師の不足",
+                        "current_value": f"{date_str}（{weekday_ja}）: 日直可能0名",
+                        "suggestion_ja": "→ この日の不可日を減らすか、勤務可能な医師を増やしてください",
+                    })
+                # Need at least 2 distinct doctors for day+night on same day
+                available_either = available_night | available_day
+                if len(available_either) < 2 and len(available_night) >= 1 and len(available_day) >= 1:
+                    errors.append({
+                        "id": "insufficient_doctors_for_day",
+                        "name_ja": "勤務可能な医師の不足",
+                        "current_value": f"{date_str}（{weekday_ja}）: 日直と当直に別の医師が必要ですが、1名しか勤務可能ではありません",
+                        "suggestion_ja": "→ この日の不可日を減らすか、勤務可能な医師を増やしてください",
+                    })
+
+        # Also check weekday nights
+        for day in days:
+            if self.is_sunday_or_holiday(day):
+                continue  # already checked above
+            if not respect_unavailable_days:
+                continue
+            available_night = set(range(self.num_doctors))
+            for d in range(self.num_doctors):
+                for item in self.unavailable.get(d, []):
+                    normalized = self._normalize_unavailable_entry(item)
+                    if normalized is None:
+                        continue
+                    if normalized["date"] != day or normalized["is_soft_penalty"]:
+                        continue
+                    if normalized["target_shift"] in ("all", "night"):
+                        available_night.discard(d)
+                for item in self.fixed_unavailable_weekdays.get(d, []):
+                    normalized = self._normalize_fixed_weekday_entry(item)
+                    if normalized is None:
+                        continue
+                    if not self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                        continue
+                    if normalized["is_soft_penalty"]:
+                        continue
+                    if normalized["target_shift"] in ("all", "night"):
+                        available_night.discard(d)
+
+            if len(available_night) < 1:
+                dt = datetime.date(self.year, self.month, day)
+                weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+                errors.append({
+                    "id": "insufficient_doctors_for_day",
+                    "name_ja": "勤務可能な医師の不足",
+                    "current_value": f"{self.year}/{self.month}/{day}（{weekday_ja}）: 当直可能0名",
+                    "suggestion_ja": "→ この日の不可日を減らすか、勤務可能な医師を増やしてください",
+                })
+
+        # --- Check 3: score range contradiction ---
+        total_score_in_month = 0
+        for day in days:
+            if self.is_sunday_or_holiday(day):
+                if combined_mode:
+                    total_score_in_month += self.W_DAY_NIGHT
+                else:
+                    total_score_in_month += self.W_SUNHOL_DAY + self.W_SUNHOL_NIGHT
+            elif self.is_saturday(day):
+                total_score_in_month += self.W_SAT_NIGHT
+            else:
+                total_score_in_month += self.W_WEEKDAY_NIGHT
+
+        sum_min = sum(
+            int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
+            for d in range(self.num_doctors)
+        )
+        sum_max = sum(
+            int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
+            for d in range(self.num_doctors)
+        )
+
+        if sum_min > total_score_in_month:
+            import math
+            # Margin: 10% below the even split
+            even_split = total_score_in_month / self.num_doctors / 10
+            recommended_min = math.floor(even_split * 0.9 * 10) / 10
+            errors.append({
+                "id": "score_min_exceeds_total",
+                "name_ja": "スコア下限が高すぎます",
+                "current_value": f"現在の下限: {self.score_min_float:.1f}",
+                "suggestion_ja": f"→ スコア下限を{recommended_min:.1f}以下にしてください",
+            })
+        if sum_max < total_score_in_month:
+            import math
+            # Margin: 10% above the even split
+            even_split = total_score_in_month / self.num_doctors / 10
+            recommended_max = math.ceil(even_split * 1.1 * 10) / 10
+            errors.append({
+                "id": "score_max_below_total",
+                "name_ja": "スコア上限が低すぎます",
+                "current_value": f"現在の上限: {self.score_max_float:.1f}",
+                "suggestion_ja": f"→ スコア上限を{recommended_max:.1f}以上にしてください",
+            })
+
+        # --- Check 4: locked shift vs unavailable day conflict ---
+        for item in self.locked_shifts:
+            if not isinstance(item, dict):
+                continue
+            doctor_idx = item.get("doctor_idx")
+            if doctor_idx is None:
+                continue
+            try:
+                d = int(doctor_idx)
+            except (TypeError, ValueError):
+                continue
+            if d < 0 or d >= self.num_doctors:
+                continue
+
+            day = self._parse_locked_day(item.get("date"))
+            if day is None:
+                continue
+            shift = self._normalize_shift_type(item.get("shift_type"))
+            if shift is None:
+                continue
+
+            if not respect_unavailable_days:
+                continue
+
+            # Check date-based unavailable
+            for ua_item in self.unavailable.get(d, []):
+                normalized = self._normalize_unavailable_entry(ua_item)
+                if normalized is None:
+                    continue
+                if normalized["date"] != day or normalized["is_soft_penalty"]:
+                    continue
+                ts = normalized["target_shift"]
+                if ts == "all" or ts == shift:
+                    dt = datetime.date(self.year, self.month, day)
+                    weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+                    errors.append({
+                        "id": "locked_vs_unavailable",
+                        "name_ja": "ロック済みシフトと不可日の衝突",
+                        "current_value": f"{self.year}/{self.month}/{day}（{weekday_ja}）の{('日直' if shift == 'day' else '当直')}がロックされていますが、医師{d + 1}の不可日です",
+                        "suggestion_ja": "→ ロックを解除するか、不可日を外してください",
+                    })
+
+            # Check fixed weekday unavailable
+            for fw_item in self.fixed_unavailable_weekdays.get(d, []):
+                normalized = self._normalize_fixed_weekday_entry(fw_item)
+                if normalized is None:
+                    continue
+                if not self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                    continue
+                if normalized["is_soft_penalty"]:
+                    continue
+                ts = normalized["target_shift"]
+                if ts == "all" or ts == shift:
+                    dt = datetime.date(self.year, self.month, day)
+                    weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+                    errors.append({
+                        "id": "locked_vs_unavailable",
+                        "name_ja": "ロック済みシフトと不可曜日の衝突",
+                        "current_value": f"{self.year}/{self.month}/{day}（{weekday_ja}）の{('日直' if shift == 'day' else '当直')}がロックされていますが、医師{d + 1}の不可曜日です",
+                        "suggestion_ja": "→ ロックを解除するか、不可曜日を外してください",
+                    })
+
+        # --- Check 5: month-cross spacing blocks early days ---
+        prev_month_worked_days, prev_last = self._build_previous_month_state()
+        if spacing_days is not None and spacing_days > 0 and prev_last is not None:
+            # Build set of blocked (doctor, day) pairs from previous month spillover
+            cross_blocked: Dict[int, set] = {}  # day -> set of blocked doctor indices
+            for d, prev_days_set in prev_month_worked_days.items():
+                for prev_day in prev_days_set:
+                    dist_to_start = (prev_last - int(prev_day)) + 1
+                    if 1 <= dist_to_start <= spacing_days:
+                        block_until = spacing_days + 1 - dist_to_start
+                        for day in range(1, min(block_until, self.num_days) + 1):
+                            cross_blocked.setdefault(day, set()).add(d)
+
+            for day in range(1, min(spacing_days + 1, self.num_days + 1)):
+                blocked_docs = cross_blocked.get(day, set())
+                if not blocked_docs:
+                    continue
+
+                # Count available doctors for night shift on this day
+                available_night = set(range(self.num_doctors)) - blocked_docs
+                available_day = set(range(self.num_doctors)) - blocked_docs
+
+                # Also subtract unavailable doctors
+                if respect_unavailable_days:
+                    for d_idx in list(available_night):
+                        if self._is_doctor_unavailable_on_day(d_idx, day, "night"):
+                            available_night.discard(d_idx)
+                    for d_idx in list(available_day):
+                        if self._is_doctor_unavailable_on_day(d_idx, day, "day"):
+                            available_day.discard(d_idx)
+
+                dt = datetime.date(self.year, self.month, day)
+                weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+                date_str = f"{self.year}/{self.month}/{day}"
+
+                if len(available_night) < 1:
+                    errors.append({
+                        "id": "cross_month_blocked",
+                        "name_ja": "前月の勤務間隔による月初の人手不足",
+                        "current_value": f"{date_str}（{weekday_ja}）: 前月末の勤務間隔により当直可能な医師が0名",
+                        "suggestion_ja": "→ 勤務間隔を短くするか、前月末のシフトを調整してください",
+                    })
+                if self.is_sunday_or_holiday(day) and not combined_mode:
+                    if len(available_day) < 1:
+                        errors.append({
+                            "id": "cross_month_blocked",
+                            "name_ja": "前月の勤務間隔による月初の人手不足",
+                            "current_value": f"{date_str}（{weekday_ja}）: 前月末の勤務間隔により日直可能な医師が0名",
+                            "suggestion_ja": "→ 勤務間隔を短くするか、前月末のシフトを調整してください",
+                        })
+
+        # --- Check 6: weekend/holiday work cap vs required slots ---
+        max_weekend_holiday_works = self._get_hard_constraint_value(
+            None,
+            "max_weekend_holiday_works",
+            "weekend_holiday_work_max",
+            "weekend_hol_work_max",
+            "max_weekend_holiday_count",
+            "weekend_holiday_total_max",
+            "weekend_hol_total_max",
+            "max_shifts",
+            flag_keys=("strict_weekend_hol_max",),
+        )
+        saturdays = [day for day in days if self.is_saturday(day)]
+
+        if max_weekend_holiday_works is not None:
+            # Total weekend/holiday slots that need filling
+            wh_slots = len(saturdays)  # saturday nights
+            for day in sunhol_days:
+                if combined_mode:
+                    wh_slots += 1  # night only
+                else:
+                    wh_slots += 2  # day + night
+            total_wh_capacity = max_weekend_holiday_works * self.num_doctors
+            if total_wh_capacity < wh_slots:
+                import math
+                recommended = math.ceil(wh_slots / self.num_doctors)
+                errors.append({
+                    "id": "weekend_holiday_cap_exceeded",
+                    "name_ja": "土日祝の勤務回数上限が低すぎます",
+                    "current_value": f"現在: 上限{max_weekend_holiday_works}回/人 × {self.num_doctors}名 = 最大{total_wh_capacity}枠（必要: {wh_slots}枠）",
+                    "suggestion_ja": f"→ 上限を{recommended}回以上にするか、勤務可能な医師を増やしてください",
+                })
+
+        # --- Check 7: saturday night cap vs saturday count ---
+        max_saturday_nights = self._get_hard_constraint_value(
+            1,
+            "max_saturday_nights",
+            "max_sat_nights",
+            "sat_night_max",
+            "saturday_night_max",
+        )
+        if max_saturday_nights is not None and len(saturdays) > 0:
+            total_sat_capacity = max_saturday_nights * self.num_doctors
+            if total_sat_capacity < len(saturdays):
+                import math
+                recommended = math.ceil(len(saturdays) / self.num_doctors)
+                errors.append({
+                    "id": "saturday_cap_exceeded",
+                    "name_ja": "土曜当直の上限が低すぎます",
+                    "current_value": f"現在: 上限{max_saturday_nights}回/人 × {self.num_doctors}名 = 最大{total_sat_capacity}枠（土曜: {len(saturdays)}日）",
+                    "suggestion_ja": f"→ 上限を{recommended}回以上にしてください",
+                })
+
+        return errors
+
+    def _is_doctor_unavailable_on_day(self, doctor_idx: int, day: int, shift: str) -> bool:
+        """Check if a doctor is hard-unavailable on a specific day for a specific shift."""
+        for item in self.unavailable.get(doctor_idx, []):
+            normalized = self._normalize_unavailable_entry(item)
+            if normalized is None:
+                continue
+            if normalized["date"] != day or normalized["is_soft_penalty"]:
+                continue
+            ts = normalized["target_shift"]
+            if ts == "all" or ts == shift:
+                return True
+        for item in self.fixed_unavailable_weekdays.get(doctor_idx, []):
+            normalized = self._normalize_fixed_weekday_entry(item)
+            if normalized is None:
+                continue
+            if not self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                continue
+            if normalized["is_soft_penalty"]:
+                continue
+            ts = normalized["target_shift"]
+            if ts == "all" or ts == shift:
+                return True
+        return False
+
     def build_model(self) -> None:
         doctors = range(self.num_doctors)
         days = range(1, self.num_days + 1)

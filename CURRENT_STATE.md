@@ -167,7 +167,7 @@
 | # | 内容 | 優先度 | 状態 |
 |---|------|--------|------|
 | P1-1 | PDF/Excel出力（`reportlab`/`openpyxl`） | P0 | 未着手 |
-| P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 未着手 |
+| P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 🔄 Phase1完了（事前算術チェック+FE表示）/ Phase2未着手 |
 | P1-3 | プライバシーポリシー・利用規約ページ | P0 | 未着手 |
 | P1-4 | 不可日ソフト化UI（is_soft_penaltyのUI公開） | P1 | 未着手 |
 | P1-5 | マジックリンク一斉送信（メール or LINE） | P1 | 未着手 |
@@ -239,6 +239,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-22 | C-1 pre_validate強化: 4→7チェックに拡張。新規追加: ⑤前月クロス間隔→月初人手不足検知 ⑥土日祝勤務回数上限vs必要枠数 ⑦土曜当直上限vs土曜数。モバイル版CompactGenerateCard（スケジュール未生成画面）にもdiagnostics表示パネル追加 |
+| 2026-03-22 | C-1 Phase1+3簡易版完了: 解なし対策 — pre_validate()で4つの事前算術チェック（医師数vsスロット/日祝人数不足/スコア範囲矛盾/ロックvs不可日衝突）をソルバー実行前に実施。HTTP 400→200+success=false化。FE全3画面（モバイル/PC/デモ）にdiagnostics表示パネル追加。ConstraintDiagnostic/DiagnosticInfo型をBE/FE両方に新設 |
 | 2026-03-22 | B-3完了: 絵文字削減 — 全7ファイル22箇所の絵文字をLucideアイコンに置き換え（🏥→Hospital, ⚖️→Scale, 📅→Calendar, 🔄→RefreshCw, 👨‍⚕️→UserCog, 📊→BarChart3, 🗓️→CalendarDays, 🚫→Ban, ⚠️→AlertTriangle, ✅→CheckCircle, 💡→Lightbulb）。ServerStatusBannerは接続中アニメーション付き。PainCard/SettingsMenuItemのpropsをemoji:string→icon:LucideIconに型変更 |
 | 2026-03-22 | モバイル版に青ハイライトフェード追加: MobileScheduleBoard.tsxにundoFlashアニメーション実装（PC版DashboardScheduleTableと同等のchangedShiftKeys連携・1.5秒フェードアウト） |
 | 2026-03-22 | /dashboardスマホ検知バナー改善: zoom内の小さいテキストバナー→zoom外のフルスクリーンボトムシートに変更（下からスライドイン・「モバイル版へ移動」大ボタン・「このままPC版で作業する」薄めテキスト） |

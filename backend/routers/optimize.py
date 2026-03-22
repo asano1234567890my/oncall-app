@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
-from schemas.optimize import OptimizeRequest, OptimizeResponse
+from schemas.optimize import ConstraintDiagnostic, DiagnosticInfo, OptimizeRequest, OptimizeResponse
 from services.optimizer import OnCallOptimizer
 from services.optimizer_history import build_past_total_scores
 from services.settings_service import get_optimizer_config
@@ -207,13 +207,25 @@ async def generate_schedule(
             shift_scores=shift_scores,
         )
 
+        # Pre-validation: fast arithmetic checks before solving
+        pre_errors = optimizer.pre_validate()
+        if pre_errors:
+            diagnostics = DiagnosticInfo(
+                pre_check_errors=[ConstraintDiagnostic(**e) for e in pre_errors]
+            )
+            return OptimizeResponse(
+                success=False,
+                message="制約の設定に問題があります",
+                diagnostics=diagnostics,
+            )
+
         optimizer.build_model()
         solve_result = optimizer.solve()
 
         if not solve_result.get("success"):
-            raise HTTPException(
-                status_code=400,
-                detail=solve_result.get("message", "Optimization failed"),
+            return OptimizeResponse(
+                success=False,
+                message=solve_result.get("message", "スケジュールを生成できませんでした"),
             )
 
         if isinstance(solve_result.get("schedule"), list):
