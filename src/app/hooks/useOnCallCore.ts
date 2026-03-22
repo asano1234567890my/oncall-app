@@ -168,26 +168,44 @@ export function useOnCallCore() {
   // ── 仮保存 ──
   const draft = useDraftSchedule(year, month, auth.isAuthenticated);
 
-  // ── URL ?draft=YYYY-MM からの自動展開 ──
+  // ── URL ?edit=YYYY-MM から確定済みスケジュールを直接展開 ──
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const draftParam = params.get("draft");
-    if (!draftParam) return;
-    // 同じパラメータで二重実行しない
-    if (autoLoadDraftRef.current === draftParam) return;
-    autoLoadDraftRef.current = draftParam;
+    const editParam = params.get("edit") || params.get("draft");
+    if (!editParam) return;
+    if (autoLoadDraftRef.current === editParam) return;
+    autoLoadDraftRef.current = editParam;
 
-    const [draftYear, draftMonth] = draftParam.split("-").map(Number);
-    if (draftYear && draftMonth) {
-      if (draftYear !== year) setYear(draftYear);
-      if (draftMonth !== month) setMonth(draftMonth);
-      // ドラフト読み込み（draft hookの年月切り替え反映を待つ）
+    const [editYear, editMonth] = editParam.split("-").map(Number);
+    if (editYear && editMonth) {
+      if (editYear !== year) setYear(editYear);
+      if (editMonth !== month) setMonth(editMonth);
+
+      const isDraft = params.has("draft");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
       setTimeout(async () => {
-        const loaded = await draft.loadDraft();
-        if (loaded) commitSchedule(loaded);
-        // URLからパラメータを消す
+        try {
+          if (isDraft) {
+            const loaded = await draft.loadDraft();
+            if (loaded) commitSchedule(loaded);
+          } else {
+            const res = await fetch(`${apiUrl}/api/schedule/${editYear}/${editMonth}`, {
+              headers: getAuthHeaders(),
+            });
+            if (res.ok) {
+              const data = (await res.json()) as Array<Record<string, unknown>>;
+              const rows = data.map((r) => ({
+                day: r.day as number,
+                day_shift: (r.day_shift as string) ?? null,
+                night_shift: (r.night_shift as string) ?? null,
+              })) as ScheduleRow[];
+              commitSchedule(rows);
+            }
+          }
+        } catch { /* ignore */ }
         window.history.replaceState({}, "", window.location.pathname);
       }, 500);
     }

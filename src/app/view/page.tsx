@@ -46,8 +46,6 @@ export default function ViewSchedulePage() {
   const [error, setError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const { auth, logout } = useAuth();
-  const [isCopying, setIsCopying] = useState(false);
-  const [copyMessage, setCopyMessage] = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
   const { manualSet, disabledSet, customError } = useCustomHolidays(year);
@@ -137,26 +135,6 @@ export default function ViewSchedulePage() {
       window.alert("画像の保存に失敗しました。");
     } finally {
       setIsDownloading(false);
-    }
-  };
-
-  const handleCopyToDraft = async () => {
-    if (isCopying || copyMessage === "done" || schedule.length === 0) return;
-    setIsCopying(true);
-    setCopyMessage("");
-    try {
-      const res = await fetch(`${API_BASE}/api/schedule/draft/${year}/${month}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify({ schedule }),
-      });
-      if (!res.ok) throw new Error("failed");
-      setCopyMessage("done");
-    } catch {
-      setCopyMessage("失敗しました");
-      setTimeout(() => setCopyMessage(""), 3000);
-    } finally {
-      setIsCopying(false);
     }
   };
 
@@ -261,24 +239,13 @@ export default function ViewSchedulePage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {auth.isAuthenticated && schedule.length > 0 && (
-              <>
-                <button
-                  onClick={() => { void handleCopyToDraft(); }}
-                  disabled={isCopying || copyMessage === "done"}
-                  className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  {isCopying ? "準備中..." : "編集する"}
-                </button>
-                {copyMessage === "done" && (
-                  <Link
-                    href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?draft=${year}-${month}` : `/app?draft=${year}-${month}`}
-                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors animate-pulse"
-                  >
-                    編集画面へ →
-                  </Link>
-                )}
-              </>
+              <Link
+                href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
+                className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                編集する
+              </Link>
             )}
             <button
               onClick={() => { void handleDownloadImage(); }}
