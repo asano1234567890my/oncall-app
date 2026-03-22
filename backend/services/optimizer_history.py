@@ -72,21 +72,33 @@ async def build_holiday_dates(
     return holiday_dates
 
 
+DEFAULT_SHIFT_SCORES = {
+    "weekday_night": 1.0,
+    "saturday_night": 1.5,
+    "holiday_day": 0.5,
+    "holiday_night": 1.0,
+}
+
+
 def score_historical_shift(
     *,
     shift_date: date,
     shift_type: str,
     holiday_dates: set[date],
+    shift_scores: dict[str, float] | None = None,
 ) -> float:
+    ss = shift_scores or DEFAULT_SHIFT_SCORES
     normalized = str(shift_type).strip()
     normalized_lower = normalized.lower()
     is_sunday_or_holiday = shift_date.weekday() == 6 or shift_date in holiday_dates
 
     if normalized in DAY_SHIFT_TYPES or normalized_lower in DAY_SHIFT_TYPES:
-        return 0.5 if is_sunday_or_holiday else 0.0
+        return ss.get("holiday_day", 0.5) if is_sunday_or_holiday else 0.0
 
     if normalized in NIGHT_SHIFT_TYPES or normalized_lower in NIGHT_SHIFT_TYPES:
-        return 1.5 if shift_date.weekday() == 5 else 1.0
+        if is_sunday_or_holiday:
+            return ss.get("holiday_night", 1.0)
+        return ss.get("saturday_night", 1.5) if shift_date.weekday() == 5 else ss.get("weekday_night", 1.0)
 
     return 0.0
 
@@ -123,6 +135,7 @@ async def build_past_total_scores(
     target_year: int,
     target_month: int,
     history_months: int = 2,
+    shift_scores: dict[str, float] | None = None,
 ) -> Dict[UUID, float]:
     doctor_id_list = list(dict.fromkeys(doctor_ids))
     if not doctor_id_list:
@@ -163,6 +176,7 @@ async def build_past_total_scores(
             shift_date=shift_date,
             shift_type=shift_type,
             holiday_dates=holiday_dates,
+            shift_scores=shift_scores,
         )
 
     return apply_history_score_baseline(raw_scores, history_counts)

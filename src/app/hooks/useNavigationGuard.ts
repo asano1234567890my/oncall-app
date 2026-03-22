@@ -1,12 +1,6 @@
 // src/app/hooks/useNavigationGuard.ts
 import { useEffect, useRef } from "react";
-import {
-  DEFAULT_HARD_CONSTRAINTS,
-  DEFAULT_OBJECTIVE_WEIGHTS,
-  type HardConstraints,
-  type ObjectiveWeights,
-  type ScheduleRow,
-} from "../types/dashboard";
+import { type ScheduleRow } from "../types/dashboard";
 
 export const getScheduleSignature = (rows: ScheduleRow[]) =>
   JSON.stringify(
@@ -26,8 +20,8 @@ type UseNavigationGuardParams = {
   setIsDirty: (value: boolean) => void;
   getUnsavedDoctorNames: () => string[];
   hasUnsavedCustomChanges: boolean;
-  objectiveWeights: ObjectiveWeights;
-  hardConstraints: HardConstraints;
+  hasUnsavedWeights: boolean;
+  hasUnsavedHardConstraints: boolean;
 };
 
 export function useNavigationGuard({
@@ -37,18 +31,18 @@ export function useNavigationGuard({
   setIsDirty,
   getUnsavedDoctorNames,
   hasUnsavedCustomChanges,
-  objectiveWeights,
-  hardConstraints,
+  hasUnsavedWeights,
+  hasUnsavedHardConstraints,
 }: UseNavigationGuardParams): void {
   const ignoreNextPopStateRef = useRef(false);
   const getUnsavedDoctorNamesRef = useRef(getUnsavedDoctorNames);
   getUnsavedDoctorNamesRef.current = getUnsavedDoctorNames;
   const hasUnsavedCustomChangesRef = useRef(hasUnsavedCustomChanges);
   hasUnsavedCustomChangesRef.current = hasUnsavedCustomChanges;
-  const objectiveWeightsRef = useRef(objectiveWeights);
-  objectiveWeightsRef.current = objectiveWeights;
-  const hardConstraintsRef = useRef(hardConstraints);
-  hardConstraintsRef.current = hardConstraints;
+  const hasUnsavedWeightsRef = useRef(hasUnsavedWeights);
+  hasUnsavedWeightsRef.current = hasUnsavedWeights;
+  const hasUnsavedHardConstraintsRef = useRef(hasUnsavedHardConstraints);
+  hasUnsavedHardConstraintsRef.current = hasUnsavedHardConstraints;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -59,13 +53,8 @@ export function useNavigationGuard({
       const unsavedDoctors = getUnsavedDoctorNamesRef.current();
       if (unsavedDoctors.length > 0) lines.push(`${unsavedDoctors.join("、")}先生の設定が未登録です。`);
       if (hasUnsavedCustomChangesRef.current) lines.push("祝日設定が保存されていません。");
-      const weightKeys = Object.keys(DEFAULT_OBJECTIVE_WEIGHTS) as (keyof ObjectiveWeights)[];
-      if (weightKeys.some((k) => objectiveWeightsRef.current[k] !== DEFAULT_OBJECTIVE_WEIGHTS[k])) {
-        lines.push("重みづけ設定がデフォルトから変更されています。");
-      }
-      if (JSON.stringify(hardConstraintsRef.current) !== JSON.stringify(DEFAULT_HARD_CONSTRAINTS)) {
-        lines.push("ハード制約設定がデフォルトから変更されています。");
-      }
+      if (hasUnsavedWeightsRef.current) lines.push("重みづけ設定が保存されていません。");
+      if (hasUnsavedHardConstraintsRef.current) lines.push("ハード制約設定が保存されていません。");
 
       if (lines.length === 0) return true;
 

@@ -10,6 +10,7 @@ from core.config import get_settings
 from routers import health, optimize, schedule, doctor, public_doctor
 from routers import auth as auth_router
 import routers.holiday as holiday
+import routers.demo as demo_router
 import routers.settings as settings_router
 
 settings = get_settings()
@@ -28,7 +29,9 @@ if hasattr(settings, "backend_cors_origins") and settings.backend_cors_origins:
     origins.extend(settings.backend_cors_origins)
 
 frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
+if frontend_url == "*":
+    origins = ["*"]
+elif frontend_url:
     origins.append(frontend_url.strip("/"))
 
 origins = list(set(origins))
@@ -49,6 +52,7 @@ app.include_router(doctor.router)
 app.include_router(public_doctor.router)
 app.include_router(holiday.router)
 app.include_router(settings_router.router)
+app.include_router(demo_router.router)
 
 
 @app.get("/")

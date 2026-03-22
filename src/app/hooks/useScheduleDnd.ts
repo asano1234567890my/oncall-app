@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type TouchEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type TouchEvent } from "react";
 import type {
   DragPayload,
   FixedUnavailableWeekdayMap,
@@ -84,6 +84,7 @@ export function useScheduleDnd({
   const [draggingDoctorId, setDraggingDoctorId] = useState<string | null>(null);
   const [draggingListMode, setDraggingListMode] = useState<DraggingListMode>(null);
   const [highlightedDoctorId, setHighlightedDoctorId] = useState<string | null>(null);
+  const [highlightedShiftSource, setHighlightedShiftSource] = useState<{ day: number; shiftType: ShiftType } | null>(null);
   const [invalidHoverShiftKey, setInvalidHoverShiftKey] = useState<string | null>(null);
   const [touchHoverShiftKey, setTouchHoverShiftKey] = useState<string | null>(null);
   const [hoverErrorMessage, setHoverErrorMessage] = useState<string | null>(null);
@@ -103,6 +104,7 @@ export function useScheduleDnd({
     getSwapConstraintMessage,
     validateScheduleViolations,
     isHighlightedDoctorBlockedDay,
+    isHighlightedDoctorBlockedShift,
   } = useScheduleConstraints({
     schedule,
     year,
@@ -131,9 +133,30 @@ export function useScheduleDnd({
     setToastMessage(message);
   };
 
-  const toggleHighlightedDoctor = (doctorId: string | null | undefined) => {
-    if (!doctorId) return;
-    setHighlightedDoctorId((prev) => (prev === doctorId ? null : doctorId));
+  const toggleHighlightedDoctor = (doctorId: string | null | undefined, day?: number, shiftType?: ShiftType) => {
+    // 入れ替え準備中に医師名クリック → 入れ替えをキャンセル
+    if (swapSource) {
+      cancelSwapSelection();
+    }
+    if (!doctorId) {
+      setHighlightedDoctorId(null);
+      setHighlightedShiftSource(null);
+      return;
+    }
+    setHighlightedDoctorId((prev) => {
+      if (prev === doctorId) {
+        // 同じ医師を再クリック → ハイライト解除
+        setHighlightedShiftSource(null);
+        return null;
+      }
+      // 新しい医師をクリック → セル情報があれば記録
+      if (day !== undefined && shiftType) {
+        setHighlightedShiftSource({ day, shiftType });
+      } else {
+        setHighlightedShiftSource(null);
+      }
+      return doctorId;
+    });
   };
 
   const parseDragPayload = (raw: string | null): DragPayload | null => {
@@ -965,11 +988,146 @@ export function useScheduleDnd({
     return () => window.clearTimeout(timeoutId);
   }, [toastMessage]);
 
+  // ── ドラッグ中の全セル配置可否マップ（dashboard用） ──
+  // 関数参照はrefで保持し、データ値のみをuseMemoの依存配列に入れることで
+  // 毎レンダーの再計算を防ぐ
+  const constraintFnsRef = useRef({ isHolidayLikeDay, isShiftLocked, getPlacementIgnoreShiftKeys, getPlacementConstraintMessage });
+  constraintFnsRef.current = { isHolidayLikeDay, isShiftLocked, getPlacementIgnoreShiftKeys, getPlacementConstraintMessage };
+
+  const cellValidityMap = useMemo(() => {
+    const map = new Map<string, string | null>();
+    if (!draggingDoctorId || dragSourceType !== "list") return map;
+    const fns = constraintFnsRef.current;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        const key = `${row.day}_${st}`;
+        const hlInfo = fns.isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) {
+          map.set(key, "平日の日直には配置できません");
+          continue;
+        }
+        if (fns.isShiftLocked(row.day, st)) {
+          map.set(key, "ロック済み");
+          continue;
+        }
+        const ignoreKeys = fns.getPlacementIgnoreShiftKeys(draggingDoctorId, row.day, st);
+        const msg = fns.getPlacementConstraintMessage(draggingDoctorId, row.day, st, {
+          ignoreShiftKeys: ignoreKeys,
+        });
+        map.set(key, msg);
+      }
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggingDoctorId, dragSourceType, schedule, lockedShiftKeys]);
+
+  // ── スワップ違反プレビュー ──
+  const swapViolationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!swapSource) return map;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        const key = `${row.day}-${st}`;
+        if (swapSource.day === row.day && swapSource.shiftType === st) continue;
+        const locked = lockedShiftKeys.has(key);
+        if (locked) { map.set(key, "ロック済み"); continue; }
+        const hlInfo = isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) continue; // 平日日直は非表示枠
+        const msg = getSwapConstraintMessage(swapSource.doctorId, swapSource.day, swapSource.shiftType, row.day, st);
+        if (msg) map.set(key, msg);
+      }
+    }
+    return map;
+  }, [swapSource, schedule, lockedShiftKeys, isHolidayLikeDay, getSwapConstraintMessage]);
+
+  const getSwapViolation = (day: number, shiftType: ShiftType): string | null => {
+    if (!swapSource) return null;
+    return swapViolationMap.get(`${day}-${shiftType}`) ?? null;
+  };
+
+  // ── ハイライト元セルからの入れ替え違反マップ（dashboard用） ──
+  // テーブルで医師名をクリック → そのセルから各セルへの入れ替えシミュレーション
+  // パレットで医師名をクリック → 各セルへの配置可否チェック（入れ替え元なし）
+  const highlightedViolationMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!highlightedDoctorId) return map;
+    const src = highlightedShiftSource;
+    for (const row of schedule) {
+      for (const st of ["day", "night"] as const) {
+        if (src && src.day === row.day && src.shiftType === st) continue;
+        const key = `${row.day}-${st}`;
+        if (lockedShiftKeys.has(getShiftKey(row.day, st))) {
+          map.set(key, "ロック済み");
+          continue;
+        }
+        const hlInfo = isHolidayLikeDay(row.day);
+        if (st === "day" && !hlInfo.isHolidayLike) continue;
+
+        if (src) {
+          // テーブルからクリック: 入れ替えシミュレーション
+          const msg = getSwapConstraintMessage(highlightedDoctorId, src.day, src.shiftType, row.day, st);
+          if (msg) map.set(key, msg);
+        } else {
+          // パレットからクリック: 配置可否チェック（追加配置）
+          const msg = getPlacementConstraintMessage(highlightedDoctorId, row.day, st, {
+            ignoreShiftKeys: new Set<string>(),
+          });
+          if (msg) map.set(key, formatConstraintForToast(highlightedDoctorId, msg));
+        }
+      }
+    }
+    return map;
+  }, [highlightedDoctorId, highlightedShiftSource, schedule, lockedShiftKeys, isHolidayLikeDay, getSwapConstraintMessage, getPlacementConstraintMessage, formatConstraintForToast]);
+
+  const getHighlightedViolation = (day: number, shiftType: ShiftType): string | null => {
+    return highlightedViolationMap.get(`${day}-${shiftType}`) ?? null;
+  };
+
+  // --- モバイル用命令的アクション ---
+
+  const placeDoctorInShift = (day: number, shiftType: ShiftType, doctorId: string): boolean => {
+    const result = buildAssignSchedule(day, shiftType, doctorId);
+    if (result.errorMessage) { showToast(result.errorMessage); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); return true; }
+    return false;
+  };
+
+  const removeDoctorFromShift = (day: number, shiftType: ShiftType): boolean => {
+    const result = buildClearSchedule(day, shiftType);
+    if (result.errorMessage) { showToast(result.errorMessage); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); return true; }
+    return false;
+  };
+
+  const startSwapFrom = (day: number, shiftType: ShiftType): boolean => {
+    const doctorId = getScheduleDoctorId(day, shiftType);
+    if (!doctorId) { showToast("入れ替え元に医師がいません"); return false; }
+    if (isShiftLocked(day, shiftType)) { showToast("ロック済みの枠は入れ替え元にできません"); return false; }
+    clearDragState();
+    setSelectedListSelection(null);
+    setSwapSource({ day, shiftType, doctorId });
+    return true;
+  };
+
+  const executeSwapTo = (day: number, shiftType: ShiftType): boolean => {
+    if (!swapSource) return false;
+    if (swapSource.day === day && swapSource.shiftType === shiftType) {
+      setSwapSource(null);
+      return false;
+    }
+    const result = buildSwapSchedule(swapSource.day, swapSource.shiftType, day, shiftType);
+    if (result.errorMessage) { showToast(result.errorMessage); cancelSwapSelection(); return false; }
+    if (result.nextSchedule) { commitSchedule(result.nextSchedule); cancelSwapSelection(); return true; }
+    return false;
+  };
+
   return {
     toastMessage,
     hoverErrorMessage,
     dragSourceType,
     highlightedDoctorId,
+    draggingDoctorId,
+    cellValidityMap,
     invalidHoverShiftKey,
     touchHoverShiftKey,
     lockedShiftKeys,
@@ -979,7 +1137,11 @@ export function useScheduleDnd({
     selectedManualDoctorId: getSelectedManualDoctorId(),
     isEraseSelectionActive,
     isSwapSourceSelected,
+    getSwapViolation,
     isHighlightedDoctorBlockedDay,
+    isHighlightedDoctorBlockedShift,
+    getHighlightedViolation,
+    getPlacementConstraintMessage,
     toggleHighlightedDoctor,
     selectManualDoctor,
     toggleEraseSelection,
@@ -1007,5 +1169,9 @@ export function useScheduleDnd({
     handleUnlockAll,
     buildLockedShiftsPayload,
     validateScheduleViolations,
+    placeDoctorInShift,
+    removeDoctorFromShift,
+    startSwapFrom,
+    executeSwapTo,
   };
 }

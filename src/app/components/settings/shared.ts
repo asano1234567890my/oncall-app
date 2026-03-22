@@ -8,6 +8,7 @@ export type WeightChangeSummary = {
   top: string[];
 };
 
+/** 旧: 個別ウェイト一覧（/app 用に残す） */
 export const weightInputs = [
   { key: "gap5", label: "間隔ルール+1日のペナルティ", min: 0, max: 200, step: 5, hint: "勤務間隔ルールの直上を抑制" },
   { key: "soft_unavailable", label: "不可日の回避優先度", min: 0, max: 200, step: 5, hint: "不可日を守れない場合の回避強度" },
@@ -29,6 +30,77 @@ export const weightInputs = [
   step: number;
   hint: string;
 }>;
+
+/** 新: 4軸グループ（/dashboard 用） */
+export type WeightChildMeta = {
+  key: keyof ObjectiveWeights;
+  ratio: number;
+  label: string;
+  hint: string;
+};
+
+export type WeightGroup = {
+  id: string;
+  label: string;
+  hint: string;
+  primaryKey: keyof ObjectiveWeights;
+  childMapping: Partial<Record<keyof ObjectiveWeights, number>>;
+  /** 子要素のメタデータ（比率調整UI用）。未定義のグループは比率調整不可 */
+  children?: WeightChildMeta[];
+  min: number;
+  max: number;
+  step: number;
+};
+
+export const weightGroups: WeightGroup[] = [
+  {
+    id: "target_score",
+    label: "目標スコアへの近さ",
+    hint: "各医師の目標スコアに寄せます。目標が全員同じなら公平性と同義です。",
+    primaryKey: "target",
+    childMapping: { target: 1.0, score_balance: 0.3 },
+    min: 0, max: 200, step: 5,
+  },
+  {
+    id: "weekend_holiday_fairness",
+    label: "土日祝の均等化",
+    hint: "土日祝シフトの回数を医師間で均等にします。過去数か月の実績も考慮します。",
+    primaryKey: "sunhol_fairness",
+    childMapping: {
+      sunhol_fairness: 1.0, sat_month_fairness: 1.0,
+      past_sunhol_gap: 0.5, past_sat_gap: 0.5,
+    },
+    children: [
+      { key: "sunhol_fairness", ratio: 1.0, label: "当月の日祝回数バランス", hint: "今月の日祝シフト回数を医師間で均等にします" },
+      { key: "sat_month_fairness", ratio: 1.0, label: "当月の土曜回数バランス", hint: "今月の土曜当直回数を医師間で均等にします" },
+      { key: "past_sunhol_gap", ratio: 0.5, label: "過去の日祝実績バランス", hint: "過去数か月の日祝シフト累積回数の差を縮めます" },
+      { key: "past_sat_gap", ratio: 0.5, label: "過去の土曜実績バランス", hint: "過去数か月の土曜当直累積回数の差を縮めます" },
+    ],
+    min: 0, max: 200, step: 5,
+  },
+];
+
+/** 子要素の比率オーバーライド（グループID → キー → 比率） */
+export type WeightRatioOverrides = Partial<Record<string, Partial<Record<keyof ObjectiveWeights, number>>>>;
+
+/** グループスライダーの値からObjectiveWeightsを一括生成 */
+export function expandWeightGroups(
+  currentWeights: ObjectiveWeights,
+  groupId: string,
+  newValue: number,
+  ratioOverrides?: WeightRatioOverrides,
+): ObjectiveWeights {
+  const group = weightGroups.find((g) => g.id === groupId);
+  if (!group) return currentWeights;
+  const overrides = ratioOverrides?.[groupId];
+  const next = { ...currentWeights };
+  for (const [key, defaultRatio] of Object.entries(group.childMapping)) {
+    const k = key as keyof ObjectiveWeights;
+    const ratio = overrides?.[k] ?? (defaultRatio as number);
+    next[k] = Math.round(newValue * ratio);
+  }
+  return next;
+}
 
 export type WeightMeta = {
   label: string;
@@ -99,42 +171,42 @@ export function getWeightMeta(
 }
 
 export const hardConstraintNumberInputs = [
-  { key: "interval_days", label: "勤務間隔ルール", min: 0, max: 10, step: 1, unit: "日", hint: "0でOFF / 既定4" },
+  { key: "interval_days", label: "勤務間隔", min: 0, max: 10, step: 1, unit: "日", hint: "0で制限なし / 既定4" },
   {
     key: "max_weekend_holiday_works",
     label: "土日祝の合算勤務上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定3",
+    hint: "既定3",
   },
   {
     key: "max_saturday_nights",
     label: "土曜当直上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定1",
+    hint: "既定1",
   },
   {
     key: "max_sunhol_days",
     label: "日祝・日直上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定2",
+    hint: "既定2",
   },
   {
     key: "max_sunhol_works",
     label: "日祝勤務上限",
-    min: 0,
+    min: 1,
     max: 10,
     step: 1,
     unit: "回",
-    hint: "0でOFF / 既定3",
+    hint: "既定3",
   },
 ] as const satisfies ReadonlyArray<{
   key: keyof HardConstraints;
@@ -176,20 +248,33 @@ export const dayPickerBaseClassName = [
   "sm:[--rdp-day_button-width:2.65rem] sm:[--rdp-day_button-height:2.65rem]",
 ].join(" ");
 
-export const dayPickerClassNames = {
+const dayPickerClassNamesBase = {
   root: "w-full",
   months: "block w-full max-w-none",
   month: "w-full space-y-3",
   month_caption: "flex min-w-0 items-center justify-center text-center",
   caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900",
-  nav: "hidden",
   month_grid: "w-full table-fixed border-collapse",
   weekdays: "border-b border-slate-200/80",
-  weekday: "pb-2 text-center text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400",
+  weekday: "pb-2 text-center text-[11px] font-medium tracking-[0.18em] text-slate-400",
   week: "border-b border-slate-100 last:border-b-0",
   day: "p-0 text-center align-middle",
   day_button:
     "mx-auto my-1 flex h-10 w-10 items-center justify-center rounded-xl border border-transparent text-sm font-medium text-slate-700 transition hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+};
+
+/** ナビ非表示（ダッシュボード等、外部で月を制御する場合） */
+export const dayPickerClassNames = {
+  ...dayPickerClassNamesBase,
+  nav: "hidden",
+};
+
+/** ナビ表示（ドロワー内など、カレンダー単体で月移動させたい場合） */
+export const dayPickerWithNavClassNames = {
+  ...dayPickerClassNamesBase,
+  nav: "flex items-center gap-1",
+  button_previous: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
+  button_next: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
 };
 
 export const baseCalendarModifierClasses = {

@@ -12,12 +12,15 @@ from schemas.settings import (
     CustomHolidaysUpsertRequest,
     CustomHolidaysValue,
     OptimizerConfigRequest,
+    SystemSettingUpsertRequest,
 )
 from services.settings_service import (
     get_custom_holidays,
     get_optimizer_config,
+    get_system_setting,
     upsert_custom_holidays,
     upsert_optimizer_config,
+    upsert_system_setting,
 )
 
 router = APIRouter(prefix="/api/settings", tags=["Settings"])
@@ -89,3 +92,28 @@ async def api_upsert_optimizer_config(
     }
     await upsert_optimizer_config(db, hospital_id, value)
     return await get_optimizer_config(db, hospital_id)
+
+
+@router.get("/kv/{key}")
+async def api_get_system_setting(
+    key: str,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    if len(key) > 100:
+        raise HTTPException(status_code=400, detail="Key too long")
+    value = await get_system_setting(db, hospital_id, key)
+    return {"key": key, "value": value}
+
+
+@router.put("/kv/{key}")
+async def api_upsert_system_setting(
+    key: str,
+    req: SystemSettingUpsertRequest,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    if len(key) > 100:
+        raise HTTPException(status_code=400, detail="Key too long")
+    await upsert_system_setting(db, hospital_id, key, req.value)
+    return {"key": key, "value": req.value}

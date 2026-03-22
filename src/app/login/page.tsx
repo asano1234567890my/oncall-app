@@ -1,17 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Hospital } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { auth, isLoading: isAuthLoading, login } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // ログイン済みならリダイレクト
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (auth.isAuthenticated) {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
+        .then((res) => res.json())
+        .then((data: unknown) => {
+          const value = (data as Record<string, unknown>)?.value;
+          router.replace(value === "/dashboard" ? "/dashboard" : "/app");
+        })
+        .catch(() => router.replace("/app"));
+    }
+  }, [auth.isAuthenticated, isAuthLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +36,16 @@ export default function LoginPage() {
 
     try {
       await login(name, password);
-      router.push("/");
+      // Check user's default page preference
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      let dest = "/app";
+      try {
+        const res = await fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() });
+        const data: unknown = await res.json();
+        const value = (data as Record<string, unknown>)?.value;
+        if (value === "/dashboard") dest = "/dashboard";
+      } catch { /* default to /app */ }
+      router.push(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました");
     } finally {
@@ -28,12 +53,21 @@ export default function LoginPage() {
     }
   };
 
+  // ログイン済みチェック中
+  if (isAuthLoading || auth.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4 gap-8">
       {/* ヒーローセクション */}
       <div className="text-center max-w-lg">
         <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
-          🏥 シフらく
+          <Hospital className="inline h-8 w-8 text-blue-600 mr-2 align-middle" />シフらく
         </h1>
         <p className="text-base font-semibold text-gray-500 mb-6">
           さくっと当直表。あとで細かく調整。

@@ -10,7 +10,7 @@ from jose import JWTError, jwt
 from core.config import get_settings
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 24 * 30  # 30 days
 
 security = HTTPBearer()
 

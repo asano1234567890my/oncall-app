@@ -1,5 +1,6 @@
 "use client";
 
+import { X } from "lucide-react";
 import StepperNumberInput from "../inputs/StepperNumberInput";
 import type { HardConstraints } from "../../types/dashboard";
 import SettingsModalPortal from "./SettingsModalPortal";
@@ -13,6 +14,7 @@ type RulesConfigProps = {
   onClose: () => void;
   onReset: () => void;
   onSave?: () => void;
+  onShowGuide?: () => void;
   onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
 };
 
@@ -24,46 +26,48 @@ export default function RulesConfig({
   onClose,
   onReset,
   onSave,
+  onShowGuide,
   onHardConstraintChange,
 }: RulesConfigProps) {
   return (
     <SettingsModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
         <div className="flex max-h-[85dvh] min-h-0 w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl sm:max-h-[90vh]">
-          <div className="flex items-start justify-between gap-4 border-b border-indigo-100 bg-indigo-50 px-4 py-4 sm:px-5">
-            <div>
-              <h3 className="text-base font-bold text-gray-900">ルール（ハード制約）設定</h3>
-              <p className="mt-1 text-xs text-gray-500">数値を 0 にすると制限なし。スケジュール生成時に厳守されます。</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onSave && (
+          <div className="flex items-start justify-between gap-2 border-b border-indigo-100 bg-indigo-50 px-4 py-3 sm:px-5">
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-bold text-gray-900">基本ルール</h3>
+              <p className="mt-0.5 text-xs text-gray-500">スケジュール生成時に厳守されます</p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                {onSave && (
+                  <button
+                    type="button"
+                    onClick={onSave}
+                    disabled={isSaving}
+                    className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSaving ? "保存中…" : "保存"}
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={onSave}
-                  disabled={isSaving}
-                  className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={onReset}
+                  className="rounded-md border border-indigo-200 bg-white px-2.5 py-1 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
                 >
-                  {isSaving ? "保存中..." : "保存"}
+                  既定値に戻す
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={onReset}
-                className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700 transition hover:bg-indigo-50"
-              >
-                既定値に戻す
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 transition hover:bg-gray-50"
-              >
-                閉じる
-              </button>
-              {saveMessage && (
-                <span className="text-xs font-bold text-emerald-700">{saveMessage}</span>
-              )}
+                {saveMessage && (
+                  <span className="text-xs font-bold text-emerald-700">{saveMessage}</span>
+                )}
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white hover:text-gray-700"
+              aria-label="閉じる"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

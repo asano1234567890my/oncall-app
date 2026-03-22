@@ -2,10 +2,12 @@
 "use client";
 
 import Link from "next/link";
+import { Calendar } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
 import { DayPicker } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
 import { format } from "date-fns";
 import TargetShiftPopover from "../../components/TargetShiftPopover";
 import type {
@@ -342,7 +344,7 @@ export default function EntryPage() {
               href="/view"
               className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
             >
-              📅 確定した当直表を見る
+              <Calendar className="inline h-4 w-4 mr-1 align-middle" />確定した当直表を見る
             </Link>
           </div>
 
@@ -379,6 +381,7 @@ export default function EntryPage() {
                     <DayPicker
                       month={month}
                       onMonthChange={setMonth}
+                      locale={ja}
                       onDayClick={handleDayClick}
                       navLayout="after"
                       modifiers={calendarModifiers}

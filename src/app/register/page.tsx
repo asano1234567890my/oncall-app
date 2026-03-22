@@ -1,18 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { Hospital } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth, getAuthHeaders } from "../hooks/useAuth";
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { auth, isLoading: isAuthLoading, login } = useAuth();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  // ログイン済みならリダイレクト
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (auth.isAuthenticated) {
+      router.replace("/app");
+    }
+  }, [auth.isAuthenticated, isAuthLoading, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,7 +50,8 @@ export default function RegisterPage() {
 
       // 登録成功後そのままログイン
       await login(name, password);
-      router.push("/");
+      // New users always start with /app (setup wizard)
+      router.push("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "登録に失敗しました");
     } finally {
@@ -49,10 +59,18 @@ export default function RegisterPage() {
     }
   };
 
+  if (isAuthLoading || auth.isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center">🏥 シフらく</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-2 text-center flex items-center justify-center gap-2"><Hospital className="h-7 w-7 text-blue-600" />シフらく</h1>
         <p className="text-sm text-gray-500 text-center mb-8">新規病院アカウントを作成</p>
 
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">

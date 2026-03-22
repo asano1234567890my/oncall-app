@@ -7,7 +7,7 @@
 
 ## 現在のフェーズ
 
-**V1.1 完成・mainプッシュ済み。Renderデプロイ作業中（Python 3.14→3.12固定対応中）**
+**V2.1完了 → Task5: ファイル整理（✅5-1完了）・UI統合（5-2着手予定）・V3 Optimizer（5-3後回し）**
 
 ---
 
@@ -61,33 +61,75 @@
 
 ---
 
-### 【後回し】Task2.6：巨大ファイルの分割リファクタリング
+### 【次】Task5: ファイル整理・UI統合・バックエンド大改修
 
-**目的：** 1ファイルに責務が集中しすぎているファイルを分割し、Task3以降の実装を安全に進める土台を作る。
-**方針：** 動作を変えない。型・インターフェースは変えない。分割後にTypeScript 0エラー・動作確認で完了。
-
----
-
-#### フロントエンド分割
-
-| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
-|---|------|---------|---------|------|
-| 2.6-1 | `useScheduleDnd.ts`（1380行） | 制約チェックロジック一式（`getPlacementConstraintMessage` / `validateScheduleViolations` / `isDoctorBlocked*` 等）を **`useScheduleConstraints.ts`** として分離 | ▲369行（1380→1011） | ✅ 完了 |
-| 2.6-2 | `useScheduleDnd.ts` | スケジュールミューテーション分離 — 2.6-1の方針で吸収済み | — | ✅ 完了（統合） |
-| 2.6-3 | `page.tsx`（804行） | ナビゲーションガードロジック（`confirmNavigationAway` useEffect + stale closure ref群 + `getScheduleSignature`）を **`useNavigationGuard.ts`** として分離 | ▲83行（804→721） | ✅ 完了 |
-| 2.6-4 | `useScheduleApi.ts`（590行） | 医師設定系（`fetchDoctors` / `saveAllDoctorsSettings` / `applyUnavailableDaysFromDoctors` / `applyScoresFromDoctors` / committed refs）を **`useDoctorSettings.ts`** として分離 | ▲178行（590→412） | ✅ 完了 |
-
-> ⚠️ 2.6-1・2.6-2は `useScheduleDnd` の内部state（`hardConstraints` / `schedule` 等）を参照するため、引数として渡す設計にすること
+3つのサブタスクで構成。順番に実施。
 
 ---
 
-#### バックエンド分割
+#### Task5-1: デッドコード削除（✅ 完了）
 
-| # | 対象ファイル（現行） | 分割内容 | 削減見込 | 状態 |
-|---|------|---------|---------|------|
-| 2.6-5 | `optimizer.py`（866行） | `build_model()` 内の制約追加メソッド群（spacing / weekend / score / unavailable 系）を **`optimizer_constraints.py`** に `OnCallOptimizerConstraints` mixin として分離 | ▲約400行 | 未着手 |
+| ファイル | 行数 | 理由 |
+|---------|------|------|
+| `ScheduleBoard.tsx` | 500行 | import 0件。DashboardScheduleTable + MobileScheduleBoard で完全置換済み |
+| `schedule/ScheduleCell.tsx` | 331行 | ScheduleBoard専用。ScheduleBoard削除に伴い不要 |
+| `test/page.tsx` | 65行 | デバッグページ。本番不要 |
+| **合計削除** | **896行** | |
 
-> ⚠️ 2.6-5は `self.model` / `self.shifts` 等を参照するため mixin パターンを使うこと。リスク高めなので最後に実施する。
+---
+
+#### Task5-2: モバイルUI全面刷新 + PC/モバイル分離（✅ 完了）
+
+**方針（確定）:**
+- `/app` = **モバイル版（モバイル特化）** — CompactGenerateCard + MobileScheduleBoard + セットアップウィザード + オンボーディング
+- `/dashboard` = **PC版（PC特化）** — DashboardScheduleTable + DoctorPalette + DashboardToolbar + SettingsSlidePanel + 警告ダイアログ + スマホ検知バナー
+- PC/モバイル自動切替（matchMedia）は廃止 — ヘッダーのタブ切替で明示的に遷移
+
+##### 実装ステップ
+
+| # | 内容 | 状態 |
+|---|------|------|
+| 5-2a | `MobileActionSheet.tsx` 新規作成（ボトムシートUI） | ✅ 完了 |
+| 5-2b | `MobileScheduleBoard.tsx` 全面書き換え（タップ→シート方式） | ✅ 完了 |
+| 5-2c | `/app/page.tsx` からPC用レイアウト（matchMedia/isDesktop/DashboardScheduleTable等）を完全削除・モバイル特化 | ✅ 完了 |
+| 5-2d | `/dashboard/page.tsx` にPC専用警告ダイアログ実装（全体生成時ロック警告・全解除確認・仮保存上書き確認・ツールバーロックトグル） | ✅ 完了 |
+| 5-2e | 不要ファイル削除（SettingsPanel.tsx） | ✅ 完了（useDashboardState.tsはuseOnCallCoreが依存しているため削除不可） |
+| 5-2f | ~~AppHeader簡素化（タブ切替廃止検討）~~ | ✅ 不要 — モバイル版/PC版/当直表のタブ構成で確定 |
+
+##### 残すもの（PC用: /dashboard）
+- `DashboardScheduleTable.tsx` / `DashboardToolbar.tsx` / `DoctorPalette.tsx` / `DashboardSettingsPanel.tsx` / `SettingsSlidePanel.tsx`
+
+##### 残すもの（モバイル用: /app）
+- `MobileScheduleBoard.tsx` / `MobileActionSheet.tsx` / `CompactGenerateCard` / セットアップウィザード・オンボーディング
+
+---
+
+#### Task5-3: V3 Optimizer バックエンド大改修（未着手・後回し）
+
+**目的:** 不活化ウェイト・非公開設定のコード完全削除 + 新アルゴリズム実装
+
+**削除対象（コードごと消す）:**
+- 不活化ウェイト: `gap5`, `gap6`, `sat_consec`, `sunhol_3rd`, `weekend_hol_3rd`, `month_fairness`, `soft_unavailable`
+- 非公開ハード設定: `prevent_sunhol_consecutive`, `respect_unavailable_days`, `max_sunhol_days`, `max_sunhol_works`
+
+**新規実装（docs/optimizer.md 参照）:**
+- 加重累積均等化（土日祝均等化の置き換え）
+- 理想間隔方式（gap5/gap6の置き換え）
+- 累積目標乖離（score_balance/month_fairnessの置き換え）
+- optimizer.py mixin分割（旧Task 2.6-5）も同時実施
+
+> 詳細設計は `docs/optimizer.md` の「将来の再設計計画（V3 Optimizer）」セクション参照
+
+---
+
+#### 【旧Task2.6 フロントエンド分割 — 全完了】
+
+| # | 内容 | 状態 |
+|---|------|------|
+| 2.6-1 | useScheduleConstraints.ts 分離 | ✅ 完了 |
+| 2.6-2 | スケジュールミューテーション分離（2.6-1に統合） | ✅ 完了 |
+| 2.6-3 | useNavigationGuard.ts 分離 | ✅ 完了 |
+| 2.6-4 | useDoctorSettings.ts 分離 | ✅ 完了 |
 
 ---
 
@@ -104,45 +146,74 @@
 | 3-5 | `page.tsx` に認証ガード（未認証→/loginリダイレクト）・ログアウトボタン追加 | `src/app/page.tsx` | ✅ 完了 |
 | 3-6 | 全APIフックに `getAuthHeaders()` (Authorization: Bearer) を追加 | `useScheduleApi.ts`, `useDoctorSettings.ts`, `useOptimizerConfig.ts`, `useCustomHolidays.ts` | ✅ 完了 |
 
-### 【後で】Task4（旧Task3）：仮保存機能
+### 【完了】Task4（旧Task3）：仮保存機能
 
 **目的：** 作業中シフトを下書きとしてDBに保存し、別デバイス・別日でも続きから作業できるようにする。
+**方式：** `system_settings` KVストア利用（キー: `draft_schedule_YYYY_MM`、値: JSONB）— テーブル新設不要
 
 | # | 内容 | 状態 |
 |---|------|------|
-| 4-1 | `draft_schedules` テーブル作成・マイグレーション | 未着手 |
-| 4-2 | `POST/GET /api/schedule/draft` API | 未着手 |
-| 4-3 | 「仮保存」「仮保存を読み込む」ボタン | 未着手 |
+| 4-1 | `settings_service.py` に `get/upsert/delete_draft_schedule` 追加 | ✅ 完了 |
+| 4-2 | `GET/PUT/DELETE /api/schedule/draft/{year}/{month}` API | ✅ 完了 |
+| 4-3 | `useDraftSchedule.ts` フック新設 + `useOnCallCore` 統合 | ✅ 完了 |
+| 4-4 | `/app` `/dashboard` 両方に仮保存/確定保存ボタン・読み込み・確定→仮保存コピー | ✅ 完了 |
 
 ---
 
-### 【後々】Task4：V1.1新機能（出勤可能人数の可視化）
+### 【次】Phase1: 売り物にする（プロダクト戦略 `docs/product_strategy.md` 参照）
 
-| # | 内容 | スコープ | 状態 |
-|---|------|---------|------|
-| 3-1 | `availability_service.py` 新設（日付ごとの出勤可能人数算出） | `backend/services/` | 未着手 |
-| 3-2 | APIレスポンスに `availability_summary` を追加 | `backend/routers/` | 未着手 |
-| 3-3 | フロントの日付セルに空き枠数バッジをレンダリング | `src/app/components/` | 未着手 |
+**テーマ：「自分の病院以外にも使える状態にする」**
 
----
-
-### 【後々】Task5：AI診断機能（制約競合の可視化）
-
-**目的：** 「解なし」エラーを「A先生とB先生の希望がぶつかっています」という具体的なアドバイスに変える。
-
-| # | 内容 | 状態 |
-|---|------|------|
-| 3-1 | 制約をソフト化して「妥協解」を出力させる | 未着手 |
-| 3-2 | 競合している制約を特定して統計レポートを生成 | 未着手 |
+| # | 内容 | 優先度 | 状態 |
+|---|------|--------|------|
+| P1-1 | PDF/Excel出力（`reportlab`/`openpyxl`） | P0 | 未着手 |
+| P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 未着手 |
+| P1-3 | プライバシーポリシー・利用規約ページ | P0 | 未着手 |
+| P1-4 | 不可日ソフト化UI（is_soft_penaltyのUI公開） | P1 | 未着手 |
+| P1-5 | マジックリンク一斉送信（メール or LINE） | P1 | 未着手 |
+| P1-6 | 自院での実運用（2ヶ月以上） | P0 | 🔄 準備中 |
+| P1-7 | 簡易分析ページ（スコア分布グラフ） | P1 | 未着手 |
+| P1-8 | Stripe決済 + プラン別機能制限 | P0 | 未着手 |
+| P1-9 | データエクスポート/アカウント削除 | P1 | 未着手 |
 
 ---
 
-### 【後回し】Task6：リファクタリングPhase2〜5
+### 【後】Phase2: 定着させる（3〜6ヶ月目）
 
-- Phase2: 医師更新ロジックの重複排除（Admin/Public）
-- Phase3: `page.tsx`, `useScheduleDnd.ts` のHook分割
-- Phase4: `optimizer.py` のモジュール化（V2マルチシフト対応準備）
-- Phase5: pytestの修復
+| 内容 | 状態 |
+|------|------|
+| カスタムシフト種別（`shift_types`テーブル・optimizer汎用化） | 未着手 |
+| LINE連携（確定通知プッシュ） | 未着手 |
+| Googleカレンダー同期（ICSフィード） | 未着手 |
+| シフト交換リクエスト | 未着手 |
+| 複数月一括最適化（逐次carry-forward） | 未着手 |
+
+---
+
+### 【将来】Phase3: 拡大する（6〜12ヶ月目）
+
+| 内容 | 状態 |
+|------|------|
+| 複数診療科対応（`department_id`追加） | 未着手 |
+| HIS連携API | 未着手 |
+| ISMS/セキュリティ文書 | 未着手 |
+
+---
+
+### 【完了済み】V2 UXリデザイン
+
+✅ LP / ✅ /app / ✅ /dashboard / ✅ セットアップウィザード / ✅ オンボーディング / ✅ 初期画面設定 / ✅ 公開デモ / ✅ ヘッダー統一 / ✅ 仮保存機能
+
+---
+
+### 【保留】技術的負債
+
+| 内容 | 状態 |
+|------|------|
+| optimizer.py mixin分割 + V3大改修 | Task5-3で実施予定 |
+| pytest修復 | 未着手（Phase1中に実施） |
+| CORS本番設定（`*` → ドメイン限定） | 未着手 |
+| 医師更新ロジック重複排除（Admin/Public） | 未着手 |
 
 ---
 
@@ -150,8 +221,9 @@
 
 | タスク | 内容 | 状態 |
 |--------|------|------|
-| タスクA | 自院でのV1.1実戦投入・実績獲得 | 🔄 Renderデプロイ確認後に開始 |
+| タスクA | 自院でのV1.1実戦投入・実績獲得 | 🔄 進行中 |
 | タスクB | 他院へのヒアリング（V2要件定義） | タスクA完了後 |
+| タスクC | UXリデザイン（LP・/app・オンボーディング・公開デモ） | ✅ 全フェーズ完了 |
 
 ---
 
@@ -167,6 +239,51 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-22 | B-3完了: 絵文字削減 — 全7ファイル22箇所の絵文字をLucideアイコンに置き換え（🏥→Hospital, ⚖️→Scale, 📅→Calendar, 🔄→RefreshCw, 👨‍⚕️→UserCog, 📊→BarChart3, 🗓️→CalendarDays, 🚫→Ban, ⚠️→AlertTriangle, ✅→CheckCircle, 💡→Lightbulb）。ServerStatusBannerは接続中アニメーション付き。PainCard/SettingsMenuItemのpropsをemoji:string→icon:LucideIconに型変更 |
+| 2026-03-22 | モバイル版に青ハイライトフェード追加: MobileScheduleBoard.tsxにundoFlashアニメーション実装（PC版DashboardScheduleTableと同等のchangedShiftKeys連携・1.5秒フェードアウト） |
+| 2026-03-22 | /dashboardスマホ検知バナー改善: zoom内の小さいテキストバナー→zoom外のフルスクリーンボトムシートに変更（下からスライドイン・「モバイル版へ移動」大ボタン・「このままPC版で作業する」薄めテキスト） |
+| 2026-03-22 | B-2完了: オンボーディング文章統一 — dnd説明をモバイル操作に合わせて全面書き換え（1タップ=ハイライト、2タップ=操作メニュー）・不可日設定の保存ボタン説明を具体化・スコア設定パネルに?ガイドボタン追加（全10セクションで統一） |
+| 2026-03-22 | Task5-2e完了: SettingsPanel.tsx削除（490行・どこからもimportなし）。useDashboardState.tsはuseOnCallCoreが依存しているため残留 |
+| 2026-03-22 | 小修正バッチ(A1-A5): ウィザード初期値修正（minShifts 3→1、下限max=4、上限max=8）・確定保存の誤警告修正（全スロットnull=未作成扱い）・スコア一覧4列化・ルール表示崩れ修正（ラベル短縮+unit短縮）・フェイクプログレスバー段階的進行（0→30→60→85→90%、モバイル/PC両対応） |
+| 2026-03-22 | モバイルタップUX刷新(B-1): 1タップ=医師ハイライト（全配置日+制約違反色分け、PC版と同等のgetHighlightedViolation利用）・2タップ=ボトムシート表示・モザイク廃止（backdrop blur削除→薄い暗転のみ）・「解除」→「外す」文言変更 |
+| 2026-03-22 | docs/optimizer.md追記: 符号付き累積の原則（加重累積・累積目標乖離）・新規赴任医師の過去スコア補正ロジック再設計注記 |
+| 2026-03-21 | 上級設定: 「土日祝の均等化」グループに子要素の比率調整UI追加（?ボタン→説明パネル→0.0〜1.0比率スライダー）。比率はoptimizer_configのweight_ratiosとしてDB永続化。shared.tsにWeightChildMeta/WeightRatioOverrides型追加、expandWeightGroupsが動的比率対応、WeightsConfig/DashboardSettingsPanel/useOptimizerConfig/useDashboardState/useOnCallCoreに比率の状態管理追加 |
+| 2026-03-21 | ページ名変更: 「かんたん」→「モバイル版」・「一覧」→「PC版」（AppHeader/DefaultPageSetting/OnboardingModal）・ダッシュボード設定ボタン「設定」→「アカウント」 |
+| 2026-03-21 | スマホ検知バナー: /dashboardにモバイル検知（768px未満 or タッチデバイス）→「モバイル版が快適です」バナー表示（×で閉じれる） |
+| 2026-03-21 | 入れ替えボタン（⇄）: 各セルのロックボタン左に追加・タップで入れ替え元選択→別セル⇄タップで入れ替え実行・選択元は濃い紫塗りつぶし・入れ替え中に医師名クリックでキャンセル+新医師ハイライト |
+| 2026-03-21 | ハイライト違反マップ改善: テーブルクリック=swap simulation（クリックしたセルからの入れ替え可否）・パレットクリック=placement check（配置可否）・間隔/土曜上限/日祝上限/不可日等すべての制約を反映・赤セルホバーでフローティングツールチップ（医師ごとに改行表示） |
+| 2026-03-21 | 配色リデザイン: 曜日ベース（土曜=青/日祝=アンバー/平日=グレー）・制約違反=赤統一・ロックボタン明確化（ロック=アンバー塗り/未ロック=グレー枠線）・ハイライト=青太字+ring |
+| 2026-03-21 | パレットUI改善: ロック/解除ボタン削除（ツールバーに統合済み）・ゴミ箱を下部sticky固定・ハイライト時のカード目立ち強化 |
+| 2026-03-21 | ドラッグ中フローティングツールチップ: マウス追従で制約違反理由を表示（医師ごとに改行） |
+| 2026-03-21 | /dashboard固定レイアウト: min-w-1280px固定+自動zoom縮小（window.innerWidth/1280）・DoctorPaletteをposition:fixedで画面右端固定+トグル開閉ボタン（▶/◀）・paddingRightでメイン領域との重なり防止 |
+| 2026-03-21 | /dashboardツールバー再構築: 生成スプリットボタン（固定なし→「▶ 生成」全体生成、固定あり→「▶ 再生成」未固定枠のみ）・ドロップダウンに仮保存読込/確定済み読込/未固定枠クリアを統合・「白紙作成」独立ボタン追加・確定済み読込時に確認ダイアログ追加 |
+| 2026-03-21 | Undo/Redo強化: 最大15スナップショット保持（生成でもリセットされない）・生成時の中間状態（未固定枠クリア）をスキップ・変更セルに青ハイライト1.5秒フェード（undoFlashアニメーション）・D&D入替え時も同じハイライト |
+| 2026-03-21 | /app→モバイル専用: PC用レイアウト完全削除（matchMedia/isDesktop/DashboardScheduleTable/DoctorPalette/SettingsSlidePanel/DashboardSettingsPanel）・/dashboardはPC専用として独立維持 |
+| 2026-03-21 | /dashboard警告UX: 全体生成時ロック存在警告・ツールバーロックトグル・全解除確認ダイアログ・仮保存上書き確認（タイムスタンプ表示） |
+| 2026-03-21 | LP改善: InlineDemo初期値変更（医師12/間隔4/当直3/土曜1/日祝3）・月セレクタ追加・LP文言全面リライト（モバイル+PC訴求・専門用語排除） |
+| 2026-03-20 | Task5-2c/d: /app/page.tsxにPC/モバイル統合レイアウト実装（後に/appからPC部分削除） |
+| 2026-03-20 | Task5-2a/b完了: MobileActionSheet新規作成（タップ→ボトムシートUI・変更/入替え/解除/ロック・医師選択リスト+スコア+制約表示）・MobileScheduleBoard全面書き換え（3列テーブル・13-14pxフォント・セル内ボタン廃止・ツールバー4ボタン化）・useScheduleDndにモバイル用命令的API追加（placeDoctorInShift/removeDoctorFromShift/startSwapFrom/executeSwapTo） |
+| 2026-03-20 | Task5-1完了: デッドコード削除 — ScheduleBoard.tsx(500行)+ScheduleCell.tsx(331行)+test/page.tsx(65行)=896行削除。Task5ロードマップ策定（UI統合・V3 Optimizer計画） |
+| 2026-03-20 | ダッシュボードUI改善: スケジュール表2カラム化（前半/後半横並び）・医師名中央配置・行高さ固定（h-8+overflow-hidden+td overflow-hidden）・全設定モーダルヘッダー統一リデザイン（閉じる→×アイコン・保存/リセットをタイトル下コンパクトボタン化・モバイルでの全幅ブロック崩壊を解消） |
+| 2026-03-20 | 設定UI/制約ルール大整理: 基本ルール統合（勤務間隔・土日祝上限・土曜当直上限・シフトモード・スコア設定を1セクションに）、優先度13個→2軸グループスライダー化（目標スコア近似・土日祝均等化）、不要ウェイト7個不活化（gap5/gap6/sat_consec/sunhol_3rd/weekend_hol_3rd/month_fairness/soft_unavailable）、不可日は常にハード制約、prevent_sunhol_consecutive/respect_unavailable_days/max_sunhol_days/max_sunhol_worksをUI非公開化、FE/BEデフォルト値統一、回数上限の最小値を1に修正（0=配置不可の罠を解消）、V3 Optimizer再設計計画をdocs/optimizer.mdに記載（加重累積均等化・理想間隔方式・累積目標乖離） |
+| 2026-03-20 | V2.1 ダッシュボードD&D特化リデザイン: レイアウト反転（左=スケジュール全幅+右=医師パレット200px）・設定を右スライドインオーバーレイ化・1カラム全幅テーブル（14pxフォント）・ドラッグ中全セル緑/グレー色分け（cellValidityMap）・ツールバー整理（生成ドロップダウン）・ゴミ箱をパレット内統合・スワップボタン削除（セル→セルD&Dで自動スワップ）・新規4コンポーネント（DashboardScheduleTable/DashboardToolbar/DoctorPalette/SettingsSlidePanel） |
+| 2026-03-20 | ヘッダー統一リデザイン: AppHeader をタブナビゲーション方式に全面刷新（かんたん/一覧/当直表）・全認証ページで共通使用・/view は公開ページ化（未認証時はシンプルヘッダー） |
+| 2026-03-20 | 設定UI整理: パスワード変更・初期画面設定を共通コンポーネント化（PasswordChangeForm/DefaultPageSetting）・/app と /dashboard の設定モーダルに統合 |
+| 2026-03-20 | ナビゲーションガード修正: デフォルト値との比較→保存済み値との比較に変更（savedWeightsRef/savedHardRef）・誤警告の解消 |
+| 2026-03-20 | 確定シフト閲覧: /app ヘッダーに「確定シフト」ボタン追加・確定済みスケジュールの読み取り専用テーブル表示・「仮保存にコピーして編集」ボタン |
+| 2026-03-19 | 仮保存機能: system_settings KVストアで仮保存CRUD（GET/PUT/DELETE /api/schedule/draft/{year}/{month}）・useDraftScheduleフック・/app＋/dashboard両対応・確定→仮保存コピー |
+| 2026-03-19 | シフト表UX強化: 医師タップハイライト（青）・不可日/不可曜日per-shift赤ハイライト・スワップ時フラッシュアニメーション・ステータスバー固定高さ |
+| 2026-03-19 | ガイドボタン: 全ドロワー＋MobileScheduleBoard toolbar に「?」ボタン追加（per-section onShowGuide）・DoctorManageDrawerにマジックリンクコピー＋ロック機能追加 |
+| 2026-03-19 | MobileScheduleBoard新設: /app専用モバイルスケジュール表（タップ操作・coreプロップ1つ・スティッキーツールバー・DoctorSettingsPanel分離） |
+| 2026-03-19 | UI改善: ラベル統一（一覧モード/かんたんモード）・オンボーディング全セクション対応・シフトスコア設定UI・優先度説明文修正 |
+| 2026-03-18 | UX改善: SetupGuideの各ステップが対応するドロワーに直接遷移・SetupWizard間隔スライダー0-7日対応・/app↔/dashboardナビ追加・初期設定やり直しボタン・ブラウザ戻りAuth修正・InlineDemoタップ入替/年次モード/combined対応 |
+| 2026-03-18 | V2 UX Phase6完了: 初期画面設定（/app vs /dashboard トグル・ログイン後リダイレクト分岐） |
+| 2026-03-18 | V2 UX Phase5完了: 公開デモ（POST /api/demo/optimize + LP埋め込みInlineDemo） |
+| 2026-03-18 | V2 UX Phase4完了: オンボーディング（useOnboarding + OnboardingModal + DB永続化） |
+| 2026-03-18 | V2 UX Phase3完了: セットアップウィザード（5ステップ質問→仮医師生成→設定保存）実装 |
+| 2026-03-18 | V2 UX Phase2b完了: `/app`初心者向けメイン画面（ステップガイド+設定フルスクリーンモーダル+ドロワー）実装 |
+| 2026-03-18 | V2 UX Phase2a完了: `useOnCallCore`統合フック抽出・`/dashboard`簡素化 |
+| 2026-03-18 | V2 UX Phase1a-1b完了: `/dashboard`分離・LP作成・ログイン後遷移先を`/app`に変更 |
 | 2026-03-18 | Renderデプロイ修正: requirements.txt最小化・.python-version追加（Python 3.12.9固定） |
 | 2026-03-18 | 同月土曜回数平準化（sat_month_fairness: 100）追加・ソフト制約の自動無効化UI実装 |
 | 2026-03-18 | V1.1バグ修正3件: gap重み動的化・土曜上限ソフトペナルティ・unavailableゲート分離（respect=OFF時にソフト化） |
@@ -190,6 +307,6 @@
 - 本番DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
 - 開発DB: Neon devブランチ（取得後 `.env` の `DATABASE_URL` に設定）
 - マイグレーション: `$env:DATABASE_URL="<dev_branch_url>"; alembic upgrade head`
-- 認証: JWT HS256 / 24h有効 / `JWT_SECRET_KEY` を `.env` に設定必須
+- 認証: JWT HS256 / 30日有効 / `JWT_SECRET_KEY` を `.env` に設定必須
 - パスワードハッシュ: `bcrypt` 直接使用（passlib 非対応のため）
 - 既存Ebina HospitalデータはID `a0000000-0000-4000-8000-000000000001`、初期PW: `EbinaHospital2024!`

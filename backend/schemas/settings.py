@@ -26,3 +26,7 @@ class OptimizerConfigRequest(BaseModel):
     score_max: float = 4.5
     objective_weights: Dict[str, Any] = Field(default_factory=dict)
     hard_constraints: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SystemSettingUpsertRequest(BaseModel):
+    value: Any = None

@@ -1,184 +1,98 @@
+// src/app/components/AppHeader.tsx — 管理者ページ共通ヘッダー
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
-type Crumb = { href: string; label: string };
+type NavItem = {
+  label: string;
+  href: string;
+  match: string;
+};
 
-function buildCrumbs(pathname: string): Crumb[] {
-  if (pathname === "/") return [{ href: "/", label: "ダッシュボード" }];
+const NAV_ITEMS: NavItem[] = [
+  { label: "モバイル版", href: "/app", match: "/app" },
+  { label: "PC版", href: "/dashboard", match: "/dashboard" },
+  { label: "当直表", href: "/view", match: "/view" },
+];
 
-  if (pathname.startsWith("/admin/doctors")) {
-    return [
-      { href: "/", label: "シフらく" },
-      { href: "/admin/doctors", label: "医師管理" },
-    ];
-  }
+type AppHeaderProps = {
+  hospitalName?: string | null;
+  onLogout: () => void;
+  /** ページ遷移前の確認（未保存チェック等）。false を返すと遷移中止 */
+  onBeforeNavigate?: () => boolean;
+  /** 右端に追加するボタン等 */
+  rightExtra?: React.ReactNode;
+};
 
-  if (pathname.startsWith("/view")) {
-    return [
-      { href: "/", label: "シフらく" },
-      { href: "/view", label: "当直表を見る" },
-    ];
-  }
-
-  return [{ href: "/", label: "シフらく" }];
-}
-
-export default function AppHeader() {
+export default function AppHeader({ hospitalName, onLogout, onBeforeNavigate, rightExtra }: AppHeaderProps) {
   const pathname = usePathname();
-  const router = useRouter();
 
-  // ✅ 管理導線を出す範囲を限定（/ と /admin のみ）
-  const isAdminScope = pathname === "/" || pathname.startsWith("/admin");
-  // ✅ 閲覧・入力スコープ（管理導線を完全に絶つ）
-  const isPublicScope = pathname.startsWith("/view") || pathname.startsWith("/entry");
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (pathname === href) {
+      e.preventDefault();
+      return;
+    }
+    if (onBeforeNavigate && !onBeforeNavigate()) {
+      e.preventDefault();
+    }
+  };
 
-  // Public（/view・/entry）は「システム名 + 戻る」だけ
-  if (isPublicScope) {
-    return (
-      <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
-        <div className="max-w-5xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="font-extrabold text-gray-800 whitespace-nowrap">
-              🏥 シフらく v1.1
-            </div>
-
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="px-3 py-2 rounded text-sm font-bold border bg-white text-gray-700 hover:bg-gray-50"
-              title="前の画面へ戻る"
-            >
-              ← 戻る
-            </button>
-          </div>
-        </div>
-      </header>
-    );
-  }
-
-  // 管理スコープ（/ と /admin）だけ従来UI
-  const crumbs = buildCrumbs(pathname);
-  const isHome = pathname === "/";
+  const handleLogout = () => {
+    if (onBeforeNavigate && !onBeforeNavigate()) return;
+    onLogout();
+  };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
-      <div className="max-w-5xl mx-auto px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          {/* 左：タイトル＋パンくず */}
-          <div className="min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="font-extrabold text-gray-800 whitespace-nowrap">
-                🏥 シフらく v1.1
-              </div>
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-4">
+        {/* Left: Logo + Nav */}
+        <div className="flex items-center gap-1 sm:gap-5">
+          <Link
+            href="/app"
+            onClick={(e) => handleNavClick(e, "/app")}
+            className="py-3 text-base font-extrabold text-gray-800 sm:mr-1"
+          >
+            シフらく
+          </Link>
 
-              <nav className="hidden sm:flex items-center gap-2 text-xs text-gray-500 min-w-0">
-                {crumbs.map((c, idx) => (
-                  <span key={c.href} className="flex items-center gap-2 min-w-0">
-                    {idx !== 0 && <span className="text-gray-300">/</span>}
-                    <Link
-                      href={c.href}
-                      className="hover:text-gray-800 truncate"
-                      title={c.label}
-                    >
-                      {c.label}
-                    </Link>
-                  </span>
-                ))}
-              </nav>
-            </div>
-
-            <div className="sm:hidden text-[10px] text-gray-500 mt-1 truncate">
-              {crumbs.map((c, idx) => (idx === 0 ? c.label : ` / ${c.label}`)).join("")}
-            </div>
-          </div>
-
-          {/* 右：管理ナビ＋戻る */}
-          <div className="flex items-center gap-2">
-            {isAdminScope && (
-              <nav className="hidden md:flex items-center gap-2">
+          <nav className="flex">
+            {NAV_ITEMS.map((item) => {
+              const isActive = pathname.startsWith(item.match);
+              return (
                 <Link
-                  href="/"
-                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                    pathname === "/"
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
+                  key={item.href}
+                  href={item.href}
+                  onClick={(e) => handleNavClick(e, item.href)}
+                  className={`relative px-2.5 py-3 text-sm font-medium transition-colors sm:px-3 ${
+                    isActive
+                      ? "text-blue-700"
+                      : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  シフらく
+                  {item.label}
+                  {isActive && (
+                    <span className="absolute bottom-0 left-1 right-1 h-0.5 rounded-full bg-blue-600" />
+                  )}
                 </Link>
-                <Link
-                  href="/admin/doctors"
-                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                    pathname.startsWith("/admin/doctors")
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  医師管理
-                </Link>
-                <Link
-                  href="/view"
-                  className={`px-3 py-1.5 rounded text-sm font-bold border transition ${
-                    pathname.startsWith("/view")
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  当直表を見る
-                </Link>
-              </nav>
-            )}
-
-            {!isHome && (
-              <button
-                type="button"
-                onClick={() => router.back()}
-                className="px-3 py-1.5 rounded text-sm font-bold border bg-white text-gray-700 hover:bg-gray-50"
-                title="前の画面へ戻る"
-              >
-                ← 戻る
-              </button>
-            )}
-          </div>
+              );
+            })}
+          </nav>
         </div>
 
-        {/* 管理スコープだけ下段タブ（スマホ） */}
-        {isAdminScope && (
-          <div className="md:hidden mt-3 flex gap-2">
-            <Link
-              href="/"
-              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-                pathname === "/"
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700"
-              }`}
-            >
-              作成
-            </Link>
-            <Link
-              href="/admin/doctors"
-              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-                pathname.startsWith("/admin/doctors")
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700"
-              }`}
-            >
-              医師
-            </Link>
-            <Link
-              href="/view"
-              className={`flex-1 text-center px-3 py-2 rounded text-xs font-bold border ${
-                pathname.startsWith("/view")
-                  ? "bg-gray-900 text-white border-gray-900"
-                  : "bg-white text-gray-700"
-              }`}
-            >
-              閲覧
-            </Link>
-          </div>
-        )}
+        {/* Right: extras + hospital name + logout */}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {rightExtra}
+          {hospitalName && (
+            <span className="hidden text-xs text-gray-400 sm:inline">{hospitalName}</span>
+          )}
+          <button
+            onClick={handleLogout}
+            className="rounded-md px-2 py-1.5 text-xs text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          >
+            ログアウト
+          </button>
+        </div>
       </div>
     </header>
   );

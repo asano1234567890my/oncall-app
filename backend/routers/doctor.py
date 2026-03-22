@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -44,9 +45,15 @@ async def get_doctors(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
         .where(Doctor.hospital_id == hospital_id)
-        .order_by(Doctor.name)
     )
-    doctors = result.scalars().all()
+    doctors = sorted(
+        result.scalars().all(),
+        key=lambda d: [
+            int(c) if c.isdigit() else c.lower()
+            for c in re.split(r"(\d+)", d.name)
+            if c
+        ],
+    )
 
     return [
         {

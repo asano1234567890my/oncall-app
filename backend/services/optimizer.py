@@ -13,25 +13,27 @@ import random
 @dataclass
 class ObjectiveWeights:
     # Objective weights. Larger values penalize the corresponding violations more strongly.
-    month_fairness: int = 100
-    sat_month_fairness: int = 100
-    past_sat_gap: int = 10
-    past_sunhol_gap: int = 5
-    gap5: int = 100
-    gap6: int = 50
-
-    sat_consec: int = 80
+    # Active: target score + weekend/holiday equalization
+    target: int = 100
     score_balance: int = 30
-    target: int = 10
-    sunhol_fairness: int = 200
-    sunhol_3rd: int = 80
+    sunhol_fairness: int = 100
+    sat_month_fairness: int = 100
+    past_sunhol_gap: int = 50
+    past_sat_gap: int = 50
+    # Deactivated (to be redesigned: auto-follow hard constraints)
+    month_fairness: int = 0
+    gap5: int = 0
+    gap6: int = 0
+    sat_consec: int = 0
+    sunhol_3rd: int = 0
     weekend_hol_3rd: int = 0
-    soft_unavailable: int = 100
+    soft_unavailable: int = 0
 
 
 class OnCallOptimizer:
     """CP-SAT model for monthly on-call schedule generation."""
 
+    # Default score weights (×10 for integer arithmetic in CP-SAT)
     W_WEEKDAY_NIGHT = 10  # 1.0
     W_SAT_NIGHT = 15      # 1.5
     W_SUNHOL_DAY = 5      # 0.5
@@ -66,6 +68,7 @@ class OnCallOptimizer:
         prevent_sunhol_consecutive: Optional[Any] = None,
         respect_unavailable_days: Optional[Any] = None,
         locked_shifts: Optional[List[Dict[str, Any]]] = None,
+        shift_scores: Optional[Dict[str, float]] = None,
     ):
         self.num_doctors = num_doctors
         self.year = year
@@ -106,21 +109,36 @@ class OnCallOptimizer:
         # locked_shifts are normalized to doctor_idx at the router boundary.
         self.locked_shifts = locked_shifts or []
 
+        # Apply configurable shift scores (override class defaults)
+        ss = shift_scores or {}
+        if "weekday_night" in ss:
+            self.W_WEEKDAY_NIGHT = int(round(float(ss["weekday_night"]) * 10))
+        if "saturday_night" in ss:
+            self.W_SAT_NIGHT = int(round(float(ss["saturday_night"]) * 10))
+        if "holiday_day" in ss:
+            self.W_SUNHOL_DAY = int(round(float(ss["holiday_day"]) * 10))
+        if "holiday_night" in ss:
+            self.W_SUNHOL_NIGHT = int(round(float(ss["holiday_night"]) * 10))
+        # combined day+night = holiday_day + holiday_night
+        self.W_DAY_NIGHT = self.W_SUNHOL_DAY + self.W_SUNHOL_NIGHT
+
         ow = objective_weights or {}
         self.objective_weights = ObjectiveWeights(
-            month_fairness=int(ow.get("month_fairness", 100)),
-            past_sat_gap=int(ow.get("past_sat_gap", 10)),
-            past_sunhol_gap=int(ow.get("past_sunhol_gap", 5)),
-            gap5=int(ow.get("gap5", 100)),
-            gap6=int(ow.get("gap6", 50)),
-            sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
-            sat_consec=int(ow.get("sat_consec", 80)),
+            # Active
+            target=int(ow.get("target", 100)),
             score_balance=int(ow.get("score_balance", 30)),
-            target=int(ow.get("target", 10)),
-            sunhol_fairness=int(ow.get("sunhol_fairness", 200)),
-            sunhol_3rd=int(ow.get("sunhol_3rd", 80)),
+            sunhol_fairness=int(ow.get("sunhol_fairness", 100)),
+            sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
+            past_sunhol_gap=int(ow.get("past_sunhol_gap", 50)),
+            past_sat_gap=int(ow.get("past_sat_gap", 50)),
+            # Deactivated
+            month_fairness=int(ow.get("month_fairness", 0)),
+            gap5=int(ow.get("gap5", 0)),
+            gap6=int(ow.get("gap6", 0)),
+            sat_consec=int(ow.get("sat_consec", 0)),
+            sunhol_3rd=int(ow.get("sunhol_3rd", 0)),
             weekend_hol_3rd=int(ow.get("weekend_hol_3rd", 0)),
-            soft_unavailable=int(ow.get("soft_unavailable", 100)),
+            soft_unavailable=int(ow.get("soft_unavailable", 0)),
         )
 
         self.model = cp_model.CpModel()
@@ -716,7 +734,7 @@ class OnCallOptimizer:
 
         target_penalties = []
         for d in doctors:
-            if d in self.target_score_by_doctor:
+            if d in self.target_score_by_doctor and self.target_score_by_doctor[d] > 0:
                 t_score = int(round(self.target_score_by_doctor[d] * 10))
                 diff = self.model.NewIntVar(-2000, 2000, f"diff_target_d{d}")
                 abs_diff = self.model.NewIntVar(0, 2000, f"abs_diff_target_d{d}")
