@@ -159,15 +159,16 @@ export default function AppPage() {
     <div className="min-h-screen bg-gray-50 font-sans">
       <AppHeader
         hospitalName={core.auth.hospitalName}
-        onLogout={core.logout}
         onBeforeNavigate={() => core.confirmMoveWithUnsavedChanges()}
+        hideLogout
         rightExtra={
           <button
             onClick={openAccountSettings}
-            className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1 rounded-md border border-gray-200 px-1.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors sm:px-2.5"
+            title="アカウント"
           >
             <Settings className="h-3.5 w-3.5" />
-            アカウント
+            <span className="hidden sm:inline">アカウント</span>
           </button>
         }
       />
@@ -301,6 +302,12 @@ export default function AppPage() {
               className="w-full rounded-lg border border-gray-200 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
             >
               初期設定からやり直す
+            </button>
+            <button
+              onClick={() => { setIsAccountSettingsOpen(false); core.logout(); }}
+              className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ログアウト
             </button>
           </div>
         </div>

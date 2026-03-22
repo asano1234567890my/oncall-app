@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, X } from "lucide-react";
+import { Loader2, Settings, X } from "lucide-react";
 import AppHeader from "../components/AppHeader";
 import DashboardScheduleTable from "../components/DashboardScheduleTable";
 import DashboardToolbar from "../components/DashboardToolbar";
@@ -95,13 +95,15 @@ export default function DashboardPage() {
     >
       <AppHeader
         hospitalName={core.auth.hospitalName}
-        onLogout={core.logout}
+        hideLogout
         rightExtra={
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+            className="flex items-center gap-1 rounded-md border border-gray-200 px-1.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 transition-colors sm:px-2.5"
+            title="アカウント"
           >
-            アカウント
+            <Settings className="h-3.5 w-3.5 sm:hidden" />
+            <span className="hidden sm:inline">アカウント</span>
           </button>
         }
       />
@@ -285,6 +287,13 @@ export default function DashboardPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
               <PasswordChangeForm />
             </div>
+            <hr className="border-gray-200" />
+            <button
+              onClick={() => { setIsSettingsOpen(false); core.logout(); }}
+              className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              ログアウト
+            </button>
           </div>
         </div>
       )}

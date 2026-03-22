@@ -25,6 +25,14 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* ボタン・ナビリンク・ラベル系は改行しない */
+button,
+nav a,
+label,
+th {
+  white-space: nowrap;
+}
+
 /* 入れ替え完了フラッシュ（赤→透明へフェードアウト） */
 @keyframes swap-flash {
   0% {
