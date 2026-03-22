@@ -160,31 +160,11 @@ export default function ViewSchedulePage() {
     }
   };
 
-  const handleExport = async (format: "pdf" | "xlsx") => {
+  const handleExport = (format: "pdf" | "xlsx") => {
     if (schedule.length === 0) return;
-    try {
-      const res = await fetch(
-        `${API_BASE}/api/schedule/export/${year}/${month}?format=${format}`,
-        { headers: getAuthHeaders() },
-      );
-      if (!res.ok) throw new Error("failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      // window.open is more reliable on mobile browsers
-      const opened = window.open(url, "_blank");
-      if (!opened) {
-        // Fallback: anchor click
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `oncall_${year}_${pad2(month)}.${format}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch {
-      window.alert("ダウンロードに失敗しました。");
-    }
+    const token = localStorage.getItem("oncall_token") || "";
+    const url = `${API_BASE}/api/schedule/export/${year}/${month}?format=${format}&token=${encodeURIComponent(token)}`;
+    window.open(url, "_blank");
   };
 
   const renderColumn = (rows: ScheduleRow[]) => (

@@ -819,15 +819,34 @@ def _build_xlsx(
     return buf.getvalue()
 
 
+def _decode_token(token: str) -> uuid.UUID:
+    """JWTトークンからhospital_idを取得。exportエンドポイントのクエリパラメータ認証用。"""
+    from jose import JWTError, jwt as jose_jwt
+    from core.config import get_settings
+    settings = get_settings()
+    try:
+        payload = jose_jwt.decode(token, settings.jwt_secret_key, algorithms=["HS256"])
+        hospital_id_str = payload.get("hospital_id")
+        if not hospital_id_str:
+            raise HTTPException(status_code=401, detail="認証が必要です")
+        return uuid.UUID(hospital_id_str)
+    except (JWTError, ValueError):
+        raise HTTPException(status_code=401, detail="認証が必要です")
+
+
 @router.get("/export/{year}/{month}")
 async def export_schedule(
     year: int,
     month: int,
     format: str = Query("pdf", regex="^(pdf|xlsx)$"),
-    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    token: str = Query(default=""),
     db: AsyncSession = Depends(get_db),
 ):
-    """当直表をPDFまたはExcelファイルとしてダウンロード。"""
+    """当直表をPDFまたはExcelファイルとしてダウンロード。クエリパラメータtokenで認証。"""
+    if not token:
+        raise HTTPException(status_code=401, detail="認証が必要です")
+    hospital_id = _decode_token(token)
+
     hospital_name, doctor_map, rows, holiday_dates = await _fetch_export_data(
         year, month, hospital_id, db,
     )
