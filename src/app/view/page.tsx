@@ -234,7 +234,7 @@ export default function ViewSchedulePage() {
       {/* ── Content ── */}
       <main className="mx-auto max-w-3xl px-4 py-4">
         {/* Year/Month selector + actions */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 space-y-2">
           <div className="flex items-center gap-1.5 text-sm">
             <input
               type="number"
@@ -257,7 +257,7 @@ export default function ViewSchedulePage() {
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {auth.isAuthenticated && schedule.length > 0 && (
               <>
                 <button
