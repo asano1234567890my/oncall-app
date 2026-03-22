@@ -1313,7 +1313,7 @@ class OnCallOptimizer:
 
         return {
             "success": False,
-            "message": "No feasible schedule found with the current hard constraints.",
+            "message": "現在の設定では解が見つかりませんでした。ルールや不可日を見直してください。",
         }
 
 
