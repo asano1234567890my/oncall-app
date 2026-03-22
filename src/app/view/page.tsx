@@ -170,11 +170,18 @@ export default function ViewSchedulePage() {
       if (!res.ok) throw new Error("failed");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `当直表_${year}年${pad2(month)}月.${format}`;
-      link.click();
-      URL.revokeObjectURL(url);
+      // window.open is more reliable on mobile browsers
+      const opened = window.open(url, "_blank");
+      if (!opened) {
+        // Fallback: anchor click
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `oncall_${year}_${pad2(month)}.${format}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch {
       window.alert("ダウンロードに失敗しました。");
     }
