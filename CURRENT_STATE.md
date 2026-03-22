@@ -93,7 +93,7 @@
 | 5-2b | `MobileScheduleBoard.tsx` 全面書き換え（タップ→シート方式） | ✅ 完了 |
 | 5-2c | `/app/page.tsx` からPC用レイアウト（matchMedia/isDesktop/DashboardScheduleTable等）を完全削除・モバイル特化 | ✅ 完了 |
 | 5-2d | `/dashboard/page.tsx` にPC専用警告ダイアログ実装（全体生成時ロック警告・全解除確認・仮保存上書き確認・ツールバーロックトグル） | ✅ 完了 |
-| 5-2e | 不要ファイル削除（SettingsPanel.tsx / useDashboardState.ts） | 未着手 |
+| 5-2e | 不要ファイル削除（SettingsPanel.tsx） | ✅ 完了（useDashboardState.tsはuseOnCallCoreが依存しているため削除不可） |
 | 5-2f | ~~AppHeader簡素化（タブ切替廃止検討）~~ | ✅ 不要 — モバイル版/PC版/当直表のタブ構成で確定 |
 
 ##### 残すもの（PC用: /dashboard）
@@ -239,6 +239,11 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-22 | B-3完了: 絵文字削減 — 全7ファイル22箇所の絵文字をLucideアイコンに置き換え（🏥→Hospital, ⚖️→Scale, 📅→Calendar, 🔄→RefreshCw, 👨‍⚕️→UserCog, 📊→BarChart3, 🗓️→CalendarDays, 🚫→Ban, ⚠️→AlertTriangle, ✅→CheckCircle, 💡→Lightbulb）。ServerStatusBannerは接続中アニメーション付き。PainCard/SettingsMenuItemのpropsをemoji:string→icon:LucideIconに型変更 |
+| 2026-03-22 | モバイル版に青ハイライトフェード追加: MobileScheduleBoard.tsxにundoFlashアニメーション実装（PC版DashboardScheduleTableと同等のchangedShiftKeys連携・1.5秒フェードアウト） |
+| 2026-03-22 | /dashboardスマホ検知バナー改善: zoom内の小さいテキストバナー→zoom外のフルスクリーンボトムシートに変更（下からスライドイン・「モバイル版へ移動」大ボタン・「このままPC版で作業する」薄めテキスト） |
+| 2026-03-22 | B-2完了: オンボーディング文章統一 — dnd説明をモバイル操作に合わせて全面書き換え（1タップ=ハイライト、2タップ=操作メニュー）・不可日設定の保存ボタン説明を具体化・スコア設定パネルに?ガイドボタン追加（全10セクションで統一） |
+| 2026-03-22 | Task5-2e完了: SettingsPanel.tsx削除（490行・どこからもimportなし）。useDashboardState.tsはuseOnCallCoreが依存しているため残留 |
 | 2026-03-22 | 小修正バッチ(A1-A5): ウィザード初期値修正（minShifts 3→1、下限max=4、上限max=8）・確定保存の誤警告修正（全スロットnull=未作成扱い）・スコア一覧4列化・ルール表示崩れ修正（ラベル短縮+unit短縮）・フェイクプログレスバー段階的進行（0→30→60→85→90%、モバイル/PC両対応） |
 | 2026-03-22 | モバイルタップUX刷新(B-1): 1タップ=医師ハイライト（全配置日+制約違反色分け、PC版と同等のgetHighlightedViolation利用）・2タップ=ボトムシート表示・モザイク廃止（backdrop blur削除→薄い暗転のみ）・「解除」→「外す」文言変更 |
 | 2026-03-22 | docs/optimizer.md追記: 符号付き累積の原則（加重累積・累積目標乖離）・新規赴任医師の過去スコア補正ロジック再設計注記 |

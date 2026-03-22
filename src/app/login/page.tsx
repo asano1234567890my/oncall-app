@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Hospital } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth, getAuthHeaders } from "../hooks/useAuth";
@@ -66,7 +67,7 @@ export default function LoginPage() {
       {/* ヒーローセクション */}
       <div className="text-center max-w-lg">
         <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
-          🏥 シフらく
+          <Hospital className="inline h-8 w-8 text-blue-600 mr-2 align-middle" />シフらく
         </h1>
         <p className="text-base font-semibold text-gray-500 mb-6">
           さくっと当直表。あとで細かく調整。

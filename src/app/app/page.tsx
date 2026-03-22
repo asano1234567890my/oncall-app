@@ -3,7 +3,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings, ChevronRight, ChevronDown, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -246,11 +247,11 @@ export default function AppPage() {
             {/* ── 医師 ── */}
             <SettingsSection title="医師">
               <SettingsMenuItem
-                emoji="👨‍⚕️" title="医師の管理"
+                icon={UserCog} title="医師の管理"
                 detail={core.numDoctors > 0 ? `${core.numDoctors}名` : undefined}
                 onClick={() => openDrawer("doctor-manage")}
               />
-              <SettingsMenuItem emoji="📊" title="スコア設定" onClick={() => openDrawer("doctor-scores")} />
+              <SettingsMenuItem icon={BarChart3} title="スコア設定" onClick={() => openDrawer("doctor-scores")} />
               <MobileUnavailableMenuItem
                 activeDoctors={core.activeDoctors}
                 unavailableMap={core.unavailableMap}
@@ -261,14 +262,14 @@ export default function AppPage() {
 
             {/* ── カレンダー ── */}
             <SettingsSection title="カレンダー">
-              <SettingsMenuItem emoji="📅" title="祝日・休日設定" onClick={() => openDrawer("holidays")} />
+              <SettingsMenuItem icon={Calendar} title="祝日・休日設定" onClick={() => openDrawer("holidays")} />
             </SettingsSection>
 
             {/* ── 上級設定 ── */}
             <SettingsSection title="上級設定" collapsible>
-              <SettingsMenuItem emoji="⚖️" title="優先度の調整" onClick={() => openDrawer("weights")} />
+              <SettingsMenuItem icon={Scale} title="優先度の調整" onClick={() => openDrawer("weights")} />
               <SettingsMenuItem
-                emoji="🗓️" title="前月の勤務実績"
+                icon={CalendarDays} title="前月の勤務実績"
                 detail={previousMonthShiftCount > 0 ? `${previousMonthShiftCount}枠入力済み` : undefined}
                 onClick={() => openDrawer("previous")}
               />
@@ -386,7 +387,7 @@ export default function AppPage() {
       </SettingsModalPortal>
 
       <SettingsModalPortal isOpen={activeDrawer === "doctor-scores"}>
-        <MobileDoctorScoresPanel core={core} onClose={closeDrawer} />
+        <MobileDoctorScoresPanel core={core} onClose={closeDrawer} onShowGuide={() => onboarding.showGuide("doctor-scores")} />
       </SettingsModalPortal>
 
       <HolidaySettingsDrawer
@@ -610,10 +611,10 @@ function SettingsSection({ title, children, collapsible = false }: { title: stri
   );
 }
 
-function SettingsMenuItem({ emoji, title, detail, onClick }: { emoji: string; title: string; detail?: string; onClick: () => void }) {
+function SettingsMenuItem({ icon: Icon, title, detail, onClick }: { icon: LucideIcon; title: string; detail?: string; onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors">
-      <span className="text-base">{emoji}</span>
+      <Icon className="h-5 w-5 text-gray-500" />
       <div className="flex-1 min-w-0 text-sm font-medium text-gray-800">{title}</div>
       {detail && <span className="text-xs text-gray-400">{detail}</span>}
       <ChevronRight className="h-4 w-4 flex-shrink-0 text-gray-300" />
@@ -631,7 +632,7 @@ function MobileUnavailableMenuItem({ activeDoctors, unavailableMap, fixedUnavail
 
   return (
     <button onClick={onClick} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors">
-      <span className="text-base">🚫</span>
+      <Ban className="h-5 w-5 text-gray-500" />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-gray-800">不可日設定</div>
         <div className={`text-[11px] font-medium ${enteredCount === activeDoctors.length && activeDoctors.length > 0 ? "text-green-600" : "text-gray-400"}`}>
@@ -750,7 +751,7 @@ function InlineNumberSetting({ label, unit, value, min, max, onChange }: {
 type ScoreField = "min" | "target" | "max";
 type ScoreSelection = { doctorId: string; field: ScoreField } | null;
 
-function MobileDoctorScoresPanel({ core, onClose }: { core: ReturnType<typeof useOnCallCore>; onClose: () => void }) {
+function MobileDoctorScoresPanel({ core, onClose, onShowGuide }: { core: ReturnType<typeof useOnCallCore>; onClose: () => void; onShowGuide?: () => void }) {
   const [sel, setSel] = useState<ScoreSelection>(null);
   const globalTarget = core.scoreTargetDefault;
 
@@ -845,6 +846,9 @@ function MobileDoctorScoresPanel({ core, onClose }: { core: ReturnType<typeof us
         <div className="flex items-center justify-between border-b bg-orange-50 px-4 py-3">
           <h3 className="text-base font-bold text-gray-900">スコア設定</h3>
           <div className="flex items-center gap-1.5">
+            {onShowGuide && (
+              <button type="button" onClick={onShowGuide} className="rounded-full border border-gray-200 bg-white px-2 py-1 text-xs text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">?</button>
+            )}
             <button type="button" onClick={() => { void core.saveAllDoctorsSettings(); }} disabled={core.isBulkSavingDoctors} className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50">
               {core.isBulkSavingDoctors ? "保存中..." : "保存"}
             </button>

@@ -2,6 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { Hospital, Scale, Calendar, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InlineDemo from "./components/InlineDemo";
@@ -42,7 +44,7 @@ export default function LandingPage() {
       {/* ────────── ヘッダー ────────── */}
       <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-          <span className="text-lg font-extrabold text-gray-800">🏥 シフらく</span>
+          <span className="flex items-center gap-1.5 text-lg font-extrabold text-gray-800"><Hospital className="h-5 w-5 text-blue-600" />シフらく</span>
           <div className="flex items-center gap-3">
             <Link
               href="/login"
@@ -97,17 +99,17 @@ export default function LandingPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <PainCard
-              emoji="⚖️"
+              icon={Scale}
               title="誰かに偏ってしまう"
               description="当直回数・曜日の偏りを自動で均等に配分します。"
             />
             <PainCard
-              emoji="📅"
+              icon={Calendar}
               title="希望日を集めるのが大変"
               description="医師ごとの専用リンクを送るだけ。各自がスマホで不可日を入力できます。"
             />
             <PainCard
-              emoji="🔄"
+              icon={RefreshCw}
               title="直すと別の所が崩れる"
               description="1か所直すたびに別のルール違反が出る。Excelの終わらない修正ループ。"
             />
@@ -195,10 +197,10 @@ export default function LandingPage() {
 
 /* ────────── サブコンポーネント ────────── */
 
-function PainCard({ emoji, title, description }: { emoji: string; title: string; description: string }) {
+function PainCard({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center">
-      <div className="text-3xl mb-3">{emoji}</div>
+      <div className="mb-3 flex justify-center"><Icon className="h-8 w-8 text-blue-600" /></div>
       <h3 className="text-base font-bold text-gray-800 mb-2">{title}</h3>
       <p className="text-sm text-gray-600 leading-relaxed">{description}</p>
     </div>

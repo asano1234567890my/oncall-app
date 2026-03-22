@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
 
 type ScheduleRow = {
   day: number;
@@ -493,7 +493,7 @@ export default function InlineDemo() {
           >
             <div className="absolute inset-0 bg-white/60 backdrop-blur-sm rounded-xl" />
             <div className="relative z-10 mx-4 rounded-xl bg-white border-2 border-red-300 shadow-xl px-5 py-4 text-center animate-in fade-in zoom-in duration-200">
-              <div className="text-2xl mb-2">⚠️</div>
+              <div className="mb-2 flex justify-center"><AlertTriangle className="h-7 w-7 text-red-500" /></div>
               <p className="text-sm font-bold text-red-700 mb-1">{swapWarning}</p>
               <p className="text-xs text-red-500">ルール違反のため入れ替えをキャンセルしました</p>
               <p className="text-[11px] text-gray-400 mt-2">タップで閉じる</p>
@@ -519,15 +519,15 @@ export default function InlineDemo() {
         <div className={`mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-center transition-[filter] ${swapWarning ? "blur-[2px]" : ""}`}>
           {swapSelection ? (
             <p className="text-xs font-bold text-amber-700">
-              🔄 入れ替え先の ↔ ボタンをタップしてください
+              <RefreshCw className="inline h-3.5 w-3.5 mr-1 align-middle" />入れ替え先の ↔ ボタンをタップしてください
             </p>
           ) : swapCount > 0 ? (
             <p className="text-xs text-amber-700">
-              ✅ {swapCount}回入れ替え済み — ↔ ボタンでさらに入れ替えできます
+              <CheckCircle className="inline h-3.5 w-3.5 mr-1 align-middle text-green-600" />{swapCount}回入れ替え済み — ↔ ボタンでさらに入れ替えできます
             </p>
           ) : (
             <p className="text-xs text-amber-700">
-              💡 名前タップでハイライト / ↔ ボタンで入れ替え
+              <Lightbulb className="inline h-3.5 w-3.5 mr-1 align-middle" />名前タップでハイライト / ↔ ボタンで入れ替え
             </p>
           )}
         </div>

@@ -106,26 +106,12 @@ export default function DashboardPage() {
         }
       />
 
-      {/* Mobile banner */}
-      {showMobileBanner && (
-        <div className="sticky top-12 z-30 flex items-center justify-between gap-2 border-b border-blue-200 bg-blue-50 px-4 py-2.5">
-          <div className="flex-1 text-xs font-bold text-blue-800">
-            スマートフォンでは<a href="/app" className="underline">モバイル版</a>が快適です
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowMobileBanner(false)}
-            className="shrink-0 rounded p-1 text-blue-400 hover:bg-blue-100 hover:text-blue-600"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
+      {/* Mobile banner placeholder removed — see bottom sheet outside zoom container */}
 
       {/* Schedule area */}
       <main className="p-4">
           {/* Loading overlay */}
-          {core.isLoading && <DashboardLoadingOverlay />}
+          {core.isLoading && <DashboardLoadingOverlay viewportZoom={viewportZoom} />}
 
           {/* Toolbar */}
           <DashboardToolbar
@@ -206,6 +192,7 @@ export default function DashboardPage() {
               draftMessage={core.draftMessage}
               isOverrideMode={core.isOverrideMode}
               changedShiftKeys={core.changedShiftKeys}
+              viewportZoom={viewportZoom}
             />
           </div>
         </main>
@@ -342,11 +329,36 @@ export default function DashboardPage() {
         />
       </div>
     </aside>
+
+    {/* Mobile bottom sheet — outside zoom container so it renders at native device size */}
+    {showMobileBanner && (
+      <div className="fixed inset-0 z-[9999] flex items-end bg-black/40">
+        <div className="w-full animate-slide-up rounded-t-2xl bg-white px-6 pb-8 pt-6 shadow-2xl">
+          <h2 className="text-lg font-bold text-gray-800">スマートフォンでお使いですか？</h2>
+          <p className="mt-2 text-sm text-gray-500">
+            PC版はパソコン向けに設計されています。スマートフォンではモバイル版が快適です。
+          </p>
+          <a
+            href="/app"
+            className="mt-5 block w-full rounded-xl bg-blue-600 py-4 text-center text-base font-bold text-white shadow-lg active:bg-blue-700"
+          >
+            モバイル版へ移動
+          </a>
+          <button
+            type="button"
+            onClick={() => setShowMobileBanner(false)}
+            className="mt-3 block w-full py-3 text-center text-sm text-gray-400 active:text-gray-600"
+          >
+            このままPC版で作業する
+          </button>
+        </div>
+      </div>
+    )}
     </>
   );
 }
 
-function DashboardLoadingOverlay() {
+function DashboardLoadingOverlay({ viewportZoom = 1 }: { viewportZoom?: number }) {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -358,7 +370,7 @@ function DashboardLoadingOverlay() {
   }, []);
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-white/70 backdrop-blur-[1px]" style={{ zoom: 1 / viewportZoom }}>
       <div className="w-full max-w-md rounded-2xl border border-blue-100 bg-white px-6 py-6 shadow-xl">
         <div className="flex flex-col items-center text-center">
           <Loader2 className="mb-3 h-8 w-8 animate-spin text-blue-600" />

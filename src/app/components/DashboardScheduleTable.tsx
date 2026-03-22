@@ -73,6 +73,8 @@ type DashboardScheduleTableProps = {
   isOverrideMode: boolean;
   // Undo/Redo highlight
   changedShiftKeys?: Set<string>;
+  // Zoom (for inverse-zoom on fixed overlays)
+  viewportZoom?: number;
 };
 
 export default function DashboardScheduleTable({
@@ -117,6 +119,7 @@ export default function DashboardScheduleTable({
   draftMessage,
   isOverrideMode,
   changedShiftKeys,
+  viewportZoom = 1,
 }: DashboardScheduleTableProps) {
   const isDragging = draggingDoctorId !== null;
 
@@ -335,7 +338,10 @@ export default function DashboardScheduleTable({
       )}
 
       {toastMessage && (
-        <div className="pointer-events-none fixed left-1/2 top-1/2 z-[100] w-[min(92vw,30rem)] -translate-x-1/2 -translate-y-1/2 px-3">
+        <div
+          className="pointer-events-none fixed left-1/2 top-1/2 z-[100] -translate-x-1/2 -translate-y-1/2 px-3"
+          style={{ zoom: 1 / viewportZoom, width: "min(92vw, 30rem)" }}
+        >
           <div className="rounded-2xl bg-gray-900/90 px-6 py-4 text-center text-sm font-bold leading-snug whitespace-pre-line text-white shadow-2xl backdrop-blur">
             {toastMessage}
           </div>

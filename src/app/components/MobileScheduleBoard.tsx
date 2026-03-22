@@ -29,6 +29,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
     cancelSwapSelection, getPlacementConstraintMessage, getSwapViolation,
     highlightedDoctorId, toggleHighlightedDoctor,
     getHighlightedViolation,
+    changedShiftKeys,
   } = core;
 
   const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
@@ -197,8 +198,8 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
                           <span className={`text-xs font-bold ${dateC}`}>{row.day}</span>
                           <span className={`ml-0.5 text-[11px] font-bold ${wdC}`}>{wd}</span>
                         </td>
-                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation)}
-                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation)}
+                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys)}
+                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys)}
                       </tr>
                     );
                   })}
@@ -302,6 +303,7 @@ function renderCell(
   swapSource: { day: number; shiftType: ShiftType; doctorId: string } | null,
   getSwapViolation: (day: number, st: ShiftType) => string | null,
   getHighlightedViolation: (day: number, st: ShiftType) => string | null,
+  changedShiftKeys?: Set<string>,
 ) {
   const locked = isShiftLocked(day, shiftType);
   const isDocHighlighted = Boolean(doctorId && highlightedDoctorId && doctorId === highlightedDoctorId);
@@ -309,6 +311,7 @@ function renderCell(
   const swapViolation = swapSource ? getSwapViolation(day, shiftType) : null;
   const highlightViolation = highlightedDoctorId ? getHighlightedViolation(day, shiftType) : null;
   const isHighlightOk = Boolean(highlightedDoctorId && !highlightViolation && !isDocHighlighted);
+  const isChanged = changedShiftKeys?.has(`${day}_${shiftType}`) ?? false;
 
   if (!enabled) {
     return (
@@ -347,7 +350,7 @@ function renderCell(
           : "text-gray-400";
 
   return (
-    <td className={`px-0.5 py-0.5 ${bgClass}`}>
+    <td className={`px-0.5 py-0.5 ${bgClass}${isChanged ? " animate-[undoFlash_1.5s_ease-out]" : ""}`}>
       <button
         type="button"
         onClick={() => onTap(day, shiftType)}
