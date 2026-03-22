@@ -339,13 +339,25 @@ export default function EntryPage() {
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 space-y-2">
             <Link
               href="/view"
               className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
             >
               <Calendar className="inline h-4 w-4 mr-1 align-middle" />確定した当直表を見る
             </Link>
+            <button
+              type="button"
+              onClick={() => {
+                const apiBase = getApiBase();
+                const icalUrl = `${apiBase}/api/schedule/ical/${token}`;
+                void navigator.clipboard.writeText(icalUrl);
+                toast.success("カレンダーURLをコピーしました。Googleカレンダーの「URLで追加」に貼り付けてください。");
+              }}
+              className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
+            >
+              <Calendar className="inline h-4 w-4 mr-1 align-middle" />Googleカレンダーに登録
+            </button>
           </div>
 
           {locked && !isLoading && (

@@ -21,6 +21,9 @@ from services.settings_service import (
     delete_draft_schedule,
 )
 
+from fastapi.responses import Response
+from sqlalchemy.orm import selectinload
+
 router = APIRouter(prefix="/api/schedule", tags=["Schedule"])
 
 DAY_SHIFT_LABEL = chr(0x65E5) + chr(0x76F4)
@@ -65,6 +68,92 @@ def _normalize_shift_type(raw_shift_type: str) -> str:
     if raw_shift_type in {NIGHT_SHIFT_LABEL, "night", "night_shift"}:
         return "night"
     return str(raw_shift_type)
+
+
+## ── ICS Feed (Google Calendar sync) ──
+
+
+def _build_ics(doctor_name: str, hospital_name: str, assignments: list) -> str:
+    """Build an iCalendar (.ics) string from shift assignments."""
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//ShifRaku//oncall-app//JP",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{doctor_name} 当直表",
+    ]
+
+    for a in assignments:
+        shift_label = "日直" if _normalize_shift_type(a.shift_type) == "day" else "当直"
+        d = a.date
+        # Day shift: 8:30-17:00, Night shift: 17:00-next 8:30
+        if _normalize_shift_type(a.shift_type) == "day":
+            dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}T083000"
+            dtend = f"{d.year:04d}{d.month:02d}{d.day:02d}T170000"
+        else:
+            next_day = d + datetime.timedelta(days=1)
+            dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}T170000"
+            dtend = f"{next_day.year:04d}{next_day.month:02d}{next_day.day:02d}T083000"
+
+        uid = f"{d.isoformat()}-{_normalize_shift_type(a.shift_type)}-{doctor_name}@shiftraku"
+        lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{uid}",
+            f"DTSTART;TZID=Asia/Tokyo:{dtstart}",
+            f"DTEND;TZID=Asia/Tokyo:{dtend}",
+            f"SUMMARY:{shift_label}（{hospital_name}）",
+            f"DESCRIPTION:{doctor_name} {shift_label}",
+            "STATUS:CONFIRMED",
+            "END:VEVENT",
+        ])
+
+    lines.append("END:VCALENDAR")
+    return "\r\n".join(lines)
+
+
+@router.get("/ical/{doctor_token}")
+async def get_ical_feed(
+    doctor_token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """ICSフィード — 医師個人の確定済みシフトを .ics 形式で返す。認証不要（トークンがアクセス権）。"""
+    result = await db.execute(
+        select(Doctor)
+        .options(selectinload(Doctor.hospital))
+        .where(Doctor.access_token == doctor_token)
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    # 過去3ヶ月〜未来6ヶ月のシフトを返す
+    today = datetime.date.today()
+    start = today.replace(day=1) - datetime.timedelta(days=90)
+    end = today + datetime.timedelta(days=180)
+
+    shift_result = await db.execute(
+        select(ShiftAssignment)
+        .where(
+            ShiftAssignment.doctor_id == doctor.id,
+            ShiftAssignment.date >= start,
+            ShiftAssignment.date <= end,
+        )
+        .order_by(ShiftAssignment.date)
+    )
+    assignments = shift_result.scalars().all()
+
+    hospital_name = doctor.hospital.name if doctor.hospital else "病院"
+    ics_content = _build_ics(doctor.name, hospital_name, assignments)
+
+    return Response(
+        content=ics_content,
+        media_type="text/calendar; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{doctor.name}_shifts.ics"',
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+        },
+    )
 
 
 @router.post("/save")
