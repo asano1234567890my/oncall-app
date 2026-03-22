@@ -838,7 +838,7 @@ def _decode_token(token: str) -> uuid.UUID:
 async def export_schedule(
     year: int,
     month: int,
-    format: str = Query("pdf", regex="^(pdf|xlsx)$"),
+    format: str = Query("pdf", pattern="^(pdf|xlsx)$"),
     token: str = Query(default=""),
     db: AsyncSession = Depends(get_db),
 ):

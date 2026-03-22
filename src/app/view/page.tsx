@@ -163,8 +163,8 @@ export default function ViewSchedulePage() {
   const handleExport = (format: "pdf" | "xlsx") => {
     if (schedule.length === 0) return;
     const token = localStorage.getItem("oncall_token") || "";
-    const url = `${API_BASE}/api/schedule/export/${year}/${month}?format=${format}&token=${encodeURIComponent(token)}`;
-    window.open(url, "_blank");
+    // window.location.href triggers native download via Content-Disposition: attachment
+    window.location.href = `${API_BASE}/api/schedule/export/${year}/${month}?format=${format}&token=${encodeURIComponent(token)}`;
   };
 
   const renderColumn = (rows: ScheduleRow[]) => (
