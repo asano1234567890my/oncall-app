@@ -369,51 +369,6 @@ async def remove_draft(
     return {"success": True}
 
 
-@router.get("/{year}/{month}")
-async def get_schedule(
-    year: int,
-    month: int,
-    hospital_id: uuid.UUID = Depends(get_current_hospital),
-    db: AsyncSession = Depends(get_db),
-):
-    try:
-        start_date, end_date = _month_bounds(year, month)
-        hospital_doctor_ids = (
-            await db.execute(
-                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
-            )
-        ).scalars().all()
-
-        result = await db.execute(
-            select(ShiftAssignment)
-            .where(
-                ShiftAssignment.date >= start_date,
-                ShiftAssignment.date < end_date,
-                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
-            )
-            .order_by(ShiftAssignment.date)
-        )
-        assignments = result.scalars().all()
-
-        days_in_month = _calendar.monthrange(year, month)[1]
-        formatted_data: dict = {
-            day: {"day": day, "day_shift": None, "night_shift": None}
-            for day in range(1, days_in_month + 1)
-        }
-
-        for assignment in assignments:
-            day = assignment.date.day
-            if _normalize_shift_type(assignment.shift_type) == "day":
-                formatted_data[day]["day_shift"] = str(assignment.doctor_id)
-            else:
-                formatted_data[day]["night_shift"] = str(assignment.doctor_id)
-
-        return sorted(formatted_data.values(), key=lambda item: item["day"])
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 ## ── Export (PDF / Excel) ──
 
 
@@ -874,4 +829,52 @@ async def export_schedule(
             "Content-Disposition": f"attachment; filename=\"{filename_ascii}.{ext}\"; filename*=UTF-8''{quote(filename_ja)}.{ext}",
         },
     )
+
+
+## ── GET /{year}/{month} — must be LAST (catch-all path pattern) ──
+
+
+@router.get("/{year}/{month}")
+async def get_schedule(
+    year: int,
+    month: int,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        start_date, end_date = _month_bounds(year, month)
+        hospital_doctor_ids = (
+            await db.execute(
+                select(Doctor.id).where(Doctor.hospital_id == hospital_id)
+            )
+        ).scalars().all()
+
+        result = await db.execute(
+            select(ShiftAssignment)
+            .where(
+                ShiftAssignment.date >= start_date,
+                ShiftAssignment.date < end_date,
+                ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
+            )
+            .order_by(ShiftAssignment.date)
+        )
+        assignments = result.scalars().all()
+
+        days_in_month = _calendar.monthrange(year, month)[1]
+        formatted_data: dict = {
+            day: {"day": day, "day_shift": None, "night_shift": None}
+            for day in range(1, days_in_month + 1)
+        }
+
+        for assignment in assignments:
+            day = assignment.date.day
+            if _normalize_shift_type(assignment.shift_type) == "day":
+                formatted_data[day]["day_shift"] = str(assignment.doctor_id)
+            else:
+                formatted_data[day]["night_shift"] = str(assignment.doctor_id)
+
+        return sorted(formatted_data.values(), key=lambda item: item["day"])
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
