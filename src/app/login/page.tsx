@@ -67,13 +67,15 @@ export default function LoginPage() {
       {/* ヒーローセクション */}
       <div className="text-center max-w-lg">
         <h1 className="text-4xl font-extrabold text-gray-900 tracking-tight mb-2">
-          <Hospital className="inline h-8 w-8 text-blue-600 mr-2 align-middle" />シフらく
+          <Link href="/" className="inline-flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <Hospital className="h-8 w-8 text-blue-600" />シフらく
+          </Link>
         </h1>
         <p className="text-base font-semibold text-gray-500 mb-6">
           さくっと当直表。あとで細かく調整。
         </p>
         <ul className="text-sm text-gray-500 space-y-1.5">
-          <li>当直表作成を、もっと早く、もっと公平に。</li>
+          <li>当直表作成を、<br className="sm:hidden" />もっと早く、もっと公平に。</li>
           <li>AIでたたき台を作り、現場で仕上げる。</li>
           <li>希望休も固定曜日も、まとめて反映。</li>
         </ul>

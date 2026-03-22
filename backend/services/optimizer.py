@@ -870,7 +870,7 @@ class OnCallOptimizer:
         self.max_score = max_score
         self.min_score = min_score
 
-    def solve(self, time_limit_seconds: float = 10.0, random_seed: Optional[int] = None) -> Dict:
+    def solve(self, time_limit_seconds: float = 5.0, random_seed: Optional[int] = None) -> Dict:
         holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
         combined_mode = holiday_shift_mode == "combined"
 

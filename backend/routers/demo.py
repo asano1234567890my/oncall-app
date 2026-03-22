@@ -110,7 +110,7 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
         )
 
         optimizer.build_model()
-        solve_result = optimizer.solve()
+        solve_result = optimizer.solve(time_limit_seconds=3.0)
 
         if not solve_result.get("success"):
             _undo_rate_limit(client_ip)
