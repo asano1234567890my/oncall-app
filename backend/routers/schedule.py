@@ -498,8 +498,9 @@ def _build_pdf(
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph
     from reportlab.lib.styles import ParagraphStyle
 
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
     pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
-    font_name = "HeiseiKakuGo-W5"
+    font_name = "HeiseiKakuGo-W5"  # ゴシック太め
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -512,7 +513,7 @@ def _build_pdf(
 
     # Title
     title_style = ParagraphStyle(
-        "Title", fontName=font_name, fontSize=14, leading=18, alignment=1,
+        "Title", fontName=font_name, fontSize=16, leading=22, alignment=1,
     )
     elements.append(Paragraph(f"{hospital_name}　{year}年{month}月 当直表", title_style))
     elements.append(Spacer(1, 6 * mm))
@@ -556,20 +557,35 @@ def _build_pdf(
         combined.append(lr + [""] + rr)
 
     page_w = A4[0] - 30 * mm  # available width
+    page_h = A4[1] - 30 * mm  # available height
     col_date = 22 * mm
     col_shift = (page_w - 2 * col_date - 3 * mm) / 4  # 4 shift columns share remaining
     col_gap = 3 * mm
     col_widths = [col_date, col_shift, col_shift, col_gap, col_date, col_shift, col_shift]
 
-    table = Table(combined, colWidths=col_widths, repeatRows=1)
+    # Calculate row height to fill the page vertically
+    # 31日 → 16+1ヘッダー=17行が最大。余裕を持って計算
+    title_space = 22 + 8 * mm  # title + spacer
+    bottom_margin_extra = 5 * mm  # 下部に余裕
+    available_for_table = page_h - title_space - bottom_margin_extra
+    max_rows = 17  # 31日の月: ceil(31/2)+1 = 17行
+    num_rows = len(combined)
+    row_height = available_for_table / max(num_rows, max_rows)
+    row_heights = [row_height] * num_rows
+
+    table = Table(combined, colWidths=col_widths, rowHeights=row_heights, repeatRows=1)
+
+    # Font size: fit to row height (roughly 60% of row height, capped)
+    font_size = min(max(int(row_height * 0.55), 8), 14)
+    title_font_size = font_size + 2
 
     # Style
     style_cmds = [
-        # Font
+        # Font — ゴシック体（太め）
         ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTSIZE", (0, 0), (-1, -1), font_size),
         # Header row
-        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("FONTSIZE", (0, 0), (-1, 0), font_size),
         ("BACKGROUND", (0, 0), (2, 0), colors.Color(0.93, 0.93, 0.93)),
         ("BACKGROUND", (4, 0), (6, 0), colors.Color(0.93, 0.93, 0.93)),
         ("FONTNAME", (0, 0), (-1, 0), font_name),
@@ -578,10 +594,10 @@ def _build_pdf(
         ("ALIGN", (5, 0), (6, -1), "CENTER"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         # Padding
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-        ("LEFTPADDING", (0, 0), (-1, -1), 3),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        ("TOPPADDING", (0, 0), (-1, -1), 1),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         # Bold outer borders for left table
         ("BOX", (0, 0), (2, -1), 1.5, colors.black),
         ("LINEBELOW", (0, 0), (2, 0), 1.5, colors.black),
@@ -625,6 +641,7 @@ def _build_xlsx(
     ws = wb.active
     ws.title = f"{year}年{month}月"
 
+    # ── Styles ──
     thin = Side(style="thin", color="999999")
     thick = Side(style="medium", color="000000")
     header_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
@@ -638,80 +655,164 @@ def _build_xlsx(
     center = Alignment(horizontal="center", vertical="center")
     left_align = Alignment(horizontal="left", vertical="center")
 
-    # Title
-    ws.merge_cells("A1:G1")
+    # ── 左側: スケジュール（A〜H） ──
+    # A=日付, B=日直, C=当直, D=曜日, E=土曜, F=日祝, G=gap, H以降=集計
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 5
+    ws.column_dimensions["E"].width = 5
+    ws.column_dimensions["F"].width = 5
+    ws.column_dimensions["G"].width = 2  # gap
+
+    # Title (spans schedule area)
+    ws.merge_cells("A1:F1")
     ws["A1"] = f"{hospital_name}　{year}年{month}月 当直表"
     ws["A1"].font = title_font
     ws["A1"].alignment = center
 
-    # Split
-    mid = (len(rows) + 1) // 2
-    left_rows = rows[:mid]
-    right_rows = rows[mid:]
-
-    # Column widths: A=date, B=day, C=night, D=gap, E=date, F=day, G=night
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 12
-    ws.column_dimensions["C"].width = 12
-    ws.column_dimensions["D"].width = 2
-    ws.column_dimensions["E"].width = 10
-    ws.column_dimensions["F"].width = 12
-    ws.column_dimensions["G"].width = 12
-
-    start_row = 3
-
-    # Headers
-    for col, label in [(1, "日付"), (2, "日直"), (3, "当直"), (5, "日付"), (6, "日直"), (7, "当直")]:
-        cell = ws.cell(row=start_row, column=col, value=label)
+    # Schedule headers
+    sched_headers = ["日付", "日直", "当直", "曜日", "土曜", "日祝"]
+    s_row = 3
+    for col_idx, label in enumerate(sched_headers, 1):
+        cell = ws.cell(row=s_row, column=col_idx, value=label)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = center
-        cell.border = Border(top=thick, bottom=thick, left=thick if col in (1, 5) else thin, right=thick if col in (3, 7) else thin)
+        cell.border = Border(top=thick, bottom=thick, left=thick if col_idx == 1 else thin, right=thick if col_idx == len(sched_headers) else thin)
 
-    def write_rows(row_list, col_offset, excel_row):
-        for r in row_list:
-            d = r["day"]
-            wd = _weekday_ja(year, month, d)
-            dt = datetime.date(year, month, d)
-            is_sun = dt.weekday() == 6
-            is_sat = dt.weekday() == 5
-            is_holiday = is_sun or dt in holiday_dates
-            show_day = is_holiday or is_sat
+    # Schedule data
+    for idx, r in enumerate(rows):
+        excel_row = s_row + 1 + idx
+        d = r["day"]
+        wd = _weekday_ja(year, month, d)
+        dt = datetime.date(year, month, d)
+        is_sun = dt.weekday() == 6
+        is_sat = dt.weekday() == 5
+        is_holiday = is_sun or dt in holiday_dates
+        show_day = is_holiday or is_sat
 
-            date_cell = ws.cell(row=excel_row, column=col_offset, value=f"{d}({wd})")
-            day_cell = ws.cell(row=excel_row, column=col_offset + 1, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
-            night_cell = ws.cell(row=excel_row, column=col_offset + 2, value=_doctor_label(r["night_shift"], doctor_map))
+        date_cell = ws.cell(row=excel_row, column=1, value=f"{d}({wd})")
+        day_cell = ws.cell(row=excel_row, column=2, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
+        night_cell = ws.cell(row=excel_row, column=3, value=_doctor_label(r["night_shift"], doctor_map))
+        wd_cell = ws.cell(row=excel_row, column=4, value=wd)
+        sat_cell = ws.cell(row=excel_row, column=5, value="○" if is_sat else "")
+        sunhol_cell = ws.cell(row=excel_row, column=6, value="○" if is_holiday else "")
 
-            date_cell.alignment = left_align
-            day_cell.alignment = center
-            night_cell.alignment = center
+        fill = sun_fill if is_holiday else sat_fill if is_sat else None
+        font = sun_font if is_holiday else sat_font if is_sat else normal_font
 
-            fill = sun_fill if is_holiday else sat_fill if is_sat else None
-            font = sun_font if is_holiday else sat_font if is_sat else normal_font
+        date_cell.alignment = left_align
+        for c in (day_cell, night_cell, wd_cell, sat_cell, sunhol_cell):
+            c.alignment = center
 
-            for c in (date_cell, day_cell, night_cell):
-                c.font = font
-                if fill:
-                    c.fill = fill
-                c.border = Border(
-                    top=thin, bottom=thin,
-                    left=thick if c.column == col_offset else thin,
-                    right=thick if c.column == col_offset + 2 else thin,
-                )
+        for c in (date_cell, day_cell, night_cell, wd_cell, sat_cell, sunhol_cell):
+            c.font = font
+            if fill:
+                c.fill = fill
+            c.border = Border(
+                top=thin, bottom=thin,
+                left=thick if c.column == 1 else thin,
+                right=thick if c.column == len(sched_headers) else thin,
+            )
 
-            excel_row += 1
-        return excel_row
+    # Schedule bottom border
+    last_sched_row = s_row + len(rows)
+    for col_idx in range(1, len(sched_headers) + 1):
+        cell = ws.cell(row=last_sched_row, column=col_idx)
+        b = cell.border
+        cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
 
-    write_rows(left_rows, 1, start_row + 1)
-    write_rows(right_rows, 5, start_row + 1)
+    # ── 右側: 医師別集計（H〜M） ──
+    sum_col_start = 8  # H列
 
-    # Outer border for bottom of each table
-    last_data_row = start_row + max(len(left_rows), len(right_rows))
-    for col_start in [1, 5]:
-        for c in range(col_start, col_start + 3):
-            cell = ws.cell(row=last_data_row, column=c)
-            b = cell.border
-            cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
+    ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["I"].width = 10
+    ws.column_dimensions["J"].width = 10
+    ws.column_dimensions["K"].width = 10
+    ws.column_dimensions["L"].width = 10
+    ws.column_dimensions["M"].width = 8
+
+    # Summary title
+    ws.merge_cells(start_row=1, start_column=sum_col_start, end_row=1, end_column=sum_col_start + 5)
+    title_cell = ws.cell(row=1, column=sum_col_start, value="医師別集計")
+    title_cell.font = title_font
+    title_cell.alignment = center
+
+    # Summary headers
+    sum_headers = ["医師名", "当直回数", "日直回数", "土曜当直", "日祝当直", "合計"]
+    for i, label in enumerate(sum_headers):
+        col = sum_col_start + i
+        cell = ws.cell(row=s_row, column=col, value=label)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        cell.border = Border(top=thick, bottom=thick, left=thick if i == 0 else thin, right=thick if i == len(sum_headers) - 1 else thin)
+
+    # Collect unique doctors
+    doctor_names = sorted({
+        _doctor_label(r[shift], doctor_map)
+        for r in rows
+        for shift in ("day_shift", "night_shift")
+        if r[shift] and _doctor_label(r[shift], doctor_map)
+    })
+
+    # COUNTIF ranges (referencing columns B, C, E, F in same sheet)
+    days_count = len(rows)
+    data_start = s_row + 1
+    data_end = s_row + days_count
+    night_range = f"$C${data_start}:$C${data_end}"
+    day_range = f"$B${data_start}:$B${data_end}"
+    sat_range = f"$E${data_start}:$E${data_end}"
+    sunhol_range = f"$F${data_start}:$F${data_end}"
+
+    from openpyxl.utils import get_column_letter
+    name_col_letter = get_column_letter(sum_col_start)  # H
+
+    for i, name in enumerate(doctor_names):
+        r = s_row + 1 + i
+        name_ref = f"${name_col_letter}${r}"
+
+        ws.cell(row=r, column=sum_col_start, value=name).font = normal_font
+        ws.cell(row=r, column=sum_col_start).alignment = left_align
+
+        ws.cell(row=r, column=sum_col_start + 1).value = f'=COUNTIF({night_range},{name_ref})'
+        ws.cell(row=r, column=sum_col_start + 1).font = normal_font
+        ws.cell(row=r, column=sum_col_start + 1).alignment = center
+
+        ws.cell(row=r, column=sum_col_start + 2).value = f'=COUNTIF({day_range},{name_ref})'
+        ws.cell(row=r, column=sum_col_start + 2).font = normal_font
+        ws.cell(row=r, column=sum_col_start + 2).alignment = center
+
+        ws.cell(row=r, column=sum_col_start + 3).value = f'=COUNTIFS({night_range},{name_ref},{sat_range},"○")'
+        ws.cell(row=r, column=sum_col_start + 3).font = normal_font
+        ws.cell(row=r, column=sum_col_start + 3).alignment = center
+
+        ws.cell(row=r, column=sum_col_start + 4).value = f'=COUNTIFS({night_range},{name_ref},{sunhol_range},"○")'
+        ws.cell(row=r, column=sum_col_start + 4).font = normal_font
+        ws.cell(row=r, column=sum_col_start + 4).alignment = center
+
+        i_col = get_column_letter(sum_col_start + 1)
+        j_col = get_column_letter(sum_col_start + 2)
+        ws.cell(row=r, column=sum_col_start + 5).value = f'={i_col}{r}+{j_col}{r}'
+        ws.cell(row=r, column=sum_col_start + 5).font = Font(bold=True, size=10)
+        ws.cell(row=r, column=sum_col_start + 5).alignment = center
+
+        for j in range(len(sum_headers)):
+            col = sum_col_start + j
+            ws.cell(row=r, column=col).border = Border(
+                top=thin, bottom=thin,
+                left=thick if j == 0 else thin,
+                right=thick if j == len(sum_headers) - 1 else thin,
+            )
+
+    # Summary bottom border
+    last_sum_row = s_row + len(doctor_names)
+    for j in range(len(sum_headers)):
+        col = sum_col_start + j
+        cell = ws.cell(row=last_sum_row, column=col)
+        b = cell.border
+        cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
 
     buf = io.BytesIO()
     wb.save(buf)
@@ -734,20 +835,24 @@ async def export_schedule(
     if not any(r["day_shift"] or r["night_shift"] for r in rows):
         raise HTTPException(status_code=404, detail="この月の当直表はまだ保存されていません。")
 
-    filename_base = f"{hospital_name}_{year}年{month}月_当直表"
+    from urllib.parse import quote
+    filename_ja = f"{hospital_name}_{year}年{month}月_当直表"
+    filename_ascii = f"oncall_{year}_{month:02d}"
 
     if format == "xlsx":
         content = _build_xlsx(year, month, hospital_name, doctor_map, rows, holiday_dates)
-        return Response(
-            content=content,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.xlsx"'},
-        )
+        ext = "xlsx"
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
         content = _build_pdf(year, month, hospital_name, doctor_map, rows, holiday_dates)
-        return Response(
-            content=content,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
-        )
+        ext = "pdf"
+        media = "application/pdf"
+
+    return Response(
+        content=content,
+        media_type=media,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename_ascii}.{ext}\"; filename*=UTF-8''{quote(filename_ja)}.{ext}",
+        },
+    )
 

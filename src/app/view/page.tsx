@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileText, FileSpreadsheet } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, Pencil } from "lucide-react";
+import Link from "next/link";
 import { domToPng } from "modern-screenshot";
 import AppHeader from "../components/AppHeader";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
@@ -140,7 +141,7 @@ export default function ViewSchedulePage() {
   };
 
   const handleCopyToDraft = async () => {
-    if (isCopying || schedule.length === 0) return;
+    if (isCopying || copyMessage === "done" || schedule.length === 0) return;
     setIsCopying(true);
     setCopyMessage("");
     try {
@@ -150,10 +151,10 @@ export default function ViewSchedulePage() {
         body: JSON.stringify({ schedule }),
       });
       if (!res.ok) throw new Error("failed");
-      setCopyMessage("仮保存にコピーしました");
-      setTimeout(() => setCopyMessage(""), 3000);
+      setCopyMessage("done");
     } catch {
-      setCopyMessage("コピーに失敗しました");
+      setCopyMessage("失敗しました");
+      setTimeout(() => setCopyMessage(""), 3000);
     } finally {
       setIsCopying(false);
     }
@@ -180,15 +181,15 @@ export default function ViewSchedulePage() {
   };
 
   const renderColumn = (rows: ScheduleRow[]) => (
-    <table className="w-full text-[11px] sm:text-[13px]">
+    <table className="w-full text-[11px] sm:text-[13px] border-collapse">
       <thead>
-        <tr className="border-b border-gray-300 bg-gray-50 text-[10px] sm:text-[11px] text-gray-500">
+        <tr className="border-b-2 border-gray-400 bg-gray-50 text-[10px] sm:text-[11px] text-gray-500">
           <th className="px-1.5 py-1.5 text-left font-medium">日付</th>
-          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-300">日直</th>
-          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-300">当直</th>
+          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-400">日直</th>
+          <th className="px-1.5 py-1.5 text-center font-medium border-l border-gray-400">当直</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-gray-200">
+      <tbody className="divide-y divide-gray-300">
         {rows.map((row) => {
           const weekday = getWeekdayLabel(year, month, row.day);
           const dateKey = toDateKey(year, month, row.day);
@@ -201,10 +202,10 @@ export default function ViewSchedulePage() {
               <td className={`px-1.5 py-1 font-medium whitespace-nowrap ${isHolidayLike ? "text-red-600" : isSat ? "text-blue-600" : "text-gray-800"}`}>
                 {row.day}({weekday})
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-200">
+              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
                 {showDayShift ? getDoctorLabel(row.day_shift) : ""}
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-200">
+              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
                 {getDoctorLabel(row.night_shift)}
               </td>
             </tr>
@@ -261,13 +262,19 @@ export default function ViewSchedulePage() {
               <>
                 <button
                   onClick={() => { void handleCopyToDraft(); }}
-                  disabled={isCopying}
-                  className="text-xs text-gray-400 hover:text-blue-600 transition-colors disabled:opacity-50"
+                  disabled={isCopying || copyMessage === "done"}
+                  className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 disabled:opacity-50 transition-colors"
                 >
-                  {isCopying ? "コピー中..." : "仮保存にコピー"}
+                  <Pencil className="h-3.5 w-3.5" />
+                  {isCopying ? "準備中..." : "編集する"}
                 </button>
-                {copyMessage && (
-                  <span className="text-xs text-green-600">{copyMessage}</span>
+                {copyMessage === "done" && (
+                  <Link
+                    href="/app"
+                    className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors animate-pulse"
+                  >
+                    編集画面へ →
+                  </Link>
                 )}
               </>
             )}
@@ -316,7 +323,7 @@ export default function ViewSchedulePage() {
         ) : (
           <div ref={tableRef} className="grid grid-cols-2 gap-2">
             {scheduleColumns.map((rows, i) => (
-              <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+              <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border-2 border-gray-400 bg-white shadow-sm">
                 {renderColumn(rows)}
               </div>
             ))}
