@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, FileText, FileSpreadsheet } from "lucide-react";
 import { domToPng } from "modern-screenshot";
 import AppHeader from "../components/AppHeader";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
@@ -159,6 +159,26 @@ export default function ViewSchedulePage() {
     }
   };
 
+  const handleExport = async (format: "pdf" | "xlsx") => {
+    if (schedule.length === 0) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/schedule/export/${year}/${month}?format=${format}`,
+        { headers: getAuthHeaders() },
+      );
+      if (!res.ok) throw new Error("failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `当直表_${year}年${pad2(month)}月.${format}`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.alert("ダウンロードに失敗しました。");
+    }
+  };
+
   const renderColumn = (rows: ScheduleRow[]) => (
     <table className="w-full text-[11px] sm:text-[13px]">
       <thead>
@@ -257,8 +277,26 @@ export default function ViewSchedulePage() {
               className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
             >
               <Download className="h-3.5 w-3.5" />
-              {isDownloading ? "保存中..." : "画像保存"}
+              {isDownloading ? "保存中..." : "画像"}
             </button>
+            {auth.isAuthenticated && schedule.length > 0 && (
+              <>
+                <button
+                  onClick={() => { void handleExport("pdf"); }}
+                  className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 transition-colors"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  PDF
+                </button>
+                <button
+                  onClick={() => { void handleExport("xlsx"); }}
+                  className="flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 transition-colors"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5" />
+                  Excel
+                </button>
+              </>
+            )}
           </div>
         </div>
 

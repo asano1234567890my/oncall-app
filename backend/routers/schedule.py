@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import calendar as _calendar
 import datetime
+import io
 from typing import List, Optional
 from uuid import UUID
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
+from models.hospital import Hospital
 from models.shift import ShiftAssignment
 from services.settings_service import (
     get_draft_schedule,
@@ -374,8 +377,6 @@ async def get_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        import calendar as _calendar
-
         start_date, end_date = _month_bounds(year, month)
         hospital_doctor_ids = (
             await db.execute(
@@ -411,3 +412,342 @@ async def get_schedule(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+## ── Export (PDF / Excel) ──
+
+
+WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
+
+
+def _weekday_ja(year: int, month: int, day: int) -> str:
+    return WEEKDAY_LABELS[datetime.date(year, month, day).weekday()]
+
+
+async def _fetch_export_data(
+    year: int, month: int, hospital_id: uuid.UUID, db: AsyncSession
+):
+    """Fetch hospital name, doctor map, schedule rows and holiday info for export."""
+    hospital = await db.get(Hospital, hospital_id)
+    hospital_name = hospital.name if hospital else "病院"
+
+    doctors_result = await db.execute(
+        select(Doctor).where(Doctor.hospital_id == hospital_id)
+    )
+    doctor_map = {d.id: d.name for d in doctors_result.scalars().all()}
+
+    start_date, end_date = _month_bounds(year, month)
+    hospital_doctor_ids = list(doctor_map.keys())
+
+    result = await db.execute(
+        select(ShiftAssignment)
+        .where(
+            ShiftAssignment.date >= start_date,
+            ShiftAssignment.date < end_date,
+            ShiftAssignment.doctor_id.in_(hospital_doctor_ids) if hospital_doctor_ids else ShiftAssignment.doctor_id.is_(None),
+        )
+        .order_by(ShiftAssignment.date)
+    )
+    assignments = result.scalars().all()
+
+    days_in_month = _calendar.monthrange(year, month)[1]
+    schedule: dict = {
+        day: {"day": day, "day_shift": None, "night_shift": None}
+        for day in range(1, days_in_month + 1)
+    }
+    for a in assignments:
+        day = a.date.day
+        if _normalize_shift_type(a.shift_type) == "day":
+            schedule[day]["day_shift"] = str(a.doctor_id)
+        else:
+            schedule[day]["night_shift"] = str(a.doctor_id)
+
+    rows = sorted(schedule.values(), key=lambda r: r["day"])
+
+    # Determine holidays (weekday-based only; custom holidays require settings)
+    try:
+        import jpholiday
+        holiday_dates = {
+            h[0] for h in jpholiday.between(
+                datetime.date(year, month, 1),
+                datetime.date(year, month, days_in_month),
+            )
+        }
+    except Exception:
+        holiday_dates = set()
+
+    return hospital_name, doctor_map, rows, holiday_dates
+
+
+def _doctor_label(doctor_id: str | None, doctor_map: dict) -> str:
+    if not doctor_id:
+        return ""
+    uid = uuid.UUID(doctor_id) if isinstance(doctor_id, str) else doctor_id
+    return doctor_map.get(uid, "")
+
+
+def _build_pdf(
+    year: int, month: int, hospital_name: str, doctor_map: dict,
+    rows: list, holiday_dates: set,
+) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Spacer, Paragraph
+    from reportlab.lib.styles import ParagraphStyle
+
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
+    font_name = "HeiseiKakuGo-W5"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
+
+    elements = []
+
+    # Title
+    title_style = ParagraphStyle(
+        "Title", fontName=font_name, fontSize=14, leading=18, alignment=1,
+    )
+    elements.append(Paragraph(f"{hospital_name}　{year}年{month}月 当直表", title_style))
+    elements.append(Spacer(1, 6 * mm))
+
+    # Split into 2 columns
+    mid = (len(rows) + 1) // 2
+    left_rows = rows[:mid]
+    right_rows = rows[mid:]
+
+    def make_column_data(row_list):
+        header = ["日付", "日直", "当直"]
+        data = [header]
+        for r in row_list:
+            d = r["day"]
+            wd = _weekday_ja(year, month, d)
+            date_label = f"{d}({wd})"
+            dt = datetime.date(year, month, d)
+            is_sun = dt.weekday() == 6
+            is_sat = dt.weekday() == 5
+            is_holiday = is_sun or dt in holiday_dates
+            show_day = is_holiday or is_sat
+            day_name = _doctor_label(r["day_shift"], doctor_map) if show_day else ""
+            night_name = _doctor_label(r["night_shift"], doctor_map)
+            data.append([date_label, day_name, night_name])
+        return data
+
+    left_data = make_column_data(left_rows)
+    right_data = make_column_data(right_rows)
+
+    # Pad shorter column
+    while len(left_data) < len(right_data):
+        left_data.append(["", "", ""])
+    while len(right_data) < len(left_data):
+        right_data.append(["", "", ""])
+
+    # Combine into single table: [日付, 日直, 当直, gap, 日付, 日直, 当直]
+    combined = []
+    for i in range(len(left_data)):
+        lr = left_data[i]
+        rr = right_data[i]
+        combined.append(lr + [""] + rr)
+
+    page_w = A4[0] - 30 * mm  # available width
+    col_date = 22 * mm
+    col_shift = (page_w - 2 * col_date - 3 * mm) / 4  # 4 shift columns share remaining
+    col_gap = 3 * mm
+    col_widths = [col_date, col_shift, col_shift, col_gap, col_date, col_shift, col_shift]
+
+    table = Table(combined, colWidths=col_widths, repeatRows=1)
+
+    # Style
+    style_cmds = [
+        # Font
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        # Header row
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("BACKGROUND", (0, 0), (2, 0), colors.Color(0.93, 0.93, 0.93)),
+        ("BACKGROUND", (4, 0), (6, 0), colors.Color(0.93, 0.93, 0.93)),
+        ("FONTNAME", (0, 0), (-1, 0), font_name),
+        # Alignment
+        ("ALIGN", (1, 0), (2, -1), "CENTER"),
+        ("ALIGN", (5, 0), (6, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        # Padding
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 3),
+        # Bold outer borders for left table
+        ("BOX", (0, 0), (2, -1), 1.5, colors.black),
+        ("LINEBELOW", (0, 0), (2, 0), 1.5, colors.black),
+        ("INNERGRID", (0, 0), (2, -1), 0.5, colors.Color(0.7, 0.7, 0.7)),
+        # Bold outer borders for right table
+        ("BOX", (4, 0), (6, -1), 1.5, colors.black),
+        ("LINEBELOW", (4, 0), (6, 0), 1.5, colors.black),
+        ("INNERGRID", (4, 0), (6, -1), 0.5, colors.Color(0.7, 0.7, 0.7)),
+        # Gap column invisible
+        ("LINEAFTER", (2, 0), (2, -1), 0, colors.white),
+        ("LINEBEFORE", (4, 0), (4, -1), 0, colors.white),
+    ]
+
+    # Color rows for holidays/saturdays
+    for col_offset, row_list in [(0, left_rows), (4, right_rows)]:
+        for idx, r in enumerate(row_list):
+            row_idx = idx + 1  # +1 for header
+            dt = datetime.date(year, month, r["day"])
+            if dt.weekday() == 6 or dt in holiday_dates:
+                style_cmds.append(("TEXTCOLOR", (col_offset, row_idx), (col_offset, row_idx), colors.Color(0.85, 0.15, 0.15)))
+                style_cmds.append(("BACKGROUND", (col_offset, row_idx), (col_offset + 2, row_idx), colors.Color(1, 0.95, 0.95)))
+            elif dt.weekday() == 5:
+                style_cmds.append(("TEXTCOLOR", (col_offset, row_idx), (col_offset, row_idx), colors.Color(0.15, 0.15, 0.85)))
+                style_cmds.append(("BACKGROUND", (col_offset, row_idx), (col_offset + 2, row_idx), colors.Color(0.95, 0.95, 1)))
+
+    table.setStyle(TableStyle(style_cmds))
+    elements.append(table)
+
+    doc.build(elements)
+    return buf.getvalue()
+
+
+def _build_xlsx(
+    year: int, month: int, hospital_name: str, doctor_map: dict,
+    rows: list, holiday_dates: set,
+) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{year}年{month}月"
+
+    thin = Side(style="thin", color="999999")
+    thick = Side(style="medium", color="000000")
+    header_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+    sun_fill = PatternFill(start_color="FFF0F0", end_color="FFF0F0", fill_type="solid")
+    sat_fill = PatternFill(start_color="F0F0FF", end_color="F0F0FF", fill_type="solid")
+    sun_font = Font(color="CC2222", size=10)
+    sat_font = Font(color="2222CC", size=10)
+    normal_font = Font(size=10)
+    header_font = Font(bold=True, size=10)
+    title_font = Font(bold=True, size=14)
+    center = Alignment(horizontal="center", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+
+    # Title
+    ws.merge_cells("A1:G1")
+    ws["A1"] = f"{hospital_name}　{year}年{month}月 当直表"
+    ws["A1"].font = title_font
+    ws["A1"].alignment = center
+
+    # Split
+    mid = (len(rows) + 1) // 2
+    left_rows = rows[:mid]
+    right_rows = rows[mid:]
+
+    # Column widths: A=date, B=day, C=night, D=gap, E=date, F=day, G=night
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 12
+    ws.column_dimensions["D"].width = 2
+    ws.column_dimensions["E"].width = 10
+    ws.column_dimensions["F"].width = 12
+    ws.column_dimensions["G"].width = 12
+
+    start_row = 3
+
+    # Headers
+    for col, label in [(1, "日付"), (2, "日直"), (3, "当直"), (5, "日付"), (6, "日直"), (7, "当直")]:
+        cell = ws.cell(row=start_row, column=col, value=label)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        cell.border = Border(top=thick, bottom=thick, left=thick if col in (1, 5) else thin, right=thick if col in (3, 7) else thin)
+
+    def write_rows(row_list, col_offset, excel_row):
+        for r in row_list:
+            d = r["day"]
+            wd = _weekday_ja(year, month, d)
+            dt = datetime.date(year, month, d)
+            is_sun = dt.weekday() == 6
+            is_sat = dt.weekday() == 5
+            is_holiday = is_sun or dt in holiday_dates
+            show_day = is_holiday or is_sat
+
+            date_cell = ws.cell(row=excel_row, column=col_offset, value=f"{d}({wd})")
+            day_cell = ws.cell(row=excel_row, column=col_offset + 1, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
+            night_cell = ws.cell(row=excel_row, column=col_offset + 2, value=_doctor_label(r["night_shift"], doctor_map))
+
+            date_cell.alignment = left_align
+            day_cell.alignment = center
+            night_cell.alignment = center
+
+            fill = sun_fill if is_holiday else sat_fill if is_sat else None
+            font = sun_font if is_holiday else sat_font if is_sat else normal_font
+
+            for c in (date_cell, day_cell, night_cell):
+                c.font = font
+                if fill:
+                    c.fill = fill
+                c.border = Border(
+                    top=thin, bottom=thin,
+                    left=thick if c.column == col_offset else thin,
+                    right=thick if c.column == col_offset + 2 else thin,
+                )
+
+            excel_row += 1
+        return excel_row
+
+    write_rows(left_rows, 1, start_row + 1)
+    write_rows(right_rows, 5, start_row + 1)
+
+    # Outer border for bottom of each table
+    last_data_row = start_row + max(len(left_rows), len(right_rows))
+    for col_start in [1, 5]:
+        for c in range(col_start, col_start + 3):
+            cell = ws.cell(row=last_data_row, column=c)
+            b = cell.border
+            cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get("/export/{year}/{month}")
+async def export_schedule(
+    year: int,
+    month: int,
+    format: str = Query("pdf", regex="^(pdf|xlsx)$"),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    """当直表をPDFまたはExcelファイルとしてダウンロード。"""
+    hospital_name, doctor_map, rows, holiday_dates = await _fetch_export_data(
+        year, month, hospital_id, db,
+    )
+
+    if not any(r["day_shift"] or r["night_shift"] for r in rows):
+        raise HTTPException(status_code=404, detail="この月の当直表はまだ保存されていません。")
+
+    filename_base = f"{hospital_name}_{year}年{month}月_当直表"
+
+    if format == "xlsx":
+        content = _build_xlsx(year, month, hospital_name, doctor_map, rows, holiday_dates)
+        return Response(
+            content=content,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.xlsx"'},
+        )
+    else:
+        content = _build_pdf(year, month, hospital_name, doctor_map, rows, holiday_dates)
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
+        )
+

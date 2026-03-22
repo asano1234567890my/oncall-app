@@ -166,13 +166,14 @@
 
 | # | 内容 | 優先度 | 状態 |
 |---|------|--------|------|
-| P1-1 | PDF/Excel出力（`reportlab`/`openpyxl`） | P0 | 未着手 |
+| P1-1 | PDF/Excel出力（`reportlab`/`openpyxl`） | P0 | ✅ 完了 |
 | P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 🔄 Phase1完了（事前算術チェック7項目+FE表示）/ Phase2未着手（複合制約の原因特定） |
-| P1-3 | プライバシーポリシー・利用規約ページ | P0 | 未着手 |
+| P1-3 | プライバシーポリシー・利用規約ページ | P0 | ✅ 完了 |
 | P1-4 | 不可日ソフト化UI（is_soft_penaltyのUI公開） | P1 | 未着手 |
 | P1-5 | マジックリンク一斉送信（メール or LINE） | P1 | 未着手 |
 | P1-6 | 自院での実運用（2ヶ月以上） | P0 | 🔄 準備中 |
-| P1-7 | 簡易分析ページ（スコア分布グラフ） | P1 | 未着手 |
+| P1-7 | ICSフィード（Googleカレンダー同期） | P1 | ✅ 完了 |
+| P1-7b | 簡易分析ページ（スコア分布グラフ） | P1 | 未着手 |
 | P1-8 | Stripe決済 + プラン別機能制限 | P0 | 未着手 |
 | P1-9 | データエクスポート/アカウント削除 | P1 | 未着手 |
 | P1-10 | 外部医師（ダミー医師方式）— 全スロットを常勤で埋めない現場向け。既存ロック機能活用 | P1 | 未着手 |
@@ -241,6 +242,8 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-22 | C-3完了: プライバシーポリシー（/privacy）・利用規約（/terms）ページ追加。LPフッター・新規登録ページにリンク追加 |
+| 2026-03-22 | C-7完了: ICSフィード（Googleカレンダー同期）— GET /api/schedule/ical/{doctor_token}で医師個人のシフトを.ics形式で返却。/entry/[token]にカレンダー登録ボタン追加 |
 | 2026-03-22 | C-1 pre_validate強化: 4→7チェックに拡張。新規追加: ⑤前月クロス間隔→月初人手不足検知 ⑥土日祝勤務回数上限vs必要枠数 ⑦土曜当直上限vs土曜数。モバイル版CompactGenerateCard（スケジュール未生成画面）にもdiagnostics表示パネル追加 |
 | 2026-03-22 | C-1 Phase1+3簡易版完了: 解なし対策 — pre_validate()で4つの事前算術チェック（医師数vsスロット/日祝人数不足/スコア範囲矛盾/ロックvs不可日衝突）をソルバー実行前に実施。HTTP 400→200+success=false化。FE全3画面（モバイル/PC/デモ）にdiagnostics表示パネル追加。ConstraintDiagnostic/DiagnosticInfo型をBE/FE両方に新設 |
 | 2026-03-22 | B-3完了: 絵文字削減 — 全7ファイル22箇所の絵文字をLucideアイコンに置き換え（🏥→Hospital, ⚖️→Scale, 📅→Calendar, 🔄→RefreshCw, 👨‍⚕️→UserCog, 📊→BarChart3, 🗓️→CalendarDays, 🚫→Ban, ⚠️→AlertTriangle, ✅→CheckCircle, 💡→Lightbulb）。ServerStatusBannerは接続中アニメーション付き。PainCard/SettingsMenuItemのpropsをemoji:string→icon:LucideIconに型変更 |
