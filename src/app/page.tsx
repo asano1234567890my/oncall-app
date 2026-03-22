@@ -188,6 +188,11 @@ export default function LandingPage() {
       {/* ────────── フッター ────────── */}
       <footer className="border-t bg-white px-4 py-8">
         <div className="max-w-6xl mx-auto text-center text-sm text-gray-400">
+          <div className="mb-2 flex items-center justify-center gap-4">
+            <Link href="/privacy" className="hover:text-gray-600 transition-colors">プライバシーポリシー</Link>
+            <span>|</span>
+            <Link href="/terms" className="hover:text-gray-600 transition-colors">利用規約</Link>
+          </div>
           &copy; {new Date().getFullYear()} シフらく. All rights reserved.
         </div>
       </footer>

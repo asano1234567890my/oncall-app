@@ -129,6 +129,10 @@ export default function RegisterPage() {
             ログイン
           </Link>
         </p>
+
+        <p className="text-center text-xs text-gray-400 mt-4">
+          アカウントを作成することで、<Link href="/terms" className="underline hover:text-gray-600">利用規約</Link>および<Link href="/privacy" className="underline hover:text-gray-600">プライバシーポリシー</Link>に同意したものとみなされます。
+        </p>
       </div>
     </div>
   );
