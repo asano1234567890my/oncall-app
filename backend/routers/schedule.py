@@ -610,31 +610,37 @@ def _build_xlsx(
     center = Alignment(horizontal="center", vertical="center")
     left_align = Alignment(horizontal="left", vertical="center")
 
-    # ── 左側: スケジュール（A〜H） ──
-    # A=日付, B=日直, C=当直, D=曜日, E=土曜, F=日祝, G=gap, H以降=集計
+    # ── 左側: スケジュール（A〜C） ──
+    # A=日付, B=日直, C=当直, D=gap, E以降=集計
+    # L,M=非表示ヘルパー列（土曜○/日祝○ — COUNTIFSで参照）
     ws.column_dimensions["A"].width = 10
     ws.column_dimensions["B"].width = 14
     ws.column_dimensions["C"].width = 14
-    ws.column_dimensions["D"].width = 5
-    ws.column_dimensions["E"].width = 5
-    ws.column_dimensions["F"].width = 5
-    ws.column_dimensions["G"].width = 2  # gap
+    ws.column_dimensions["D"].width = 2  # gap
+
+    # Hidden helper columns for COUNTIFS
+    ws.column_dimensions["L"].width = 5
+    ws.column_dimensions["L"].hidden = True
+    ws.column_dimensions["M"].width = 5
+    ws.column_dimensions["M"].hidden = True
+
+    sched_cols = 3  # A〜C
 
     # Title (spans schedule area)
-    ws.merge_cells("A1:F1")
+    ws.merge_cells("A1:C1")
     ws["A1"] = f"{hospital_name}　{year}年{month}月 当直表"
     ws["A1"].font = title_font
     ws["A1"].alignment = center
 
     # Schedule headers
-    sched_headers = ["日付", "日直", "当直", "曜日", "土曜", "日祝"]
+    sched_headers = ["日付", "日直", "当直"]
     s_row = 3
     for col_idx, label in enumerate(sched_headers, 1):
         cell = ws.cell(row=s_row, column=col_idx, value=label)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = center
-        cell.border = Border(top=thick, bottom=thick, left=thick if col_idx == 1 else thin, right=thick if col_idx == len(sched_headers) else thin)
+        cell.border = Border(top=thick, bottom=thick, left=thick if col_idx == 1 else thin, right=thick if col_idx == sched_cols else thin)
 
     # Schedule data
     for idx, r in enumerate(rows):
@@ -650,43 +656,44 @@ def _build_xlsx(
         date_cell = ws.cell(row=excel_row, column=1, value=f"{d}({wd})")
         day_cell = ws.cell(row=excel_row, column=2, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
         night_cell = ws.cell(row=excel_row, column=3, value=_doctor_label(r["night_shift"], doctor_map))
-        wd_cell = ws.cell(row=excel_row, column=4, value=wd)
-        sat_cell = ws.cell(row=excel_row, column=5, value="○" if is_sat else "")
-        sunhol_cell = ws.cell(row=excel_row, column=6, value="○" if is_holiday else "")
+
+        # Hidden helper columns (L=土曜, M=日祝)
+        ws.cell(row=excel_row, column=12, value="○" if is_sat else "")
+        ws.cell(row=excel_row, column=13, value="○" if is_holiday else "")
 
         fill = sun_fill if is_holiday else sat_fill if is_sat else None
         font = sun_font if is_holiday else sat_font if is_sat else normal_font
 
         date_cell.alignment = left_align
-        for c in (day_cell, night_cell, wd_cell, sat_cell, sunhol_cell):
+        for c in (day_cell, night_cell):
             c.alignment = center
 
-        for c in (date_cell, day_cell, night_cell, wd_cell, sat_cell, sunhol_cell):
+        for c in (date_cell, day_cell, night_cell):
             c.font = font
             if fill:
                 c.fill = fill
             c.border = Border(
                 top=thin, bottom=thin,
                 left=thick if c.column == 1 else thin,
-                right=thick if c.column == len(sched_headers) else thin,
+                right=thick if c.column == sched_cols else thin,
             )
 
     # Schedule bottom border
     last_sched_row = s_row + len(rows)
-    for col_idx in range(1, len(sched_headers) + 1):
+    for col_idx in range(1, sched_cols + 1):
         cell = ws.cell(row=last_sched_row, column=col_idx)
         b = cell.border
         cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
 
-    # ── 右側: 医師別集計（H〜M） ──
-    sum_col_start = 8  # H列
+    # ── 右側: 医師別集計（E〜J） ──
+    sum_col_start = 5  # E列
 
-    ws.column_dimensions["H"].width = 14
+    ws.column_dimensions["E"].width = 14
+    ws.column_dimensions["F"].width = 10
+    ws.column_dimensions["G"].width = 10
+    ws.column_dimensions["H"].width = 10
     ws.column_dimensions["I"].width = 10
-    ws.column_dimensions["J"].width = 10
-    ws.column_dimensions["K"].width = 10
-    ws.column_dimensions["L"].width = 10
-    ws.column_dimensions["M"].width = 8
+    ws.column_dimensions["J"].width = 8
 
     # Summary title
     ws.merge_cells(start_row=1, start_column=sum_col_start, end_row=1, end_column=sum_col_start + 5)
@@ -712,14 +719,14 @@ def _build_xlsx(
         if r[shift] and _doctor_label(r[shift], doctor_map)
     })
 
-    # COUNTIF ranges (referencing columns B, C, E, F in same sheet)
+    # COUNTIF ranges (B=日直, C=当直, L=土曜helper, M=日祝helper)
     days_count = len(rows)
     data_start = s_row + 1
     data_end = s_row + days_count
     night_range = f"$C${data_start}:$C${data_end}"
     day_range = f"$B${data_start}:$B${data_end}"
-    sat_range = f"$E${data_start}:$E${data_end}"
-    sunhol_range = f"$F${data_start}:$F${data_end}"
+    sat_range = f"$L${data_start}:$L${data_end}"
+    sunhol_range = f"$M${data_start}:$M${data_end}"
 
     from openpyxl.utils import get_column_letter
     name_col_letter = get_column_letter(sum_col_start)  # H
