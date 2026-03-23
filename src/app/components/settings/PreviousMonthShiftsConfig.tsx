@@ -71,7 +71,7 @@ export default function PreviousMonthShiftsConfig({
                   inputMode="numeric"
                 />
               </label>
-              <div className="text-[11px] text-gray-500">直近4日分を previous_month_shifts として optimize に送信します。</div>
+              <div className="text-[11px] text-gray-500">当直間隔に応じた日数分を previous_month_shifts として optimize に送信します。</div>
             </div>
 
             <div className="space-y-2">

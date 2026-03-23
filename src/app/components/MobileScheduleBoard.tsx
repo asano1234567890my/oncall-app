@@ -193,7 +193,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
       <div className="-mx-4 px-4">
         <div className="grid grid-cols-2 gap-x-1">
           {(() => {
-            const mid = Math.ceil(schedule.length / 2);
+            const mid = schedule.length <= 28 ? 14 : 15;
             return [schedule.slice(0, mid), schedule.slice(mid)].map((col, ci) => (
               <table key={ci} className="w-full table-fixed select-none border-collapse">
                 <thead>

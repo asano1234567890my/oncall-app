@@ -473,8 +473,8 @@ def _build_pdf(
     elements.append(Paragraph(f"{hospital_name}　{year}年{month}月 当直表", title_style))
     elements.append(Spacer(1, 6 * mm))
 
-    # Split into 2 columns
-    mid = (len(rows) + 1) // 2
+    # Split into 2 columns: left=1-15, right=16-end (Feb: 14/14-15)
+    mid = 14 if len(rows) <= 28 else 15
     left_rows = rows[:mid]
     right_rows = rows[mid:]
 
@@ -523,7 +523,7 @@ def _build_pdf(
     title_space = 22 + 8 * mm  # title + spacer
     bottom_margin_extra = 5 * mm  # 下部に余裕
     available_for_table = page_h - title_space - bottom_margin_extra
-    max_rows = 17  # 31日の月: ceil(31/2)+1 = 17行
+    max_rows = 17  # 31日の月: 右列16行+1ヘッダー=17行
     num_rows = len(combined)
     row_height = available_for_table / max(num_rows, max_rows)
     row_heights = [row_height] * num_rows

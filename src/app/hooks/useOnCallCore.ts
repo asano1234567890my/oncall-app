@@ -279,7 +279,8 @@ export function useOnCallCore() {
       const previousMonth = previousMonthDate.getMonth() + 1;
       const previousMonthLastDay = new Date(previousYear, previousMonth, 0).getDate();
       const formatDate = (value: number) => `${previousYear}-${String(previousMonth).padStart(2, "0")}-${String(value).padStart(2, "0")}`;
-      const startDate = formatDate(Math.max(1, previousMonthLastDay - 3));
+      const spacingDays = Math.max(1, Number(hardConstraints.interval_days) || 4);
+      const startDate = formatDate(Math.max(1, previousMonthLastDay - spacingDays + 1));
       const endDate = formatDate(previousMonthLastDay);
       try {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -316,7 +317,7 @@ export function useOnCallCore() {
     };
     void fetchPreviousMonthShifts();
     return () => controller.abort();
-  }, [activeDoctorIds, month, year]);
+  }, [activeDoctorIds, month, year, hardConstraints.interval_days]);
 
   // ── ハンドラ ──
   const confirmMoveWithUnsavedChanges = () => {
@@ -472,7 +473,7 @@ export function useOnCallCore() {
 
   const scheduleColumns = useMemo(() => {
     if (schedule.length === 0) return [];
-    const splitIndex = Math.ceil(schedule.length / 2);
+    const splitIndex = schedule.length <= 28 ? 14 : 15;
     return [schedule.slice(0, splitIndex), schedule.slice(splitIndex)].filter((rows) => rows.length > 0);
   }, [schedule]);
 

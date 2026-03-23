@@ -118,7 +118,7 @@ export default function ViewSchedulePage() {
 
   const scheduleColumns = useMemo(() => {
     if (schedule.length === 0) return [];
-    const mid = Math.ceil(schedule.length / 2);
+    const mid = schedule.length <= 28 ? 14 : 15;
     return [schedule.slice(0, mid), schedule.slice(mid)];
   }, [schedule]);
 

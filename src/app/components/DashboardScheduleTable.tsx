@@ -370,7 +370,7 @@ export default function DashboardScheduleTable({
       )}
 
       {schedule.length > 0 && (() => {
-        const mid = Math.ceil(schedule.length / 2);
+        const mid = schedule.length <= 28 ? 14 : 15;
         const columns = [schedule.slice(0, mid), schedule.slice(mid)];
 
         const renderColumn = (rows: ScheduleRow[]) => (
