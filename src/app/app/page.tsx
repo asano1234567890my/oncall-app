@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus, LogOut } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -158,7 +158,25 @@ export default function AppPage() {
   }
 
   if (setupStatus === "needed") {
-    return <SetupWizard onComplete={handleWizardComplete} isRedo={isSetupRedo} />;
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans">
+        <div className="flex items-center justify-between border-b bg-white px-4 py-2">
+          <span className="text-sm font-bold text-gray-700">シフらく — 初期設定</span>
+          <button
+            onClick={() => {
+              if (window.confirm("初期設定を中断してログアウトしますか？\n次回ログイン時にまた表示されます。")) {
+                core.logout();
+              }
+            }}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            ログアウト
+          </button>
+        </div>
+        <SetupWizard onComplete={handleWizardComplete} isRedo={isSetupRedo} />
+      </div>
+    );
   }
 
   return (
