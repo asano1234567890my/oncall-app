@@ -38,9 +38,11 @@ export function useAuth() {
         if (res.status === 401) {
           // トークン期限切れ → 自動ログアウト
           localStorage.removeItem(TOKEN_KEY);
+          const hid = localStorage.getItem(HOSPITAL_ID_KEY);
           localStorage.removeItem(HOSPITAL_ID_KEY);
           localStorage.removeItem(HOSPITAL_NAME_KEY);
-          localStorage.removeItem("setup_completed");
+          if (hid) localStorage.removeItem(`setup_completed_${hid}`);
+          localStorage.removeItem("setup_completed"); // legacy cleanup
           setAuth({ token: null, hospitalId: null, hospitalName: null, isAuthenticated: false });
         } else {
           setAuth({ token, hospitalId, hospitalName, isAuthenticated: true });
@@ -80,9 +82,12 @@ export function useAuth() {
   }, []);
 
   const logout = useCallback(() => {
+    const hid = localStorage.getItem(HOSPITAL_ID_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(HOSPITAL_ID_KEY);
     localStorage.removeItem(HOSPITAL_NAME_KEY);
+    if (hid) localStorage.removeItem(`setup_completed_${hid}`);
+    localStorage.removeItem("setup_completed"); // legacy cleanup
     setAuth({ token: null, hospitalId: null, hospitalName: null, isAuthenticated: false });
   }, []);
 

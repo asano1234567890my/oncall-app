@@ -61,20 +61,23 @@ export default function AppPage() {
   // ── セットアップ完了チェック ──
   useEffect(() => {
     if (!core.auth.isAuthenticated) return;
-    if (localStorage.getItem("setup_completed")) { setSetupStatus("done"); return; }
+    const setupKey = `setup_completed_${core.auth.hospitalId ?? ""}`;
+    if (localStorage.getItem(setupKey)) { setSetupStatus("done"); return; }
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
     fetch(`${apiUrl}/api/settings/kv/setup_completed`, { headers: getAuthHeaders() })
       .then((res) => { if (!res.ok) throw new Error(); return res.json(); })
       .then((data: unknown) => {
         const value = (data as Record<string, unknown>)?.value;
-        if (value) localStorage.setItem("setup_completed", "1");
+        if (value) localStorage.setItem(setupKey, "1");
         setSetupStatus(value ? "done" : "needed");
       })
       .catch(() => setSetupStatus("done"));
-  }, [core.auth.isAuthenticated]);
+  }, [core.auth.isAuthenticated, core.auth.hospitalId]);
+
+  const setupStorageKey = `setup_completed_${core.auth.hospitalId ?? ""}`;
 
   const handleWizardComplete = useCallback((options?: { openDoctorManage?: boolean; openUnavailable?: boolean }) => {
-    localStorage.setItem("setup_completed", "1");
+    localStorage.setItem(setupStorageKey, "1");
     setSetupStatus("done");
     if (options?.openDoctorManage) sessionStorage.setItem("open_doctor_manage", "1");
     if (options?.openUnavailable) sessionStorage.setItem("open_unavailable", "1");
@@ -137,7 +140,7 @@ export default function AppPage() {
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ value: false }),
     }).then(() => {
-      localStorage.removeItem("setup_completed");
+      localStorage.removeItem(setupStorageKey);
       setIsSetupRedo(true);
       setSetupStatus("needed");
       setIsSettingsOpen(false);
