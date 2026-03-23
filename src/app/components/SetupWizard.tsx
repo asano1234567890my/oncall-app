@@ -38,7 +38,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
     minShifts: 1,
     maxShifts: 5,
-    intervalDays: 1,
+    intervalDays: 3,
     maxSaturdayNights: 2,
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -152,7 +152,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
 
       // 2. Save optimizer config
       const optimizerConfig = {
-        score_min: state.minShifts,
+        score_min: 0.5,
         score_max: state.maxShifts,
         objective_weights: {},
         hard_constraints: {
@@ -357,7 +357,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
                 <input
                   type="range"
                   min={1}
-                  max={8}
+                  max={10}
                   step={1}
                   value={state.maxShifts}
                   onChange={(e) => {
