@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lock, Unlock, Loader2, Copy, Check } from "lucide-react";
+import { Lock, Unlock, Loader2, Copy, Check, ClipboardList } from "lucide-react";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getAuthHeaders } from "../../hooks/useAuth";
 
@@ -46,6 +46,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const [editName, setEditName] = useState("");
   const [error, setError] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [bulkCopied, setBulkCopied] = useState(false);
   const [lockingId, setLockingId] = useState<string | null>(null);
 
   const activeDoctors = useMemo(() =>
@@ -217,6 +218,31 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                     追加
                   </button>
                 </div>
+
+                {/* 一括リンクコピー */}
+                {activeDoctors.length > 0 && (
+                  <div className="mb-4">
+                    <button
+                      onClick={async () => {
+                        const lines = activeDoctors
+                          .filter((d) => d.access_token)
+                          .map((d) => `${d.name}: ${window.location.origin}/entry/${d.access_token}`);
+                        if (lines.length === 0) return;
+                        try {
+                          await copyText(lines.join("\n"));
+                          setBulkCopied(true);
+                          window.setTimeout(() => setBulkCopied(false), 2000);
+                        } catch { setError("コピーに失敗しました"); }
+                      }}
+                      className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                        bulkCopied ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {bulkCopied ? <Check className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />}
+                      {bulkCopied ? "全員分コピー済み" : "全員の入力用URLを一括コピー"}
+                    </button>
+                  </div>
+                )}
 
                 {error && <p className="mb-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
