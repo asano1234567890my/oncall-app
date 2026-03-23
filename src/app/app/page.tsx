@@ -23,6 +23,7 @@ import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
+import AccountActions from "../components/settings/AccountActions";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import type { HardConstraints, ShiftScores } from "../types/dashboard";
@@ -296,6 +297,8 @@ export default function AppPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
               <PasswordChangeForm />
             </div>
+            <hr className="border-gray-200" />
+            <AccountActions />
             <hr className="border-gray-200" />
             <button
               onClick={() => { setIsAccountSettingsOpen(false); handleRedoSetup(); }}

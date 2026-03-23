@@ -12,6 +12,7 @@ import SettingsSlidePanel from "../components/SettingsSlidePanel";
 import DashboardSettingsPanel from "../components/DashboardSettingsPanel";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
+import AccountActions from "../components/settings/AccountActions";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
@@ -288,6 +289,8 @@ export default function DashboardPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
               <PasswordChangeForm />
             </div>
+            <hr className="border-gray-200" />
+            <AccountActions />
             <hr className="border-gray-200" />
             <button
               onClick={() => { setIsSettingsOpen(false); core.logout(); }}
