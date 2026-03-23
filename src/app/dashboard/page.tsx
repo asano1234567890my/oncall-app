@@ -293,7 +293,7 @@ export default function DashboardPage() {
             <AccountActions />
             <hr className="border-gray-200" />
             <button
-              onClick={() => { setIsSettingsOpen(false); core.logout(); }}
+              onClick={() => { if (window.confirm("ログアウトしますか？")) { setIsSettingsOpen(false); core.logout(); } }}
               className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
             >
               ログアウト
