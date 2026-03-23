@@ -1,8 +1,8 @@
-// src/app/components/settings/DoctorManageDrawer.tsx — 医師の追加・名前変更・削除・ロック・マジックリンク
+// src/app/components/settings/DoctorManageDrawer.tsx — 医師の追加・名前変更・削除・ロック・共有
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Lock, Unlock, Loader2, Copy, Check, ClipboardList } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X } from "lucide-react";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getAuthHeaders } from "../../hooks/useAuth";
 
@@ -38,6 +38,172 @@ const copyText = async (value: string) => {
   document.body.removeChild(ta);
 };
 
+const getDoctorUrl = (token: string) =>
+  typeof window !== "undefined" ? `${window.location.origin}/entry/${token}` : `/entry/${token}`;
+
+// ── QR code generation (dynamic import to keep bundle small) ──
+async function generateQrDataUrl(text: string): Promise<string> {
+  const QRCode = (await import("qrcode")).default;
+  return QRCode.toDataURL(text, { width: 256, margin: 2 });
+}
+
+// ── Share dropdown for individual doctor ──
+function DoctorShareDropdown({ doctor, onError }: { doctor: Doctor; onError: (msg: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen]);
+
+  if (!doctor.access_token) return null;
+  const url = getDoctorUrl(doctor.access_token);
+  const msg = `${doctor.name}先生\n不可日の入力をお願いします。\n${url}`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 rounded-lg bg-emerald-100 px-2.5 py-1.5 text-xs font-bold text-emerald-800 hover:bg-emerald-200 transition-colors"
+      >
+        <Share2 className="h-3 w-3" />
+        共有
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              try {
+                await copyText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch { onError("コピーに失敗しました"); }
+            }}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "コピー済み" : "URLをコピー"}
+          </button>
+          <a
+            href={`https://line.me/R/share?text=${encodeURIComponent(msg)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => setIsOpen(false)}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 2.9 1.93 5.45 4.83 6.91l-.58 3.43a.3.3 0 0 0 .42.34l4-2.08c.43.06.87.1 1.33.1 5.52 0 10-3.81 10-8.5S17.52 2 12 2z"/></svg>
+            LINEで送る
+          </a>
+          <a
+            href={`mailto:?subject=${encodeURIComponent(`不可日入力のお願い（${doctor.name}先生）`)}&body=${encodeURIComponent(msg)}`}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => setIsOpen(false)}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            メールで送る
+          </a>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              setIsOpen(false);
+              try {
+                const dataUrl = await generateQrDataUrl(url);
+                setQrDataUrl(dataUrl);
+              } catch { onError("QRコードの生成に失敗しました"); }
+            }}
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            QRコードを表示
+          </button>
+        </div>
+      )}
+      {/* QR modal */}
+      {qrDataUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={() => setQrDataUrl(null)}>
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-xs w-full text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="font-bold text-gray-800 mb-3">{doctor.name}先生</p>
+            <img src={qrDataUrl} alt="QR Code" className="mx-auto w-48 h-48" />
+            <p className="mt-3 text-[10px] text-gray-400 break-all">{url}</p>
+            <button onClick={() => setQrDataUrl(null)} className="mt-4 rounded-lg bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Bulk share dropdown ──
+function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (msg: string) => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen]);
+
+  const docsWithToken = doctors.filter((d) => d.access_token);
+  if (docsWithToken.length === 0) return null;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+      >
+        <Share2 className="h-3.5 w-3.5" />
+        まとめて共有
+      </button>
+      {isOpen && (
+        <div className="absolute left-0 top-full mt-1 z-50 w-56 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              const lines = docsWithToken.map((d) => `${d.name}: ${getDoctorUrl(d.access_token!)}`);
+              try {
+                await copyText(lines.join("\n"));
+                setCopied(true);
+                setTimeout(() => { setCopied(false); setIsOpen(false); }, 1500);
+              } catch { onError("コピーに失敗しました"); }
+            }}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "コピー済み" : "全員のURLを一括コピー"}
+          </button>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => {
+              setIsOpen(false);
+              // Open QR print page in new tab
+              const params = docsWithToken.map((d) => `n=${encodeURIComponent(d.name)}&t=${encodeURIComponent(d.access_token!)}`).join("&");
+              const printUrl = `/report/qr-print?${params}`;
+              window.open(printUrl, "_blank");
+            }}
+          >
+            <Printer className="h-3.5 w-3.5" />
+            QRカードを印刷
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main component ──
 export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, onShowGuide }: DoctorManageDrawerProps) {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -45,8 +211,6 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [error, setError] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [bulkCopied, setBulkCopied] = useState(false);
   const [lockingId, setLockingId] = useState<string | null>(null);
 
   const activeDoctors = useMemo(() =>
@@ -164,17 +328,6 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
     }
   };
 
-  const handleCopyLink = async (doctor: Doctor) => {
-    if (!doctor.access_token) return;
-    try {
-      await copyText(`${window.location.origin}/entry/${doctor.access_token}`);
-      setCopiedId(doctor.id);
-      window.setTimeout(() => setCopiedId((prev) => (prev === doctor.id ? null : prev)), 1500);
-    } catch {
-      setError("コピーに失敗しました");
-    }
-  };
-
   return (
     <SettingsModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
@@ -201,7 +354,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
             ) : (
               <>
                 {/* 追加フォーム */}
-                <div className="mb-4 flex gap-2">
+                <div className="mb-3 flex gap-2">
                   <input
                     type="text"
                     placeholder="新しい医師名を入力"
@@ -219,28 +372,10 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                   </button>
                 </div>
 
-                {/* 一括リンクコピー */}
+                {/* まとめて共有 */}
                 {activeDoctors.length > 0 && (
                   <div className="mb-4">
-                    <button
-                      onClick={async () => {
-                        const lines = activeDoctors
-                          .filter((d) => d.access_token)
-                          .map((d) => `${d.name}: ${window.location.origin}/entry/${d.access_token}`);
-                        if (lines.length === 0) return;
-                        try {
-                          await copyText(lines.join("\n"));
-                          setBulkCopied(true);
-                          window.setTimeout(() => setBulkCopied(false), 2000);
-                        } catch { setError("コピーに失敗しました"); }
-                      }}
-                      className={`flex w-full items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
-                        bulkCopied ? "border-emerald-300 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100"
-                      }`}
-                    >
-                      {bulkCopied ? <Check className="h-3.5 w-3.5" /> : <ClipboardList className="h-3.5 w-3.5" />}
-                      {bulkCopied ? "全員分コピー済み" : "全員の入力用URLを一括コピー"}
-                    </button>
+                    <BulkShareDropdown doctors={activeDoctors} onError={setError} />
                   </div>
                 )}
 
@@ -254,7 +389,6 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                   {activeDoctors.map((doctor) => {
                     const locked = Boolean(doctor.is_locked);
                     const isLocking = lockingId === doctor.id;
-                    const isCopied = copiedId === doctor.id;
                     return (
                       <div key={doctor.id} className="rounded-lg border border-gray-200 px-3 py-2.5">
                         {editingId === doctor.id ? (
@@ -293,16 +427,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
                                 {isLocking ? "更新中..." : locked ? "解除" : "ロック"}
                               </button>
-                              <button
-                                onClick={() => { void handleCopyLink(doctor); }}
-                                disabled={!doctor.access_token}
-                                className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 ${
-                                  isCopied ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                }`}
-                              >
-                                {isCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                                {isCopied ? "コピー済み" : "入力用URL"}
-                              </button>
+                              <DoctorShareDropdown doctor={doctor} onError={setError} />
                               <button
                                 onClick={() => { setEditingId(doctor.id); setEditName(doctor.name); }}
                                 className="rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-100"
