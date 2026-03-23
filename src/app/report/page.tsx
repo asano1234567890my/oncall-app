@@ -26,6 +26,10 @@ const SCORE_DAY = 0.5;
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/** 自然順ソート（"医師2" < "医師10"） */
+const naturalCompare = (a: string, b: string) =>
+  a.localeCompare(b, "ja", { numeric: true, sensitivity: "base" });
+
 function isSaturdayDate(dateStr: string) {
   return new Date(dateStr).getDay() === 6;
 }
@@ -89,6 +93,7 @@ export default function ReportPage() {
           }
         }
         if (!cancelled) {
+          d.doctors.sort((a, b) => naturalCompare(a.name, b.name));
           setData(d);
           if (!selectedDoctorId && d.doctors.length > 0) setSelectedDoctorId(d.doctors[0].id);
         }

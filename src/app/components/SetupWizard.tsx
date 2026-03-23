@@ -528,8 +528,8 @@ function ChoiceButton({ label, description, selected, onClick }: {
           : "border-gray-200 bg-white text-gray-700 hover:border-blue-200 hover:bg-blue-50/30"
       }`}
     >
-      <div className="text-base font-bold">{label}</div>
-      {description && <div className="text-sm text-gray-500 mt-0.5">{description}</div>}
+      <div className="text-base font-bold whitespace-normal">{label}</div>
+      {description && <div className="text-sm text-gray-500 mt-0.5 whitespace-normal break-words">{description}</div>}
     </button>
   );
 }
