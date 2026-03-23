@@ -205,7 +205,7 @@ export default function AppPage() {
                   onClick={() => setShowImportModal(true)}
                   className="flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors"
                 >
-                  <ImagePlus className="h-3.5 w-3.5" /> 画像取込
+                  <ImagePlus className="h-3.5 w-3.5" /> 取込
                 </button>
               )}
               {!hasSchedule && (
@@ -638,7 +638,7 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
           className="flex-1 rounded-xl border border-purple-200 bg-purple-50 py-3 text-sm font-bold text-purple-700 hover:bg-purple-100 transition-colors"
         >
           <ImagePlus className="mr-1 inline h-4 w-4" />
-          画像から取込
+          ファイルから取込
         </button>
       </div>
 

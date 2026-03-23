@@ -169,30 +169,49 @@ def _call_gemini_text(prompt: str, text: str) -> str:
 
 # ── 当直表 画像取込 ──────────────────────────────────────
 
+SCHEDULE_ACCEPTED_EXTENSIONS = ACCEPTED_EXTENSIONS | {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+
+
 @router.post("/parse-image")
 async def parse_image(
     file: UploadFile = File(...),
     hospital_id: uuid.UUID = Depends(get_current_hospital),
 ):
-    """画像をGemini Vision APIで解析し、スケジュールデータを返す。"""
+    """画像・Excel・Word・PDF・テキストからスケジュールデータを抽出する。"""
     if not GEMINI_API_KEY:
-        raise HTTPException(status_code=500, detail="画像解析機能が設定されていません（APIキー未設定）")
+        raise HTTPException(status_code=500, detail="AI解析機能が設定されていません（APIキー未設定）")
 
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="ファイルサイズが大きすぎます（上限10MB）")
 
-    mime_type = file.content_type or "image/jpeg"
-    if not mime_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="画像ファイルを選択してください")
+    filename = file.filename or "unknown"
+    mime_type = file.content_type or "application/octet-stream"
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in SCHEDULE_ACCEPTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="対応していないファイル形式です。対応形式: 画像, Excel, Word, PDF, テキスト",
+        )
 
     try:
-        raw_text = _call_gemini_vision(SCHEDULE_PROMPT, content, mime_type)
+        # ドキュメント系はテキスト抽出 → テキストAPI
+        extracted = _extract_text_from_file(content, mime_type, filename)
+        if extracted:
+            raw_text = _call_gemini_text(SCHEDULE_PROMPT, extracted)
+        elif mime_type.startswith("image/"):
+            raw_text = _call_gemini_vision(SCHEDULE_PROMPT, content, mime_type)
+        else:
+            raise HTTPException(status_code=400, detail="ファイルの内容を読み取れませんでした")
+
         parsed = json.loads(_extract_json(raw_text))
     except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="画像の解析結果を正しく読み取れませんでした。別の画像を試してください。")
+        raise HTTPException(status_code=422, detail="ファイルの解析結果を正しく読み取れませんでした。別のファイルを試してください。")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"画像解析に失敗しました: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"ファイル解析に失敗しました: {str(e)}")
 
     return parsed
 

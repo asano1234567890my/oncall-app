@@ -100,11 +100,28 @@ export default function ImageImportModal({
     return null;
   };
 
+  const ACCEPTED_TYPES = [
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/pdf",
+    "text/plain", "text/csv",
+  ];
+  const ACCEPTED_EXTS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".xlsx", ".xls", ".docx", ".pdf", ".txt", ".csv"];
+  const FILE_ACCEPT = "image/*,.xlsx,.xls,.docx,.pdf,.txt,.csv";
+
+  const isAcceptedFile = (f: File): boolean => {
+    if (ACCEPTED_TYPES.includes(f.type)) return true;
+    const ext = f.name.toLowerCase().slice(f.name.lastIndexOf("."));
+    return ACCEPTED_EXTS.includes(ext);
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setError("画像ファイルを選択してください");
+    if (!isAcceptedFile(f)) {
+      setError("対応していないファイル形式です。画像・Excel・Word・PDF・テキストに対応しています。");
       return;
     }
     if (f.size > 10 * 1024 * 1024) {
@@ -113,7 +130,7 @@ export default function ImageImportModal({
     }
     setError("");
     setFile(f);
-    setPreview(URL.createObjectURL(f));
+    setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : "");
   };
 
   const handleParse = async () => {
@@ -225,7 +242,7 @@ export default function ImageImportModal({
       <div className="relative w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl bg-white shadow-xl">
         {/* Header */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-white px-4 py-3 rounded-t-2xl">
-          <h2 className="text-sm font-bold text-gray-800">画像から当直表を取り込む</h2>
+          <h2 className="text-sm font-bold text-gray-800">ファイルから当直表を取り込む</h2>
           <button onClick={handleClose} className="rounded-full p-1 hover:bg-gray-100 transition-colors">
             <X className="h-5 w-5 text-gray-500" />
           </button>
@@ -236,7 +253,7 @@ export default function ImageImportModal({
           {step === "upload" && (
             <>
               <p className="text-xs text-gray-500">
-                当直表の画像（写真・スクリーンショット）をアップロードすると、AIが自動で読み取ります。
+                当直表の画像・Excel・Word・PDFなどをアップロードすると、AIが自動で読み取ります。
               </p>
 
               {!file ? (
@@ -257,11 +274,11 @@ export default function ImageImportModal({
                   {/* ファイル選択 */}
                   <label className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-6 cursor-pointer hover:border-gray-400 hover:bg-gray-100/50 transition-colors">
                     <Upload className="h-8 w-8 text-gray-400" />
-                    <span className="text-sm font-bold text-gray-600">画像を選択</span>
-                    <span className="text-[10px] text-gray-400">JPEG, PNG</span>
+                    <span className="text-sm font-bold text-gray-600">ファイルを選択</span>
+                    <span className="text-[10px] text-gray-400">画像, Excel, Word, PDF</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept={FILE_ACCEPT}
                       onChange={handleFileChange}
                       className="hidden"
                     />
@@ -269,13 +286,23 @@ export default function ImageImportModal({
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-gray-200 overflow-hidden">
-                    <img
-                      src={preview}
-                      alt="プレビュー"
-                      className="w-full max-h-60 object-contain bg-gray-100"
-                    />
-                  </div>
+                  {preview ? (
+                    <div className="rounded-xl border border-gray-200 overflow-hidden">
+                      <img
+                        src={preview}
+                        alt="プレビュー"
+                        className="w-full max-h-60 object-contain bg-gray-100"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                      <Upload className="h-8 w-8 text-gray-400 shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-gray-700">{file.name}</p>
+                        <p className="text-[10px] text-gray-400">{(file.size / 1024).toFixed(0)} KB</p>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-500 truncate max-w-[60%]">{file.name}</span>
                     <div className="flex gap-2">

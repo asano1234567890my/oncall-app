@@ -220,10 +220,10 @@ export default function DashboardToolbar({
           type="button"
           onClick={onOpenImport}
           className="flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100"
-          title="画像から当直表を取り込む"
+          title="ファイルから当直表を取り込む"
         >
           <ImagePlus className="h-3.5 w-3.5" />
-          画像取込
+          取込
         </button>
       )}
 
