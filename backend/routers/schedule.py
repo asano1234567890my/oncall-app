@@ -369,6 +369,69 @@ async def remove_draft(
     return {"success": True}
 
 
+## ── Stats (年間集計) ──
+
+
+@router.get("/stats")
+async def get_schedule_stats(
+    year: int = Query(...),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    """年間のシフトデータを集計して返す。"""
+    import jpholiday
+
+    # 医師一覧
+    doctors_result = await db.execute(
+        select(Doctor)
+        .where(Doctor.hospital_id == hospital_id, Doctor.is_active == True)  # noqa: E712
+        .order_by(Doctor.name)
+    )
+    doctors = doctors_result.scalars().all()
+    doctor_map = {str(d.id): d.name for d in doctors}
+
+    # 年間シフト（1月〜12月）
+    start_date = datetime.date(year, 1, 1)
+    end_date = datetime.date(year, 12, 31)
+
+    doctor_ids = [d.id for d in doctors]
+    if not doctor_ids:
+        return {"doctors": [], "shifts": [], "holidays": []}
+
+    shifts_result = await db.execute(
+        select(ShiftAssignment)
+        .where(
+            ShiftAssignment.date >= start_date,
+            ShiftAssignment.date <= end_date,
+            ShiftAssignment.doctor_id.in_(doctor_ids),
+        )
+        .order_by(ShiftAssignment.date)
+    )
+    shifts = shifts_result.scalars().all()
+
+    # 祝日一覧
+    holiday_dates = set()
+    for m in range(1, 13):
+        days_in_month = _calendar.monthrange(year, m)[1]
+        for d in range(1, days_in_month + 1):
+            dt = datetime.date(year, m, d)
+            if jpholiday.is_holiday(dt):
+                holiday_dates.add(dt.isoformat())
+
+    return {
+        "doctors": [{"id": str(d.id), "name": d.name} for d in doctors],
+        "shifts": [
+            {
+                "date": s.date.isoformat(),
+                "doctor_id": str(s.doctor_id),
+                "shift_type": s.shift_type,
+            }
+            for s in shifts
+        ],
+        "holidays": sorted(holiday_dates),
+    }
+
+
 ## ── Export (PDF / Excel) ──
 
 

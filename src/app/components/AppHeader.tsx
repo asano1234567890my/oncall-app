@@ -16,6 +16,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "モバイル版", shortLabel: "モバイル", href: "/app", match: "/app" },
   { label: "PC版", shortLabel: "PC", href: "/dashboard", match: "/dashboard" },
   { label: "当直表", shortLabel: "当直表", href: "/view", match: "/view" },
+  { label: "レポート", shortLabel: "レポート", href: "/report", match: "/report" },
 ];
 
 type AppHeaderProps = {
