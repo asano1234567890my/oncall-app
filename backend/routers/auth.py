@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import delete as sa_delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -12,7 +14,10 @@ from core.auth import create_access_token, get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from models.hospital import Hospital
+from models.shift import ShiftAssignment
 from models.system_setting import SystemSetting
+from models.transfer_code import TransferCode
+from models.unavailable_day import UnavailableDay
 from services.auth_service import (
     create_hospital,
     get_hospital_by_id,
@@ -194,3 +199,129 @@ async def delete_account(
     await db.commit()
 
     return {"message": "アカウントを削除しました"}
+
+
+# ── データ引き継ぎ ──
+
+
+class TransferCodeResponse(BaseModel):
+    code: str
+    expires_at: str
+
+
+class TransferImportRequest(BaseModel):
+    code: str
+
+
+@router.post("/transfer-code", response_model=TransferCodeResponse)
+async def generate_transfer_code(
+    db: AsyncSession = Depends(get_db),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+):
+    """引き継ぎコードを発行（24時間有効）。既存コードがあれば置換。"""
+    # 既存コード削除
+    await db.execute(
+        sa_delete(TransferCode).where(TransferCode.hospital_id == hospital_id)
+    )
+
+    code = secrets.token_urlsafe(9)  # 12文字
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    tc = TransferCode(
+        hospital_id=hospital_id,
+        code=code,
+        expires_at=expires_at,
+    )
+    db.add(tc)
+    await db.commit()
+
+    return TransferCodeResponse(code=code, expires_at=expires_at.isoformat())
+
+
+@router.post("/transfer-import", status_code=200)
+async def transfer_import(
+    body: TransferImportRequest,
+    db: AsyncSession = Depends(get_db),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+):
+    """引き継ぎコードで別アカウントのデータを取り込む。既存データは上書き。"""
+    # コード検索
+    result = await db.execute(
+        select(TransferCode).where(TransferCode.code == body.code)
+    )
+    tc = result.scalar_one_or_none()
+    if tc is None:
+        raise HTTPException(status_code=400, detail="無効な引き継ぎコードです")
+    if tc.expires_at < datetime.now(timezone.utc):
+        await db.delete(tc)
+        await db.commit()
+        raise HTTPException(status_code=400, detail="引き継ぎコードの有効期限が切れています")
+    if tc.hospital_id == hospital_id:
+        raise HTTPException(status_code=400, detail="自分自身のコードは使用できません")
+
+    source_hospital_id = tc.hospital_id
+
+    # ── ソースデータ読み込み ──
+    src_doctors_result = await db.execute(
+        select(Doctor)
+        .where(Doctor.hospital_id == source_hospital_id)
+        .options(selectinload(Doctor.unavailable_days), selectinload(Doctor.shift_assignments))
+    )
+    src_doctors = src_doctors_result.scalars().all()
+
+    src_settings_result = await db.execute(
+        select(SystemSetting).where(SystemSetting.hospital_id == source_hospital_id)
+    )
+    src_settings = src_settings_result.scalars().all()
+
+    # ── ターゲットの既存データ削除 ──
+    # doctors削除でshift_assignments, unavailable_daysもCASCADE削除
+    await db.execute(sa_delete(SystemSetting).where(SystemSetting.hospital_id == hospital_id))
+    await db.execute(sa_delete(Doctor).where(Doctor.hospital_id == hospital_id))
+
+    # ── データコピー ──
+    doctors_count = 0
+    for src_doc in src_doctors:
+        new_doc = Doctor(
+            hospital_id=hospital_id,
+            name=src_doc.name,
+            is_active=src_doc.is_active,
+            is_locked=src_doc.is_locked,
+            access_token=secrets.token_urlsafe(32),
+            min_score=src_doc.min_score,
+            max_score=src_doc.max_score,
+            target_score=src_doc.target_score,
+        )
+        db.add(new_doc)
+        await db.flush()  # new_doc.id を確定
+
+        for ud in src_doc.unavailable_days:
+            db.add(UnavailableDay(
+                doctor_id=new_doc.id,
+                date=ud.date,
+                day_of_week=ud.day_of_week,
+                is_fixed=ud.is_fixed,
+                target_shift=ud.target_shift,
+                is_soft_penalty=ud.is_soft_penalty,
+            ))
+
+        for sa in src_doc.shift_assignments:
+            db.add(ShiftAssignment(
+                doctor_id=new_doc.id,
+                date=sa.date,
+                shift_type=sa.shift_type,
+            ))
+
+        doctors_count += 1
+
+    for s in src_settings:
+        db.add(SystemSetting(
+            hospital_id=hospital_id,
+            key=s.key,
+            value=s.value,
+        ))
+
+    # 使用済みコード削除
+    await db.delete(tc)
+    await db.commit()
+
+    return {"message": f"データを取り込みました（医師{doctors_count}名）", "doctors_count": doctors_count}

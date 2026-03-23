@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Settings, Undo2, Redo2, ChevronDown, Shield, Lock, Unlock, FileSpreadsheet } from "lucide-react";
+import { Settings, Undo2, Redo2, ChevronDown, Shield, Lock, Unlock, FileSpreadsheet, ImagePlus } from "lucide-react";
 
 type DashboardToolbarProps = {
   year: number;
@@ -38,6 +38,8 @@ type DashboardToolbarProps = {
   // 白紙作成
   onCreateBlank: () => void;
   hasSchedule: boolean;
+  // 画像取込
+  onOpenImport?: () => void;
 };
 
 export default function DashboardToolbar({
@@ -72,6 +74,7 @@ export default function DashboardToolbar({
   onClearUnlocked,
   onCreateBlank,
   hasSchedule,
+  onOpenImport,
 }: DashboardToolbarProps) {
   const [isGenMenuOpen, setIsGenMenuOpen] = useState(false);
   const genMenuRef = useRef<HTMLDivElement>(null);
@@ -210,6 +213,19 @@ export default function DashboardToolbar({
         <FileSpreadsheet className="h-3.5 w-3.5" />
         白紙作成
       </button>
+
+      {/* Image import */}
+      {onOpenImport && (
+        <button
+          type="button"
+          onClick={onOpenImport}
+          className="flex items-center gap-1 rounded-md border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700 transition hover:bg-purple-100"
+          title="画像から当直表を取り込む"
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+          画像取込
+        </button>
+      )}
 
       {/* Override mode */}
       <button

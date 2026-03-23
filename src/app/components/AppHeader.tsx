@@ -45,6 +45,7 @@ export default function AppHeader({ hospitalName, onLogout, onBeforeNavigate, ri
 
   const handleLogout = () => {
     if (onBeforeNavigate && !onBeforeNavigate()) return;
+    if (!window.confirm("ログアウトしますか？")) return;
     onLogout?.();
   };
 

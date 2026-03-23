@@ -194,8 +194,12 @@ export default function ReportPage() {
 
   if (!auth.isAuthenticated) {
     return (
-      <div className="min-h-dvh bg-gray-50 flex items-center justify-center">
+      <div className="min-h-dvh bg-gray-50 flex flex-col items-center justify-center gap-4">
         <p className="text-gray-500">ログインが必要です</p>
+        <div className="flex gap-3">
+          <a href="/login" className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-bold text-white hover:bg-blue-700 transition-colors">ログイン</a>
+          <a href="/register" className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors">新規登録</a>
+        </div>
       </div>
     );
   }
@@ -577,13 +581,12 @@ function OverviewTab({
         </table>
       </div>
 
-      {/* ── Monthly detail (expandable) ── */}
-      <details className="group">
-        <summary className="flex items-center gap-1 cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-700">
-          <ChevronRight className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
-          月別詳細
-        </summary>
-        <div className="mt-2 flex gap-1 items-center mb-2">
+      {/* ── Monthly detail ── */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-xs font-bold text-gray-800">月別詳細</h3>
+        </div>
+        <div className="flex gap-1 items-center mb-2">
           {([["weekdayNight", "平日当直"], ["satNight", "土曜当直"], ["sunholDay", "日祝日直"], ["sunholNight", "日祝当直"], ["sunholTotal", "日祝合計"]] as const).map(([key, lbl]) => (
             <button
               key={key}
@@ -653,7 +656,7 @@ function OverviewTab({
             </tfoot>
           </table>
         </div>
-      </details>
+      </div>
     </div>
   );
 }

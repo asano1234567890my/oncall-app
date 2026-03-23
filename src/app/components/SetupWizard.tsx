@@ -1,8 +1,8 @@
 // src/app/components/SetupWizard.tsx — 初回セットアップウィザード
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Loader2, Upload } from "lucide-react";
 import { getAuthHeaders } from "../hooks/useAuth";
 
 type WizardProps = {
@@ -46,6 +46,9 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [currentDoctorCount, setCurrentDoctorCount] = useState<number | null>(null);
   const [existingDoctorNames, setExistingDoctorNames] = useState<string[]>([]);
   const [wantUnavailable, setWantUnavailable] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setStep = (step: StepNumber) => setState((s) => ({ ...s, step }));
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -81,6 +84,41 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
       }
       return { ...s, doctorCount: newCount, doctorNames: names };
     });
+  };
+
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setIsImporting(true);
+    setImportError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", f);
+      const res = await fetch(`${apiUrl}/api/import/parse-doctors`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.detail || "ファイルの解析に失敗しました");
+      }
+      const data: { names: string[] } = await res.json();
+      if (data.names.length === 0) {
+        setImportError("医師名が見つかりませんでした");
+        return;
+      }
+      setState((s) => ({
+        ...s,
+        doctorCount: data.names.length,
+        doctorNames: data.names,
+      }));
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "ファイルの解析に失敗しました");
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleFinish = async (openUnavailable: boolean) => {
@@ -216,6 +254,23 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           title="医師の名前を入力してください"
           subtitle="そのままでもひとまず作成できます。後から変更も可能です。"
         >
+          {/* ファイルから一括取込 */}
+          <div className="mb-3">
+            <label className={`inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer ${isImporting ? "opacity-50 pointer-events-none" : ""}`}>
+              {isImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+              {isImporting ? "読み取り中..." : "ファイルから取込"}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.xlsx,.xls,.docx,.pdf,.txt,.csv"
+                onChange={(e) => { void handleFileImport(e); }}
+                className="hidden"
+              />
+            </label>
+            <p className="mt-1 text-[10px] text-gray-400">名簿の写真・Excel・Wordなどから医師名を自動読取</p>
+            {importError && <p className="mt-1 text-xs text-red-600">{importError}</p>}
+          </div>
+
           <div className="my-4 max-h-64 overflow-y-auto space-y-2 px-1">
             {state.doctorNames.map((name, i) => (
               <div key={i} className="flex items-center gap-2">

@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X } from "lucide-react";
+import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X, Upload } from "lucide-react";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getAuthHeaders } from "../../hooks/useAuth";
 
@@ -213,6 +213,13 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const [error, setError] = useState("");
   const [lockingId, setLockingId] = useState<string | null>(null);
 
+  // ファイル取込
+  const [importStep, setImportStep] = useState<"idle" | "parsing" | "confirm">("idle");
+  const [importNames, setImportNames] = useState<string[]>([]);
+  const [importChecked, setImportChecked] = useState<Set<number>>(new Set());
+  const [importError, setImportError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const activeDoctors = useMemo(() =>
     doctors.filter((d) => d.is_active !== false).sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true })),
     [doctors],
@@ -310,6 +317,68 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
     }
   };
 
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (f.size > 10 * 1024 * 1024) {
+      setImportError("ファイルサイズが大きすぎます（上限10MB）");
+      return;
+    }
+    setImportStep("parsing");
+    setImportError("");
+    setImportNames([]);
+    try {
+      const formData = new FormData();
+      formData.append("file", f);
+      const res = await fetch(`${apiBase()}/api/import/parse-doctors`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.detail || "ファイルの解析に失敗しました");
+      }
+      const data: { names: string[] } = await res.json();
+      if (data.names.length === 0) {
+        setImportError("医師名が見つかりませんでした");
+        setImportStep("idle");
+        return;
+      }
+      setImportNames(data.names);
+      setImportChecked(new Set(data.names.map((_, i) => i)));
+      setImportStep("confirm");
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "ファイルの解析に失敗しました");
+      setImportStep("idle");
+    } finally {
+      // reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    const selected = importNames.filter((_, i) => importChecked.has(i));
+    if (selected.length === 0) return;
+    setImportError("");
+    try {
+      const res = await fetch(`${apiBase()}/api/import/register-doctors`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({ names: selected }),
+      });
+      if (!res.ok) throw new Error("登録に失敗しました");
+      const data = await res.json();
+      window.alert(data.message);
+      setImportStep("idle");
+      setImportNames([]);
+      await fetchDoctors();
+      onDoctorsChanged();
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : "登録に失敗しました");
+    }
+  };
+
   const handleToggleLock = async (doctor: Doctor) => {
     setLockingId(doctor.id);
     setError("");
@@ -370,6 +439,74 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                   >
                     追加
                   </button>
+                </div>
+
+                {/* ファイルから一括取込 */}
+                <div className="mb-3">
+                  {importStep === "idle" && (
+                    <label className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors cursor-pointer w-fit">
+                      <Upload className="h-3.5 w-3.5" />
+                      ファイルから一括取込
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*,.xlsx,.xls,.docx,.pdf,.txt,.csv"
+                        onChange={(e) => { void handleFileImport(e); }}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
+                  {importStep === "parsing" && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
+                      ファイルを解析中...
+                    </div>
+                  )}
+                  {importStep === "confirm" && importNames.length > 0 && (
+                    <div className="rounded-lg border border-purple-200 bg-purple-50/50 p-3 space-y-2">
+                      <p className="text-xs font-bold text-purple-800">
+                        {importNames.length}名の医師名を検出しました（チェックを外すと除外）
+                      </p>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {importNames.map((name, i) => (
+                          <label key={i} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={importChecked.has(i)}
+                              onChange={() => {
+                                setImportChecked((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(i)) next.delete(i); else next.add(i);
+                                  return next;
+                                });
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            {name}
+                          </label>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { void handleImportConfirm(); }}
+                          disabled={importChecked.size === 0}
+                          className="rounded-lg bg-purple-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                        >
+                          {importChecked.size}名を登録
+                        </button>
+                        <button
+                          onClick={() => { setImportStep("idle"); setImportNames([]); setImportError(""); }}
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
+                          キャンセル
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {importError && <p className="mt-1 text-xs text-red-600">{importError}</p>}
+                  {importStep === "idle" && (
+                    <p className="mt-1 text-[10px] text-gray-400">画像・Excel・Word・PDF・テキストに対応</p>
+                  )}
                 </div>
 
                 {/* まとめて共有 + 一括ロック/解除 */}

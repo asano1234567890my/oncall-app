@@ -11,6 +11,7 @@ Current core entities:
 from .doctor import Doctor
 from .holiday import Holiday
 from .system_setting import SystemSetting
+from .transfer_code import TransferCode
 from .unavailable_day import UnavailableDay
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "UnavailableDay",
     "Holiday",
     "SystemSetting",
+    "TransferCode",
 ]

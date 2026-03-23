@@ -207,6 +207,10 @@ export default function ViewSchedulePage() {
               <span className="text-base font-extrabold text-gray-800">シフらく</span>
               <span className="text-sm text-gray-400">当直表</span>
             </div>
+            <div className="flex items-center gap-2">
+              <a href="/login" className="rounded-md px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors">ログイン</a>
+              <a href="/register" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors">新規登録</a>
+            </div>
           </div>
         </header>
       )}

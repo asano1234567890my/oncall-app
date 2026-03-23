@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -24,6 +24,7 @@ import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
+import ImageImportModal from "../components/ImageImportModal";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import type { HardConstraints, ShiftScores } from "../types/dashboard";
@@ -42,6 +43,7 @@ export default function AppPage() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAccountSettingsOpen, setIsAccountSettingsOpen] = useState(false);
   const [activeDrawer, setActiveDrawer] = useState<SettingsDrawer>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // ── セットアップ ──
   const [setupStatus, setSetupStatus] = useState<"loading" | "needed" | "done">("loading");
@@ -197,14 +199,24 @@ export default function AppPage() {
                 ))}
               </select>
             </div>
-            {!hasSchedule && (
-              <button
-                onClick={openSettings}
-                className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
-              >
-                <Settings className="h-3.5 w-3.5" /> 設定
-              </button>
-            )}
+            <div className="flex items-center gap-1.5">
+              {hasSchedule && (
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 transition-colors"
+                >
+                  <ImagePlus className="h-3.5 w-3.5" /> 画像取込
+                </button>
+              )}
+              {!hasSchedule && (
+                <button
+                  onClick={openSettings}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+                >
+                  <Settings className="h-3.5 w-3.5" /> 設定
+                </button>
+              )}
+            </div>
           </div>
 
           <main className="mx-auto w-full max-w-5xl px-4 py-4">
@@ -217,7 +229,7 @@ export default function AppPage() {
                 onShowGuide={() => onboarding.showGuide("dnd")}
               />
             ) : (
-              <CompactGenerateCard core={core} onOpenSettings={openSettings} onOpenDoctorManage={() => openDrawer("doctor-manage")} />
+              <CompactGenerateCard core={core} onOpenSettings={openSettings} onOpenDoctorManage={() => openDrawer("doctor-manage")} onOpenImport={() => setShowImportModal(true)} />
             )}
           </main>
 
@@ -298,8 +310,6 @@ export default function AppPage() {
               <PasswordChangeForm />
             </div>
             <hr className="border-gray-200" />
-            <AccountActions />
-            <hr className="border-gray-200" />
             <button
               onClick={() => { setIsAccountSettingsOpen(false); handleRedoSetup(); }}
               className="w-full rounded-lg border border-gray-200 py-2.5 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
@@ -308,10 +318,18 @@ export default function AppPage() {
             </button>
             <button
               onClick={() => { if (window.confirm("ログアウトしますか？")) { setIsAccountSettingsOpen(false); core.logout(); } }}
-              className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
             >
               ログアウト
             </button>
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors select-none">
+                上級設定
+              </summary>
+              <div className="mt-4 space-y-4">
+                <AccountActions />
+              </div>
+            </details>
           </div>
         </div>
       )}
@@ -432,6 +450,17 @@ export default function AppPage() {
 
 
       <OnboardingModal section={onboarding.pendingSection} onDismiss={onboarding.dismissOnboarding} />
+
+      {/* 画像取込モーダル */}
+      <ImageImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        doctors={core.activeDoctors}
+        defaultYear={core.year}
+        defaultMonth={core.month}
+        hasExistingSchedule={hasSchedule}
+        onImported={() => { void core.refetchDoctors(); window.location.reload(); }}
+      />
     </div>
   );
 }
@@ -472,7 +501,7 @@ function LoadingOverlay() {
   );
 }
 
-function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage }: { core: ReturnType<typeof useOnCallCore>; onOpenSettings: () => void; onOpenDoctorManage: () => void }) {
+function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenImport }: { core: ReturnType<typeof useOnCallCore>; onOpenSettings: () => void; onOpenDoctorManage: () => void; onOpenImport: () => void }) {
   const hasDoctors = core.numDoctors > 0;
   const [detailDoctorId, setDetailDoctorId] = useState<string | null>(null);
 
@@ -596,13 +625,22 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage }: { cor
         </div>
       )}
 
-      <button
-        onClick={onOpenSettings}
-        className="mt-3 w-full rounded-xl border border-gray-200 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
-      >
-        <Settings className="mr-1.5 inline h-4 w-4" />
-        設定を変更
-      </button>
+      <div className="mt-3 flex gap-2">
+        <button
+          onClick={onOpenSettings}
+          className="flex-1 rounded-xl border border-gray-200 py-3 text-sm text-gray-500 hover:bg-gray-50 transition-colors"
+        >
+          <Settings className="mr-1 inline h-4 w-4" />
+          設定を変更
+        </button>
+        <button
+          onClick={onOpenImport}
+          className="flex-1 rounded-xl border border-purple-200 bg-purple-50 py-3 text-sm font-bold text-purple-700 hover:bg-purple-100 transition-colors"
+        >
+          <ImagePlus className="mr-1 inline h-4 w-4" />
+          画像から取込
+        </button>
+      </div>
 
       {/* 医師不可日詳細モーダル */}
       {detailDoctor && (

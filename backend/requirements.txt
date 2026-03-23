@@ -24,3 +24,7 @@ pytz==2025.2
 typing_extensions==4.13.2
 reportlab>=3.5
 openpyxl>=3.1
+google-genai>=1.0
+python-multipart>=0.0.9
+python-docx>=1.0
+PyPDF2>=3.0

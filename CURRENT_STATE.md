@@ -170,13 +170,15 @@
 | P1-2 | 制約矛盾の診断（CP-SAT AddAssumptions活用） | P0 | 🔄 Phase1完了（事前算術チェック7項目+FE表示）/ Phase2未着手（複合制約の原因特定） |
 | P1-3 | プライバシーポリシー・利用規約ページ | P0 | ✅ 完了 |
 | P1-4 | 不可日ソフト化UI（is_soft_penaltyのUI公開） | P1 | 未着手 |
-| P1-5 | マジックリンク一斉送信（メール or LINE） | P1 | 未着手 |
+| P1-5 | マジックリンク共有機能（URLコピー/LINE/メール/QRコード・一括共有） | P1 | ✅ 完了 |
 | P1-6 | 自院での実運用（2ヶ月以上） | P0 | 🔄 準備中 |
 | P1-7 | ICSフィード（Googleカレンダー同期） | P1 | ✅ 完了 |
-| P1-7b | 簡易分析ページ（スコア分布グラフ） | P1 | 未着手 |
+| P1-7b | レポートページ（スコア乖離・累積推移・回数マトリクス・各医師カレンダー・期間選択） | P1 | ✅ 完了 |
 | P1-8 | Stripe決済 + プラン別機能制限 | P0 | 未着手 |
-| P1-9 | データエクスポート/アカウント削除 | P1 | 未着手 |
+| P1-9 | データ引き継ぎコード（12文字・24h有効）+ アカウント完全削除（パスワード確認） | P1 | ✅ 完了 |
 | P1-10 | 外部医師（ダミー医師方式）— 全スロットを常勤で埋めない現場向け。既存ロック機能活用 | P1 | 未着手 |
+| P1-11 | AI当直表画像取込（Gemini Vision API → スケジュールJSON → 医師名マッピング → DB保存）— /app・/dashboard両対応・カメラ撮影対応 | P1 | ✅ 完了 |
+| P1-12 | AI医師名一括取込（画像・Excel・Word・PDF・テキスト → Gemini API → 医師名抽出・登録）— DoctorManageDrawer・SetupWizard Step2両対応 | P1 | ✅ 完了 |
 
 ---
 
@@ -242,6 +244,9 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-24 | P1-11/P1-12完了: AI連携（Google Gemini `gemini-3-flash-preview`・`google-genai` SDK）— 当直表画像取込（/app・/dashboard・カメラ対応・4ステップモーダル: アップロード→AI解析→医師名マッピング→確認保存）・医師名一括取込（画像/Excel/Word/PDF/テキスト→AI抽出→チェックボックス選択→一括登録。DoctorManageDrawer+SetupWizard Step2） |
+| 2026-03-24 | P1-9完了: データ引き継ぎコード発行/取込（12文字・24h有効・医師/シフト/設定を丸ごとコピー）+ アカウント完全削除（パスワード確認必須）— AccountActionsコンポーネント・/app・/dashboard設定モーダル |
+| 2026-03-24 | import機能配置見直し: /viewから削除→/app・/dashboardの編集ページに移動。画像取込ボタンをDashboardToolbar・CompactGenerateCardに配置 |
 | 2026-03-23 | Excel出力改善: 曜日・土曜・日祝列を削除（集計用は非表示ヘルパー列L/Mに移動）。表示列はA(日付)/B(日直)/C(当直)のみ、E-J列に医師別集計 |
 | 2026-03-23 | 2カラム分割修正: 全表示箇所(view/dashboard/mobile/PDF)で左列=1-15日・右列=16-末日に固定（2月のみ14/14-15）。31日目が消える問題を解消 |
 | 2026-03-23 | 前月参照日数の動的化: 前月シフト取得を4日固定→hardConstraints.interval_days（当直間隔）に連動。間隔5日なら5日分取得 |
@@ -317,6 +322,7 @@
 - 本番DB: Neon（クラウドPostgreSQL）/ `.env` に `DATABASE_URL` を設定
 - 開発DB: Neon devブランチ（取得後 `.env` の `DATABASE_URL` に設定）
 - マイグレーション: `$env:DATABASE_URL="<dev_branch_url>"; alembic upgrade head`
+- AI連携: Google Gemini API / `GEMINI_API_KEY` を `.env` に設定 / モデル: `gemini-3-flash-preview`（無料枠）
 - 認証: JWT HS256 / 30日有効 / `JWT_SECRET_KEY` を `.env` に設定必須
 - パスワードハッシュ: `bcrypt` 直接使用（passlib 非対応のため）
 - 既存Ebina HospitalデータはID `a0000000-0000-4000-8000-000000000001`、初期PW: `EbinaHospital2024!`

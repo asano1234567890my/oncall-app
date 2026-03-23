@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Settings, X } from "lucide-react";
+import { Loader2, Settings, X, ImagePlus } from "lucide-react";
 import AppHeader from "../components/AppHeader";
 import DashboardScheduleTable from "../components/DashboardScheduleTable";
 import DashboardToolbar from "../components/DashboardToolbar";
@@ -13,6 +13,8 @@ import DashboardSettingsPanel from "../components/DashboardSettingsPanel";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
+import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
+import ImageImportModal from "../components/ImageImportModal";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
@@ -22,6 +24,8 @@ export default function DashboardPage() {
   const [isLoadingConfirmed, setIsLoadingConfirmed] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGenerationSettingsOpen, setIsGenerationSettingsOpen] = useState(false);
+  const [isDoctorDrawerOpen, setIsDoctorDrawerOpen] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(true);
   const [showMobileBanner, setShowMobileBanner] = useState(false);
 
@@ -149,6 +153,7 @@ export default function DashboardPage() {
             onClearUnlocked={core.handleClearUnlocked}
             onCreateBlank={core.handleCreateBlankSchedule}
             hasSchedule={core.schedule.length > 0}
+            onOpenImport={() => setShowImportModal(true)}
           />
 
           {/* Schedule table */}
@@ -283,6 +288,13 @@ export default function DashboardPage() {
             </button>
           </div>
           <div className="mx-auto max-w-md p-4 space-y-6">
+            <button
+              onClick={() => { setIsSettingsOpen(false); setIsDoctorDrawerOpen(true); }}
+              className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-bold text-gray-700 hover:bg-gray-100 transition-colors text-left"
+            >
+              医師管理（追加・編集・共有・ロック）
+            </button>
+            <hr className="border-gray-200" />
             <DefaultPageSetting />
             <hr className="border-gray-200" />
             <div>
@@ -290,17 +302,41 @@ export default function DashboardPage() {
               <PasswordChangeForm />
             </div>
             <hr className="border-gray-200" />
-            <AccountActions />
-            <hr className="border-gray-200" />
             <button
               onClick={() => { if (window.confirm("ログアウトしますか？")) { setIsSettingsOpen(false); core.logout(); } }}
-              className="w-full py-2.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              className="w-full rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
             >
               ログアウト
             </button>
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors select-none">
+                上級設定
+              </summary>
+              <div className="mt-4 space-y-4">
+                <AccountActions />
+              </div>
+            </details>
           </div>
         </div>
       )}
+
+      {/* Doctor manage drawer */}
+      <DoctorManageDrawer
+        isOpen={isDoctorDrawerOpen}
+        onClose={() => setIsDoctorDrawerOpen(false)}
+        onDoctorsChanged={() => { void core.refetchDoctors(); }}
+      />
+
+      {/* 画像取込モーダル */}
+      <ImageImportModal
+        open={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        doctors={core.activeDoctors}
+        defaultYear={core.year}
+        defaultMonth={core.month}
+        hasExistingSchedule={core.schedule.length > 0}
+        onImported={() => { void core.refetchDoctors(); window.location.reload(); }}
+      />
     </div>
 
     {/* Palette toggle tab (viewport-fixed) */}
@@ -312,7 +348,7 @@ export default function DashboardPage() {
         right: isPaletteOpen ? PALETTE_WIDTH : 0,
         zoom: viewportZoom,
       }}
-      title={isPaletteOpen ? "パレットを閉じる" : "パレットを開く"}
+      title={isPaletteOpen ? "医師一覧を閉じる" : "医師一覧を開く"}
     >
       {isPaletteOpen ? "▶" : "◀"}
     </button>
@@ -339,6 +375,7 @@ export default function DashboardPage() {
           onToggleHighlightedDoctor={core.toggleHighlightedDoctor}
           onTrashDragOver={core.handleTrashDragOver}
           onTrashDrop={core.handleTrashDrop}
+          onOpenDoctorManage={() => setIsDoctorDrawerOpen(true)}
         />
       </div>
     </aside>

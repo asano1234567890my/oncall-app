@@ -37,7 +37,12 @@ function QrPrintContent() {
   }
 
   if (cards.length === 0) {
-    return <div className="flex items-center justify-center min-h-screen text-gray-500">データがありません</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <p className="text-gray-500">データがありません</p>
+        <a href="/app" className="rounded-lg border border-gray-300 px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 transition-colors">トップに戻る</a>
+      </div>
+    );
   }
 
   return (

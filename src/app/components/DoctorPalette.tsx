@@ -1,6 +1,6 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Trash2, Settings2 } from "lucide-react";
 import type { DragEvent } from "react";
 import type { DoctorScoreEntry, ShiftType } from "../types/dashboard";
 
@@ -16,6 +16,7 @@ type DoctorPaletteProps = {
   onToggleHighlightedDoctor: (doctorId: string | null | undefined, day?: number, shiftType?: ShiftType) => void;
   onTrashDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onTrashDrop: (event: DragEvent<HTMLDivElement>) => void;
+  onOpenDoctorManage?: () => void;
 };
 
 const formatScore = (score: number | null) => (score === null ? "-" : score.toFixed(1));
@@ -32,6 +33,7 @@ export default function DoctorPalette({
   onToggleHighlightedDoctor,
   onTrashDragOver,
   onTrashDrop,
+  onOpenDoctorManage,
 }: DoctorPaletteProps) {
   const getBarPercent = (score: number) => {
     if (scoreMax <= scoreMin) return 50;
@@ -56,7 +58,20 @@ export default function DoctorPalette({
     <div className="flex h-full flex-col">
       {/* Scrollable doctor list */}
       <div className="flex-1 overflow-y-auto p-3">
-        <div className="mb-3 text-sm font-bold text-gray-700">医師パレット</div>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-bold text-gray-700">医師一覧</span>
+          {onOpenDoctorManage && (
+            <button
+              type="button"
+              onClick={onOpenDoctorManage}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-200 hover:text-gray-700 transition-colors"
+              title="医師管理（追加・編集・共有・ロック）"
+            >
+              <Settings2 className="h-3.5 w-3.5" />
+              管理
+            </button>
+          )}
+        </div>
         <div className="flex flex-col gap-2">
           {scoreEntries.map((entry) => {
             const isHighlighted = entry.doctorId === highlightedDoctorId;
