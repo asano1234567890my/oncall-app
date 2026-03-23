@@ -373,9 +373,11 @@ export function useOnCallCore() {
     void handleSaveToDB();
   };
 
-  const toggleHoliday = (day: number) => {
-    const ymd = toYmd(year, month, day);
-    if (getWeekday(year, month, day) === "日") return;
+  const toggleHoliday = (ymdOrDay: string | number) => {
+    const ymd = typeof ymdOrDay === "number" ? toYmd(year, month, ymdOrDay) : ymdOrDay;
+    // 日曜チェック
+    const d = new Date(ymd);
+    if (d.getDay() === 0) return;
     setManualHolidaySetYear((prev) => {
       const next = new Set(prev);
       if (next.has(ymd)) next.delete(ymd); else next.add(ymd);
@@ -490,7 +492,7 @@ export function useOnCallCore() {
     year, month, handleYearChange, handleMonthChange,
     doctorUnavailableMonth, setDoctorUnavailableMonth,
     holidays, holidaySet, holidayWorkdayOverrides,
-    manualHolidaySetInMonth, autoHolidayDaysInMonth,
+    manualHolidaySetYear, manualHolidaySetInMonth, autoHolidayDaysInMonth,
     isHolidayLikeDay,
     scoreMin, setScoreMin, scoreMax, setScoreMax,
     scoreTargetDefault, setScoreTargetDefault,

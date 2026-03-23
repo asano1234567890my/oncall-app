@@ -403,9 +403,10 @@ export default function AppPage() {
       <HolidaySettingsDrawer
         isOpen={activeDrawer === "holidays"}
         onClose={closeDrawer}
-        year={core.year} month={core.month} daysInMonth={core.daysInMonth}
+        year={core.year} month={core.month}
+        holidaySet={core.holidaySet}
+        manualHolidaySet={core.manualHolidaySetYear}
         holidayWorkdayOverrides={core.holidayWorkdayOverrides}
-        isHolidayLikeDay={core.isHolidayLikeDay}
         onToggleHoliday={core.toggleHoliday}
         onToggleHolidayOverride={core.handleHolidayOverrideToggle}
         onSaveCustomHolidays={() => { void core.saveCustomHolidays(); }}

@@ -77,7 +77,7 @@ function DoctorShareDropdown({ doctor, onError }: { doctor: Doctor; onError: (ms
         共有
       </button>
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+        <div className="absolute left-0 top-full mt-1 z-50 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
           <button
             className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
             onClick={async () => {
@@ -372,10 +372,58 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                   </button>
                 </div>
 
-                {/* まとめて共有 */}
+                {/* まとめて共有 + 一括ロック/解除 */}
                 {activeDoctors.length > 0 && (
-                  <div className="mb-4">
+                  <div className="mb-4 flex flex-wrap gap-2">
                     <BulkShareDropdown doctors={activeDoctors} onError={setError} />
+                    {activeDoctors.some((d) => !d.is_locked) && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm("全員の入力をロックしますか？")) return;
+                          setError("");
+                          try {
+                            const res = await fetch(`${apiBase()}/api/doctors/bulk-lock`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                              body: JSON.stringify({ is_locked: true }),
+                            });
+                            if (!res.ok) throw new Error("一括ロックに失敗しました");
+                            await fetchDoctors();
+                            onDoctorsChanged();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "一括ロックに失敗しました");
+                          }
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        全員ロック
+                      </button>
+                    )}
+                    {activeDoctors.some((d) => d.is_locked) && (
+                      <button
+                        onClick={async () => {
+                          if (!window.confirm("全員のロックを解除しますか？")) return;
+                          setError("");
+                          try {
+                            const res = await fetch(`${apiBase()}/api/doctors/bulk-lock`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                              body: JSON.stringify({ is_locked: false }),
+                            });
+                            if (!res.ok) throw new Error("一括解除に失敗しました");
+                            await fetchDoctors();
+                            onDoctorsChanged();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "一括解除に失敗しました");
+                          }
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+                      >
+                        <Unlock className="h-3.5 w-3.5" />
+                        全員解除
+                      </button>
+                    )}
                   </div>
                 )}
 

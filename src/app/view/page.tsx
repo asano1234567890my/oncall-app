@@ -290,7 +290,7 @@ export default function ViewSchedulePage() {
             この月の当直表はまだ保存されていません。
           </div>
         ) : (
-          <div ref={tableRef} className="grid grid-cols-2 gap-2">
+          <div ref={tableRef} className="grid grid-cols-2 items-start gap-2">
             {scheduleColumns.map((rows, i) => (
               <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border-2 border-gray-400 bg-white shadow-sm">
                 {renderColumn(rows)}

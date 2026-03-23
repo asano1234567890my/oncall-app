@@ -191,7 +191,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
 
       {/* Schedule table — 2-column (前半/後半), each with 3 cols (date | day | night) */}
       <div className="-mx-4 px-4">
-        <div className="grid grid-cols-2 gap-x-1">
+        <div className="grid grid-cols-2 items-start gap-x-1">
           {(() => {
             const mid = schedule.length <= 28 ? 14 : 15;
             return [schedule.slice(0, mid), schedule.slice(mid)].map((col, ci) => (

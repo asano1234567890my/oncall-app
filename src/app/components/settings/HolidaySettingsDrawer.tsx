@@ -11,14 +11,8 @@ import {
   baseCalendarModifierClasses,
 } from "./shared";
 
-type HolidayLikeDayInfo = {
-  ymd: string;
-  wd: string;
-  isSun: boolean;
-  isAutoHoliday: boolean;
-  isManualHoliday: boolean;
-  isHolidayLike: boolean;
-};
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const toYmd = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`;
 
 type HolidaySettingsDrawerProps = {
   isOpen: boolean;
@@ -26,10 +20,13 @@ type HolidaySettingsDrawerProps = {
   onShowGuide?: () => void;
   year: number;
   month: number;
-  daysInMonth: number;
+  /** 年単位の自動祝日Set (yyyy-mm-dd) */
+  holidaySet: Set<string>;
+  /** 年単位の手動追加祝日Set (yyyy-mm-dd) */
+  manualHolidaySet: Set<string>;
+  /** 平日扱いにした祝日Set (yyyy-mm-dd) */
   holidayWorkdayOverrides: Set<string>;
-  isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
-  onToggleHoliday: (day: number) => void;
+  onToggleHoliday: (ymd: string) => void;
   onToggleHolidayOverride: (ymd: string) => void;
   onSaveCustomHolidays: () => void;
   isLoadingCustom: boolean;
@@ -45,9 +42,9 @@ export default function HolidaySettingsDrawer({
   onShowGuide,
   year,
   month,
-  daysInMonth,
+  holidaySet,
+  manualHolidaySet,
   holidayWorkdayOverrides,
-  isHolidayLikeDay,
   onToggleHoliday,
   onToggleHolidayOverride,
   onSaveCustomHolidays,
@@ -59,59 +56,66 @@ export default function HolidaySettingsDrawer({
 }: HolidaySettingsDrawerProps) {
   const [displayMonth, setDisplayMonth] = useState(new Date(year, month - 1, 1));
 
+  const dispYear = displayMonth.getFullYear();
+  const dispMonth = displayMonth.getMonth() + 1;
+  const dispDaysInMonth = new Date(dispYear, dispMonth, 0).getDate();
+
+  // 表示月のカウント（標準祝日・手動追加・平日扱い）
   const holidayCounts = useMemo(() => {
     let autoCount = 0;
     let manualCount = 0;
     let overrideCount = 0;
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const info = isHolidayLikeDay(day);
-      if (info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd)) overrideCount += 1;
-      else if (info.isAutoHoliday) autoCount += 1;
-      if (info.isManualHoliday) manualCount += 1;
+    for (let day = 1; day <= dispDaysInMonth; day += 1) {
+      const ymd = toYmd(dispYear, dispMonth, day);
+      const isAuto = holidaySet.has(ymd);
+      const isManual = manualHolidaySet.has(ymd);
+      if (isAuto && holidayWorkdayOverrides.has(ymd)) overrideCount += 1;
+      else if (isAuto) autoCount += 1;
+      if (isManual) manualCount += 1;
     }
     return { autoCount, manualCount, overrideCount };
-  }, [daysInMonth, isHolidayLikeDay, holidayWorkdayOverrides]);
+  }, [dispDaysInMonth, dispYear, dispMonth, holidaySet, manualHolidaySet, holidayWorkdayOverrides]);
 
+  // カレンダーの選択済み日付（祝日・手動追加で、平日扱いでないもの）
   const holidaySelectedDates = useMemo(() => {
     const dates: Date[] = [];
-    for (let day = 1; day <= daysInMonth; day += 1) {
-      const info = isHolidayLikeDay(day);
-      if (info.isManualHoliday || (info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd))) {
-        dates.push(new Date(year, month - 1, day));
+    for (let day = 1; day <= dispDaysInMonth; day += 1) {
+      const ymd = toYmd(dispYear, dispMonth, day);
+      const isAuto = holidaySet.has(ymd);
+      const isManual = manualHolidaySet.has(ymd);
+      if (isManual || (isAuto && !holidayWorkdayOverrides.has(ymd))) {
+        dates.push(new Date(dispYear, dispMonth - 1, day));
       }
     }
     return dates;
-  }, [daysInMonth, isHolidayLikeDay, holidayWorkdayOverrides, year, month]);
+  }, [dispDaysInMonth, dispYear, dispMonth, holidaySet, manualHolidaySet, holidayWorkdayOverrides]);
 
+  // カレンダーのモディファイア（表示月に連動）
   const holidayCalendarModifiers = useMemo(() => ({
     saturday: (date: Date) => date.getDay() === 6,
     sunday: (date: Date) => date.getDay() === 0,
     autoHoliday: (date: Date) => {
-      if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
-      const info = isHolidayLikeDay(date.getDate());
-      return info.isAutoHoliday && !holidayWorkdayOverrides.has(info.ymd);
+      const ymd = toYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+      return holidaySet.has(ymd) && !holidayWorkdayOverrides.has(ymd);
     },
     manualHoliday: (date: Date) => {
-      if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
-      return isHolidayLikeDay(date.getDate()).isManualHoliday;
+      const ymd = toYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+      return manualHolidaySet.has(ymd);
     },
     overrideHoliday: (date: Date) => {
-      if (date.getFullYear() !== year || date.getMonth() !== month - 1) return false;
-      const info = isHolidayLikeDay(date.getDate());
-      return info.isAutoHoliday && holidayWorkdayOverrides.has(info.ymd);
+      const ymd = toYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+      return holidaySet.has(ymd) && holidayWorkdayOverrides.has(ymd);
     },
-  }), [year, month, isHolidayLikeDay, holidayWorkdayOverrides]);
+  }), [holidaySet, manualHolidaySet, holidayWorkdayOverrides]);
 
   const handleHolidayDateClick = (date: Date) => {
-    if (date.getFullYear() !== year || date.getMonth() !== month - 1) return;
-    const day = date.getDate();
-    const info = isHolidayLikeDay(day);
-    if (info.isSun) return;
-    if (info.isAutoHoliday) {
-      onToggleHolidayOverride(info.ymd);
+    if (date.getDay() === 0) return; // 日曜は操作不可
+    const ymd = toYmd(date.getFullYear(), date.getMonth() + 1, date.getDate());
+    if (holidaySet.has(ymd)) {
+      onToggleHolidayOverride(ymd);
       return;
     }
-    onToggleHoliday(day);
+    onToggleHoliday(ymd);
   };
 
   return (

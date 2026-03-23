@@ -432,7 +432,7 @@ export default function DashboardScheduleTable({
         );
 
         return (
-          <div className="flex gap-3">
+          <div className="flex items-start gap-3">
             {renderColumn(columns[0])}
             {columns[1].length > 0 && renderColumn(columns[1])}
           </div>

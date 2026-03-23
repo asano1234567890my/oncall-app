@@ -424,7 +424,7 @@ async def get_schedule_stats(
             {
                 "date": s.date.isoformat(),
                 "doctor_id": str(s.doctor_id),
-                "shift_type": s.shift_type,
+                "shift_type": _normalize_shift_type(s.shift_type),
             }
             for s in shifts
         ],
