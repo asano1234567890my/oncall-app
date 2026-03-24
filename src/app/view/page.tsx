@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileText, FileSpreadsheet, Pencil } from "lucide-react";
+import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { domToPng } from "modern-screenshot";
 import AppHeader from "../components/AppHeader";
@@ -45,6 +45,8 @@ export default function ViewSchedulePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [publishedMonths, setPublishedMonths] = useState<Set<string>>(new Set());
+  const [isTogglingPublish, setIsTogglingPublish] = useState(false);
   const { auth, logout } = useAuth();
   const tableRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
@@ -74,6 +76,23 @@ export default function ViewSchedulePage() {
     if (isUuidLike(value)) return "未設定";
     return value;
   };
+
+  useEffect(() => {
+    if (!auth.isAuthenticated) return;
+    let cancelled = false;
+    const fetchPublished = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/settings/published_months`, { headers: getAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.months)) {
+          setPublishedMonths(new Set(data.months as string[]));
+        }
+      } catch { /* ignore */ }
+    };
+    void fetchPublished();
+    return () => { cancelled = true; };
+  }, [auth.isAuthenticated]);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +155,30 @@ export default function ViewSchedulePage() {
     } finally {
       setIsDownloading(false);
     }
+  };
+
+  const monthKey = `${year}-${pad2(month)}`;
+  const isPublished = publishedMonths.has(monthKey);
+
+  const handleTogglePublish = async () => {
+    setIsTogglingPublish(true);
+    try {
+      const next = new Set(publishedMonths);
+      if (isPublished) {
+        next.delete(monthKey);
+      } else {
+        next.add(monthKey);
+      }
+      const res = await fetch(`${API_BASE}/api/settings/published_months`, {
+        method: "PUT",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ months: [...next] }),
+      });
+      if (res.ok) {
+        setPublishedMonths(next);
+      }
+    } catch { /* ignore */ }
+    setIsTogglingPublish(false);
   };
 
   const handleExport = async (format: "pdf" | "xlsx") => {
@@ -243,13 +286,27 @@ export default function ViewSchedulePage() {
 
           <div className="flex flex-wrap items-center gap-2">
             {auth.isAuthenticated && schedule.length > 0 && (
-              <Link
-                href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
-                className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                編集する
-              </Link>
+              <>
+                <Link
+                  href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
+                  className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  編集する
+                </Link>
+                <button
+                  onClick={() => { void handleTogglePublish(); }}
+                  disabled={isTogglingPublish}
+                  className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+                    isPublished
+                      ? "border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+                      : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  }`}
+                >
+                  {isPublished ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                  {isPublished ? "公開中" : "非公開"}
+                </button>
+              </>
             )}
             <button
               onClick={() => { void handleDownloadImage(); }}

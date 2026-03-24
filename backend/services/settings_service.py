@@ -194,3 +194,44 @@ async def delete_draft_schedule(
         )
     )
     await db.commit()
+
+
+# ── Published Months ──
+
+PUBLISHED_MONTHS_KEY = "published_months"
+
+
+async def get_published_months(db: AsyncSession, hospital_id: uuid.UUID) -> list[str]:
+    """公開済み年月リストを取得 (例: ["2026-04", "2026-05"])"""
+    value = await get_system_setting(db, hospital_id, PUBLISHED_MONTHS_KEY)
+    if value is None or not isinstance(value, list):
+        return []
+    return [str(v) for v in value]
+
+
+async def set_published_months(
+    db: AsyncSession, hospital_id: uuid.UUID, months: list[str]
+) -> None:
+    """公開済み年月リストを保存"""
+    await upsert_system_setting(
+        db, hospital_id, PUBLISHED_MONTHS_KEY, sorted(set(months)),
+        description="Published schedule months",
+    )
+
+
+async def get_published_months_by_doctor_token(
+    db: AsyncSession, doctor_token: str
+) -> list[str]:
+    """医師トークンからhospital_idを特定して公開月リストを返す"""
+    from models.doctor import Doctor as DoctorModel
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(DoctorModel)
+        .options(selectinload(DoctorModel.hospital))
+        .where(DoctorModel.access_token == doctor_token)
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        return []
+    return await get_published_months(db, doctor.hospital_id)

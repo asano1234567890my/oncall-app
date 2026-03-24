@@ -17,7 +17,9 @@ from schemas.settings import (
 from services.settings_service import (
     get_custom_holidays,
     get_optimizer_config,
+    get_published_months,
     get_system_setting,
+    set_published_months,
     upsert_custom_holidays,
     upsert_optimizer_config,
     upsert_system_setting,
@@ -92,6 +94,33 @@ async def api_upsert_optimizer_config(
     }
     await upsert_optimizer_config(db, hospital_id, value)
     return await get_optimizer_config(db, hospital_id)
+
+
+@router.get("/published_months")
+async def api_get_published_months(
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    months = await get_published_months(db, hospital_id)
+    return {"months": months}
+
+
+@router.put("/published_months")
+async def api_set_published_months(
+    req: dict,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    months = req.get("months", [])
+    if not isinstance(months, list):
+        raise HTTPException(status_code=400, detail="months must be a list")
+    # validate format "YYYY-MM"
+    import re
+    for m in months:
+        if not isinstance(m, str) or not re.match(r"^\d{4}-\d{2}$", m):
+            raise HTTPException(status_code=400, detail=f"Invalid month format: {m}")
+    await set_published_months(db, hospital_id, months)
+    return {"months": sorted(set(months))}
 
 
 @router.get("/kv/{key}")
