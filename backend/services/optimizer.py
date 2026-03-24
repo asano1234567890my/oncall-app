@@ -1317,6 +1317,486 @@ class OnCallOptimizer:
         }
 
 
+    # ── P1-2 Phase 2: Constraint Diagnosis ──────────────────────
+
+    def diagnose(
+        self,
+        doctor_names: Optional[Dict[int, str]] = None,
+        time_limit_seconds: float = 5.0,
+    ) -> Dict[str, Any]:
+        """Run constraint diagnosis to identify why the model is infeasible.
+
+        Returns a dict with:
+          - conflict_groups: list of ConflictGroup-like dicts
+          - specific_violations: list of human-readable strings
+          - human_insights: list of statistical observations
+          - phase_completed: int (1, 2, or 3)
+        """
+        self.doctor_names = doctor_names or {i: f"医師{i+1}" for i in range(self.num_doctors)}
+
+        # Phase 1: Build diagnosis model with assumptions → find conflicting groups
+        conflict_groups, assumption_map = self._diagnose_phase1(time_limit_seconds)
+        if not conflict_groups:
+            return {
+                "conflict_groups": [],
+                "specific_violations": ["制約の競合を特定できませんでした。"],
+                "human_insights": self._build_human_insights(),
+                "phase_completed": 1,
+            }
+
+        # Phase 2: Soften conflicting groups → find specific violations
+        specific_violations = self._diagnose_phase2(conflict_groups, time_limit_seconds)
+
+        return {
+            "conflict_groups": conflict_groups,
+            "specific_violations": specific_violations,
+            "human_insights": self._build_human_insights(),
+            "phase_completed": 2,
+        }
+
+    def _diagnose_phase1(
+        self, time_limit_seconds: float = 5.0
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        """Phase 1: Build model with assumption literals, find MUS (minimal unsatisfiable subset)."""
+        model = cp_model.CpModel()
+        doctors = range(self.num_doctors)
+        days = range(1, self.num_days + 1)
+
+        holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
+        combined_mode = holiday_shift_mode == "combined"
+        prevent_sunhol_consecutive = not combined_mode and not self._is_explicitly_disabled(
+            self.hard_constraints.get("prevent_sunhol_consecutive", True)
+        )
+        respect_unavailable_days = not self._is_explicitly_disabled(
+            self.hard_constraints.get("respect_unavailable_days", True)
+        )
+
+        spacing_days = self._get_hard_constraint_value(4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days")
+        max_saturday_nights = self._get_hard_constraint_value(1, "max_saturday_nights", "max_sat_nights", "sat_night_max", "saturday_night_max")
+        max_sunhol_days = self._get_hard_constraint_value(2, "max_sunhol_days", "sunhol_day_max", "max_holiday_days", "max_sunday_holiday_days")
+        max_sunhol_works = self._get_hard_constraint_value(3, "max_sunhol_works", "sunhol_work_max", "max_holiday_works", "max_sunday_holiday_works")
+        max_weekend_holiday_works = self._get_hard_constraint_value(
+            None, "max_weekend_holiday_works", "weekend_holiday_work_max", "weekend_hol_work_max",
+            "max_weekend_holiday_count", "weekend_holiday_total_max", "weekend_hol_total_max", "max_shifts",
+            flag_keys=("strict_weekend_hol_max",),
+        )
+
+        # --- Create variables (same as build_model) ---
+        night_shifts: Dict[Tuple[int, int], cp_model.IntVar] = {}
+        day_shifts: Dict[Tuple[int, int], cp_model.IntVar] = {}
+        work: Dict[Tuple[int, int], cp_model.IntVar] = {}
+
+        for d in doctors:
+            for day in days:
+                night_shifts[(d, day)] = model.NewBoolVar(f"night_d{d}_day{day}")
+                day_shifts[(d, day)] = model.NewBoolVar(f"day_d{d}_day{day}")
+                work[(d, day)] = model.NewBoolVar(f"work_d{d}_day{day}")
+                model.Add(work[(d, day)] == night_shifts[(d, day)] + day_shifts[(d, day)])
+
+        # --- Slot fulfillment (NOT wrapped — always enforced) ---
+        for day in days:
+            model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
+            if self.is_sunday_or_holiday(day) and not combined_mode:
+                model.AddExactlyOne(day_shifts[(d, day)] for d in doctors)
+            else:
+                for d in doctors:
+                    model.Add(day_shifts[(d, day)] == 0)
+
+        # --- Prevent same-day double (NOT wrapped — structural) ---
+        if prevent_sunhol_consecutive:
+            for d in doctors:
+                for day in days:
+                    model.Add(night_shifts[(d, day)] + day_shifts[(d, day)] <= 1)
+
+        # --- Build assumption-wrapped constraints ---
+        assumption_map: Dict[str, Dict[str, Any]] = {}  # assumption_name -> metadata
+
+        def make_assumption(group_id: str, category: str, doctor_idx: Optional[int], description_ja: str):
+            lit = model.NewBoolVar(f"assume_{group_id}")
+            assumption_map[group_id] = {
+                "literal": lit,
+                "category": category,
+                "doctor_idx": doctor_idx,
+                "doctor_name": self.doctor_names.get(doctor_idx) if doctor_idx is not None else None,
+                "description_ja": description_ja,
+            }
+            return lit
+
+        # A) Locked shifts
+        for item in self.locked_shifts:
+            if not isinstance(item, dict):
+                continue
+            doctor_idx = item.get("doctor_idx")
+            if doctor_idx is None:
+                continue
+            try:
+                d = int(doctor_idx)
+            except (TypeError, ValueError):
+                continue
+            if d < 0 or d >= self.num_doctors:
+                continue
+            day = self._parse_locked_day(item.get("date"))
+            if day is None:
+                continue
+            shift = self._normalize_shift_type(item.get("shift_type"))
+            if shift is None:
+                continue
+
+            shift_label = "当直" if shift == "night" else "日直"
+            group_id = f"locked_d{d}_day{day}_{shift}"
+            date_obj = datetime.date(self.year, self.month, day)
+            weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
+            lit = make_assumption(group_id, "locked", d, f"{self.doctor_names.get(d, f'医師{d+1}')}の{self.month}/{day}（{weekday_ja}）{shift_label}ロック")
+
+            if shift == "night":
+                model.Add(night_shifts[(d, day)] == 1).OnlyEnforceIf(lit)
+            else:
+                if combined_mode and self.is_sunday_or_holiday(day):
+                    model.Add(night_shifts[(d, day)] == 1).OnlyEnforceIf(lit)
+                else:
+                    model.Add(day_shifts[(d, day)] == 1).OnlyEnforceIf(lit)
+
+        # B) Unavailable days (hard only)
+        for d, items in self.unavailable.items():
+            for item in items:
+                normalized = self._normalize_unavailable_entry(item)
+                if normalized is None:
+                    continue
+                is_soft = normalized["is_soft_penalty"] or not respect_unavailable_days
+                if is_soft:
+                    continue  # skip soft in diagnosis
+
+                day = normalized["date"]
+                shift_type = normalized["target_shift"]
+                date_obj = datetime.date(self.year, self.month, day)
+                weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
+                group_id = f"unavail_d{d}_day{day}"
+                lit = make_assumption(group_id, "unavailable", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の{self.month}/{day}（{weekday_ja}）不可日")
+
+                if shift_type in ["day", "all"]:
+                    model.Add(day_shifts[(d, day)] == 0).OnlyEnforceIf(lit)
+                if shift_type in ["night", "all"]:
+                    model.Add(night_shifts[(d, day)] == 0).OnlyEnforceIf(lit)
+
+        # C) Fixed weekday unavailable (hard only)
+        weekday_names_ja = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜", "祝日(日曜以外)"]
+        for d, items in self.fixed_unavailable_weekdays.items():
+            for item in items:
+                normalized = self._normalize_fixed_weekday_entry(item)
+                if normalized is None:
+                    continue
+                is_soft = normalized["is_soft_penalty"] or not respect_unavailable_days
+                if is_soft:
+                    continue
+
+                target_dow = normalized["day_of_week"]
+                shift_type = normalized["target_shift"]
+                dow_label = weekday_names_ja[target_dow] if target_dow < len(weekday_names_ja) else f"曜日{target_dow}"
+                group_id = f"fixdow_d{d}_dow{target_dow}"
+                lit = make_assumption(group_id, "unavailable", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の{dow_label}固定不可")
+
+                for day in days:
+                    if not self._matches_fixed_unavailable_weekday(day, target_dow):
+                        continue
+                    if shift_type in ["day", "all"]:
+                        model.Add(day_shifts[(d, day)] == 0).OnlyEnforceIf(lit)
+                    if shift_type in ["night", "all"]:
+                        model.Add(night_shifts[(d, day)] == 0).OnlyEnforceIf(lit)
+
+        # D) Spacing rule (global)
+        if spacing_days is not None:
+            lit = make_assumption("interval_global", "interval", None, f"勤務間隔 {spacing_days}日ルール")
+            for d in doctors:
+                for day in days:
+                    for k in range(1, spacing_days + 1):
+                        if day + k <= self.num_days:
+                            model.Add(work[(d, day)] + work[(d, day + k)] <= 1).OnlyEnforceIf(lit)
+
+        # E) Month-cross spacing
+        prev_month_worked_days, prev_last = self._build_previous_month_state()
+        if spacing_days is not None and prev_last is not None:
+            for d, prev_days_list in prev_month_worked_days.items():
+                blocked_days = []
+                for prev_day in prev_days_list:
+                    dist_to_start = (prev_last - int(prev_day)) + 1
+                    if 1 <= dist_to_start <= spacing_days:
+                        block_until = spacing_days + 1 - dist_to_start
+                        for bd in range(1, block_until + 1):
+                            if 1 <= bd <= self.num_days:
+                                blocked_days.append(bd)
+                if blocked_days:
+                    group_id = f"cross_month_d{d}"
+                    lit = make_assumption(group_id, "cross_month", d,
+                        f"{self.doctor_names.get(d, f'医師{d+1}')}の前月末勤務による月初ブロック（{min(blocked_days)}〜{max(blocked_days)}日）")
+                    for bd in blocked_days:
+                        model.Add(work[(d, bd)] == 0).OnlyEnforceIf(lit)
+
+        saturdays = [day for day in days if self.is_saturday(day)]
+        sunhol_days = [day for day in days if self.is_sunday_or_holiday(day)]
+
+        # F) Saturday night cap (per doctor)
+        if max_saturday_nights is not None:
+            for d in doctors:
+                group_id = f"sat_cap_d{d}"
+                lit = make_assumption(group_id, "cap", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の土曜当直上限（月{max_saturday_nights}回）")
+                model.Add(sum(night_shifts[(d, day)] for day in saturdays) <= max_saturday_nights).OnlyEnforceIf(lit)
+
+        # G) Sun/holiday day cap (per doctor)
+        if max_sunhol_days is not None:
+            for d in doctors:
+                group_id = f"sunhol_day_cap_d{d}"
+                lit = make_assumption(group_id, "cap", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の日祝日直上限（月{max_sunhol_days}回）")
+                model.Add(sum(day_shifts[(d, day)] for day in sunhol_days) <= max_sunhol_days).OnlyEnforceIf(lit)
+
+        # H) Sun/holiday total work cap (per doctor)
+        if max_sunhol_works is not None:
+            for d in doctors:
+                group_id = f"sunhol_work_cap_d{d}"
+                lit = make_assumption(group_id, "cap", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の日祝合計上限（月{max_sunhol_works}回）")
+                model.Add(sum(day_shifts[(d, day)] + night_shifts[(d, day)] for day in sunhol_days) <= max_sunhol_works).OnlyEnforceIf(lit)
+
+        # I) Weekend/holiday total cap (per doctor)
+        if max_weekend_holiday_works is not None:
+            for d in doctors:
+                group_id = f"wh_cap_d{d}"
+                wh_expr = sum(
+                    day_shifts[(d, day)] + night_shifts[(d, day)]
+                    if self.is_sunday_or_holiday(day)
+                    else night_shifts[(d, day)]
+                    for day in days
+                    if self.is_sunday_or_holiday(day) or self.is_saturday(day)
+                )
+                lit = make_assumption(group_id, "cap", d,
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}の土日祝合計上限（月{max_weekend_holiday_works}回）")
+                model.Add(wh_expr <= max_weekend_holiday_works).OnlyEnforceIf(lit)
+
+        # J) Score min/max (per doctor)
+        for d in doctors:
+            score_expr = 0
+            for day in days:
+                if self.is_sunday_or_holiday(day):
+                    if combined_mode:
+                        score_expr += night_shifts[(d, day)] * self.W_DAY_NIGHT
+                    else:
+                        score_expr += day_shifts[(d, day)] * self.W_SUNHOL_DAY
+                        score_expr += night_shifts[(d, day)] * self.W_SUNHOL_NIGHT
+                elif self.is_saturday(day):
+                    score_expr += night_shifts[(d, day)] * self.W_SAT_NIGHT
+                else:
+                    score_expr += night_shifts[(d, day)] * self.W_WEEKDAY_NIGHT
+
+            doc_score = model.NewIntVar(0, 2000, f"diag_score_d{d}")
+            model.Add(doc_score == score_expr)
+
+            d_min = int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
+            d_max = int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
+
+            lit_min = make_assumption(f"score_min_d{d}", "score", d,
+                f"{self.doctor_names.get(d, f'医師{d+1}')}のスコア下限（{d_min/10:.1f}点）")
+            model.Add(doc_score >= d_min).OnlyEnforceIf(lit_min)
+
+            lit_max = make_assumption(f"score_max_d{d}", "score", d,
+                f"{self.doctor_names.get(d, f'医師{d+1}')}のスコア上限（{d_max/10:.1f}点）")
+            model.Add(doc_score <= d_max).OnlyEnforceIf(lit_max)
+
+        # --- Solve with assumptions ---
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(time_limit_seconds)
+
+        all_assumptions = [info["literal"] for info in assumption_map.values()]
+        model.AddAssumptions(all_assumptions)
+
+        status = solver.Solve(model)
+
+        if status == cp_model.INFEASIBLE:
+            sufficient = solver.SufficientAssumptionsForInfeasibility()
+            sufficient_set = set(sufficient)
+
+            conflict_groups = []
+            for group_id, info in assumption_map.items():
+                if info["literal"].Index() in sufficient_set:
+                    conflict_groups.append({
+                        "group_id": group_id,
+                        "category": info["category"],
+                        "doctor_name": info["doctor_name"],
+                        "description_ja": info["description_ja"],
+                    })
+            return conflict_groups, assumption_map
+
+        # Model was feasible with all assumptions → infeasibility was in slot fulfillment
+        # (which we don't wrap). This means the base problem is likely under-staffed.
+        return [], assumption_map
+
+    def _diagnose_phase2(
+        self, conflict_groups: List[Dict[str, Any]], time_limit_seconds: float = 5.0
+    ) -> List[str]:
+        """Phase 2: Generate specific actionable suggestions based on conflict groups."""
+        violations: List[str] = []
+
+        # Count by category
+        categories = {}
+        for g in conflict_groups:
+            cat = g["category"]
+            categories.setdefault(cat, []).append(g)
+
+        if "interval" in categories:
+            spacing_days = self._get_hard_constraint_value(4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days")
+            if spacing_days and spacing_days > 1:
+                violations.append(f"勤務間隔を{spacing_days}日→{spacing_days - 1}日に緩和すると解ける可能性があります")
+
+        if "unavailable" in categories:
+            unavail_groups = categories["unavailable"]
+            # Group by date to find concentrated days
+            date_groups: Dict[str, List[str]] = {}
+            for g in unavail_groups:
+                # Extract date from group_id like "unavail_d3_day15" or description
+                date_groups.setdefault(g["description_ja"], [])
+            if len(unavail_groups) <= 5:
+                for g in unavail_groups:
+                    violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
+            else:
+                violations.append(f"不可日が{len(unavail_groups)}件競合しています。一部を「できれば避けたい」（ソフト制約）に変更してください")
+
+        if "score" in categories:
+            score_groups = categories["score"]
+            min_groups = [g for g in score_groups if "下限" in g["description_ja"]]
+            max_groups = [g for g in score_groups if "上限" in g["description_ja"]]
+            if min_groups:
+                violations.append(f"スコア下限を下げると解ける可能性があります（対象: {', '.join(g.get('doctor_name', '?') for g in min_groups)}）")
+            if max_groups:
+                violations.append(f"スコア上限を上げると解ける可能性があります（対象: {', '.join(g.get('doctor_name', '?') for g in max_groups)}）")
+
+        if "cap" in categories:
+            cap_groups = categories["cap"]
+            for g in cap_groups:
+                violations.append(f"{g['description_ja']}を引き上げると解ける可能性があります")
+
+        if "locked" in categories:
+            locked_groups = categories["locked"]
+            for g in locked_groups:
+                violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
+
+        if "cross_month" in categories:
+            violations.append("前月末の勤務により月初の割当可能枠が不足しています")
+
+        if not violations:
+            violations.append("制約の競合を特定しましたが、具体的な解決策を生成できませんでした")
+
+        return violations
+
+    def _build_human_insights(self) -> List[str]:
+        """Build statistical observations that a human scheduler would notice."""
+        insights: List[str] = []
+        days = range(1, self.num_days + 1)
+
+        # 1) Same-day unavailable concentration
+        day_unavail_counts: Dict[int, List[str]] = {}
+        for d, items in self.unavailable.items():
+            for item in items:
+                normalized = self._normalize_unavailable_entry(item)
+                if normalized is None:
+                    continue
+                if normalized["is_soft_penalty"]:
+                    continue
+                day_unavail_counts.setdefault(normalized["date"], []).append(
+                    self.doctor_names.get(d, f"医師{d+1}")
+                )
+
+        threshold = max(2, self.num_doctors * 0.4)
+        for day in sorted(day_unavail_counts.keys()):
+            names = day_unavail_counts[day]
+            if len(names) >= threshold:
+                date_obj = datetime.date(self.year, self.month, day)
+                weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
+                holiday_tag = "・祝" if self.is_holiday(day) else ""
+                insights.append(
+                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可日申請（{', '.join(names)}）"
+                )
+
+        # 2) Doctors with too many unavailable days
+        for d in range(self.num_doctors):
+            hard_count = 0
+            for item in self.unavailable.get(d, []):
+                normalized = self._normalize_unavailable_entry(item)
+                if normalized and not normalized["is_soft_penalty"]:
+                    hard_count += 1
+            for item in self.fixed_unavailable_weekdays.get(d, []):
+                normalized = self._normalize_fixed_weekday_entry(item)
+                if normalized and not normalized["is_soft_penalty"]:
+                    # Count how many days this weekday covers
+                    for day in days:
+                        if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                            hard_count += 1
+
+            ratio = hard_count / self.num_days if self.num_days > 0 else 0
+            if ratio > 0.25:
+                insights.append(
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}: {self.num_days}日中{hard_count}日が不可日（{ratio:.0%}）"
+                )
+
+        # 3) Many holidays
+        if len(self.holidays) >= 4:
+            insights.append(f"祝日が{len(self.holidays)}日（通常月は1〜2日）")
+
+        # 4) Weekend/holiday slot pressure
+        sunhol_days = [day for day in days if self.is_sunday_or_holiday(day)]
+        saturdays = [day for day in days if self.is_saturday(day)]
+        total_wh_slots = len(sunhol_days) * 2 + len(saturdays)  # day+night for sunhol, night for sat
+
+        max_wh = self._get_hard_constraint_value(
+            None, "max_weekend_holiday_works", "weekend_holiday_work_max", "weekend_hol_work_max",
+            "max_weekend_holiday_count", "weekend_holiday_total_max", "weekend_hol_total_max", "max_shifts",
+            flag_keys=("strict_weekend_hol_max",),
+        )
+        if max_wh is not None:
+            capacity = max_wh * self.num_doctors
+            if capacity < total_wh_slots:
+                insights.append(f"土日祝スロット{total_wh_slots}枠に対し上限合計{capacity}枠（不足{total_wh_slots - capacity}枠）")
+            elif capacity - total_wh_slots <= 2:
+                insights.append(f"土日祝スロット{total_wh_slots}枠に対し上限合計{capacity}枠（余裕わずか{capacity - total_wh_slots}枠）")
+
+        # 5) Score range tightness
+        score_min = self.score_min_float
+        score_max = self.score_max_float
+        if score_max - score_min <= 1.5:
+            insights.append(f"スコア許容幅が{score_min}〜{score_max}（幅{score_max - score_min:.1f}点）と狭い")
+
+        # 6) Fixed weekday unavailable concentration
+        dow_counts: Dict[int, List[str]] = {}
+        for d, items in self.fixed_unavailable_weekdays.items():
+            for item in items:
+                normalized = self._normalize_fixed_weekday_entry(item)
+                if normalized and not normalized["is_soft_penalty"]:
+                    dow_counts.setdefault(normalized["day_of_week"], []).append(
+                        self.doctor_names.get(d, f"医師{d+1}")
+                    )
+        weekday_names = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]
+        for dow, names in sorted(dow_counts.items()):
+            if dow < 7 and len(names) >= max(2, self.num_doctors * 0.3):
+                insights.append(
+                    f"{weekday_names[dow]}の当直に{self.num_doctors}人中{len(names)}人が固定不可（外来日？）"
+                )
+
+        # 7) Spacing vs doctor count margin
+        spacing_days = self._get_hard_constraint_value(4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days")
+        if spacing_days is not None and spacing_days > 0:
+            import math
+            max_per_doc = math.ceil(self.num_days / (spacing_days + 1))
+            total_capacity = max_per_doc * self.num_doctors
+            total_slots = self.num_days  # night shifts every day
+            if total_capacity - total_slots <= 2:
+                insights.append(
+                    f"間隔{spacing_days}日・医師{self.num_doctors}人 → 最大{total_capacity}枠、必要{total_slots}枠（ギリギリ）"
+                )
+
+        return insights
+
+
 if __name__ == "__main__":
     # 簡易動作確認用
     optimizer = OnCallOptimizer(

@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus, LogOut } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus, LogOut, Sparkles } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -651,6 +651,43 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
               {d.suggestion_ja && <p className="text-xs text-red-500 mt-0.5">{d.suggestion_ja}</p>}
             </div>
           ))}
+          {!core.diagnostics?.pre_check_errors?.length && core.handleDiagnose && !core.diagnoseResult && (
+            <button
+              type="button"
+              onClick={core.handleDiagnose}
+              disabled={core.isDiagnosing}
+              className="mt-2 ml-6 inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition active:bg-blue-100 disabled:opacity-50"
+            >
+              {core.isDiagnosing ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" />AIが解析中...</>
+              ) : (
+                <><Sparkles className="h-3.5 w-3.5" />どうすれば解けるかAIに検討させる</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {core.diagnoseResult && (
+        <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">
+          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />AI制約診断の結果</p>
+          {core.diagnoseResult.specific_violations.map((v, i) => (
+            <p key={i} className="ml-3 mt-0.5">・{v}</p>
+          ))}
+          {core.diagnoseResult.human_insights.length > 0 && (
+            <div className="mt-2 border-t border-blue-200 pt-1.5">
+              <p className="font-semibold text-blue-700">気づき</p>
+              {core.diagnoseResult.human_insights.map((h, i) => (
+                <p key={i} className="ml-3 mt-0.5 text-blue-800">・{h}</p>
+              ))}
+            </div>
+          )}
+          {core.diagnoseResult.ai_explanation && (
+            <div className="mt-2 border-t border-blue-200 pt-1.5">
+              <p className="font-semibold text-blue-700">AIからの提案</p>
+              <p className="ml-3 mt-0.5 whitespace-pre-wrap text-blue-800">{core.diagnoseResult.ai_explanation}</p>
+            </div>
+          )}
         </div>
       )}
 

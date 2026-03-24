@@ -202,6 +202,9 @@ export default function DashboardPage() {
               toastMessage={core.toastMessage}
               error={core.error}
               diagnostics={core.diagnostics}
+              diagnoseResult={core.diagnoseResult}
+              isDiagnosing={core.isDiagnosing}
+              onDiagnose={core.handleDiagnose}
               saveMessage={core.saveMessage}
               isLoading={core.isLoading}
               saveValidationMessages={core.saveValidationMessages}

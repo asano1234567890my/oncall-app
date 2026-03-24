@@ -1,5 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import type {
+  DiagnoseResponse,
+  DiagnoseResult,
   DiagnosticInfo,
   Doctor,
   FixedUnavailableWeekdayMap,
@@ -132,6 +134,8 @@ export function useScheduleApi({
   const [saveMessage, setSaveMessage] = useState("");
   const [error, setError] = useState("");
   const [diagnostics, setDiagnostics] = useState<DiagnosticInfo | null>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+  const [diagnoseResult, setDiagnoseResult] = useState<DiagnoseResult | null>(null);
 
   const { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors } = useDoctorSettings({
     activeDoctors,
@@ -279,6 +283,7 @@ export function useScheduleApi({
     setIsLoading(true);
     setError("");
     setDiagnostics(null);
+    setDiagnoseResult(null);
     setSaveMessage("");
 
     try {
@@ -362,6 +367,81 @@ export function useScheduleApi({
     }
   };
 
+  const handleDiagnose = async () => {
+    setIsDiagnosing(true);
+    setDiagnoseResult(null);
+
+    try {
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const activeCount = activeDoctors.length;
+
+      if (activeCount === 0) {
+        throw new Error("有効な医師がいません");
+      }
+
+      const lockedShifts = buildLockedShiftsPayload();
+
+      const manual = holidays.filter((day) => day >= 1 && day <= daysInMonth);
+      const auto = autoHolidayDaysInMonth
+        .filter((day) => day >= 1 && day <= daysInMonth)
+        .filter((day) => !holidayWorkdayOverrides.has(toYmd(year, month, day)));
+      const nonSunday = (day: number) => getWeekday(year, month, day) !== "日";
+      const validHolidays = Array.from(new Set([...manual, ...auto].filter(nonSunday))).sort((a, b) => a - b);
+
+      const formattedUnavailable = formatUnavailableForOptimize(unavailableMap);
+      const formattedFixedWeekdays = formatFixedWeekdaysForOptimize(fixedUnavailableWeekdaysMap);
+      const formattedPreviousMonthShifts = formatPreviousMonthShiftsForOptimize();
+      const formattedHardConstraints = formatHardConstraintsForOptimize();
+      const formattedMinScore = filterRecordByActiveDoctors(minScoreMap);
+      const formattedMaxScore = filterRecordByActiveDoctors(maxScoreMap);
+      const formattedTargetScore = Object.fromEntries(
+        Object.entries(filterRecordByActiveDoctors(targetScoreMap)).filter(([, v]) => v != null && v > 0),
+      );
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${apiUrl}/api/optimize/diagnose`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify({
+          year,
+          month,
+          num_doctors: activeCount,
+          holidays: validHolidays,
+          unavailable: formattedUnavailable,
+          fixed_unavailable_weekdays: formattedFixedWeekdays,
+          prev_month_last_day: prevMonthLastDay,
+          prev_month_worked_days: {},
+          previous_month_shifts: formattedPreviousMonthShifts,
+          score_min: scoreMin,
+          score_max: scoreMax,
+          min_score_by_doctor: formattedMinScore,
+          max_score_by_doctor: formattedMaxScore,
+          target_score_by_doctor: formattedTargetScore,
+          past_sat_counts: new Array(activeCount).fill(0),
+          past_sunhol_counts: new Array(activeCount).fill(0),
+          past_total_scores: {},
+          objective_weights: objectiveWeights,
+          hard_constraints: formattedHardConstraints,
+          locked_shifts: lockedShifts,
+        }),
+      });
+
+      const data: DiagnoseResponse = await res.json().catch(() => ({ success: false, phase_completed: 0 }));
+
+      if (!res.ok) {
+        throw new Error("診断に失敗しました");
+      }
+
+      if (data.result) {
+        setDiagnoseResult(data.result);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "診断に失敗しました");
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
+
   const handleSaveToDB = async () => {
     setSaveMessage("");
     setError("");
@@ -416,6 +496,8 @@ export function useScheduleApi({
   return {
     error,
     diagnostics,
+    diagnoseResult,
+    isDiagnosing,
     isLoading,
     isSaving,
     getUnsavedDoctorNames,
@@ -425,6 +507,7 @@ export function useScheduleApi({
     saveAllDoctorsSettings,
     handleDeleteMonthSchedule,
     handleGenerate,
+    handleDiagnose,
     handleSaveToDB,
     refetchDoctors,
   };

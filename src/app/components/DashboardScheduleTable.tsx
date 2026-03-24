@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { ArrowLeftRight, Lock, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
-import type { DiagnosticInfo, ScheduleRow, ShiftType } from "../types/dashboard";
+import { Sparkles, Loader2 } from "lucide-react";
+import type { DiagnoseResult, DiagnosticInfo, ScheduleRow, ShiftType } from "../types/dashboard";
 
 type CellValidityMap = Map<string, string | null>;
 
@@ -62,6 +63,9 @@ type DashboardScheduleTableProps = {
   toastMessage: string | null;
   error: string;
   diagnostics?: DiagnosticInfo | null;
+  diagnoseResult?: DiagnoseResult | null;
+  isDiagnosing?: boolean;
+  onDiagnose?: () => void;
   saveMessage: string;
   isLoading: boolean;
   // Validation
@@ -113,6 +117,9 @@ export default function DashboardScheduleTable({
   toastMessage,
   error,
   diagnostics,
+  diagnoseResult,
+  isDiagnosing,
+  onDiagnose,
   saveMessage,
   isLoading,
   saveValidationMessages,
@@ -360,6 +367,51 @@ export default function DashboardScheduleTable({
               {d.suggestion_ja && <p className="text-red-500">{d.suggestion_ja}</p>}
             </div>
           ))}
+          {!diagnostics?.pre_check_errors?.length && onDiagnose && !diagnoseResult && (
+            <button
+              type="button"
+              onClick={onDiagnose}
+              disabled={isDiagnosing}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+            >
+              {isDiagnosing ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" />AIが解析中...</>
+              ) : (
+                <><Sparkles className="h-3.5 w-3.5" />どうすれば解けるかAIに検討させる</>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+
+      {diagnoseResult && (
+        <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />AI制約診断の結果</p>
+          {diagnoseResult.specific_violations.map((v, i) => (
+            <p key={i} className="ml-3 mt-0.5">・{v}</p>
+          ))}
+          {diagnoseResult.human_insights.length > 0 && (
+            <div className="mt-2 border-t border-blue-200 pt-1.5">
+              <p className="font-semibold text-blue-700">気づき</p>
+              {diagnoseResult.human_insights.map((h, i) => (
+                <p key={i} className="ml-3 mt-0.5 text-blue-800">・{h}</p>
+              ))}
+            </div>
+          )}
+          {diagnoseResult.ai_explanation && (
+            <div className="mt-2 border-t border-blue-200 pt-1.5">
+              <p className="font-semibold text-blue-700">AIからの提案</p>
+              <p className="ml-3 mt-0.5 whitespace-pre-wrap text-blue-800">{diagnoseResult.ai_explanation}</p>
+            </div>
+          )}
+          {diagnoseResult.conflict_groups.length > 0 && (
+            <details className="mt-2 border-t border-blue-200 pt-1.5">
+              <summary className="cursor-pointer font-semibold text-blue-700">競合する制約の詳細（{diagnoseResult.conflict_groups.length}件）</summary>
+              {diagnoseResult.conflict_groups.map((g, i) => (
+                <p key={i} className="ml-3 mt-0.5 text-blue-800">・{g.description_ja}</p>
+              ))}
+            </details>
+          )}
         </div>
       )}
 

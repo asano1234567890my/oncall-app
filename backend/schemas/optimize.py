@@ -119,6 +119,31 @@ class OptimizeRequest(BaseModel):
         return constraints.model_dump(exclude_unset=True)
 
 
+# ── P1-2 Phase 2: Constraint Diagnosis ──
+
+class ConflictGroup(BaseModel):
+    """競合している制約グループ1件"""
+    group_id: str  # e.g. "unavail_d3_day15", "interval_global"
+    category: str  # "unavailable", "interval", "score", "cap", "locked", "cross_month"
+    doctor_name: Optional[str] = None
+    description_ja: str  # "田中先生の4/15（火）不可日"
+
+
+class DiagnoseResult(BaseModel):
+    """制約診断の結果"""
+    conflict_groups: List[ConflictGroup] = Field(default_factory=list)
+    specific_violations: List[str] = Field(default_factory=list)
+    human_insights: List[str] = Field(default_factory=list)
+    ai_explanation: Optional[str] = None
+
+
+class DiagnoseResponse(BaseModel):
+    success: bool
+    phase_completed: int = 0  # 1, 2, or 3
+    result: Optional[DiagnoseResult] = None
+    error: Optional[str] = None
+
+
 class ConstraintDiagnostic(BaseModel):
     id: str
     name_ja: str

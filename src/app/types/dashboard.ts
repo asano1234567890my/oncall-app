@@ -110,6 +110,28 @@ export type DiagnosticInfo = {
   pre_check_errors: ConstraintDiagnostic[];
 };
 
+// P1-2 Phase 2: Constraint Diagnosis
+export type ConflictGroup = {
+  group_id: string;
+  category: string;
+  doctor_name?: string | null;
+  description_ja: string;
+};
+
+export type DiagnoseResult = {
+  conflict_groups: ConflictGroup[];
+  specific_violations: string[];
+  human_insights: string[];
+  ai_explanation?: string | null;
+};
+
+export type DiagnoseResponse = {
+  success: boolean;
+  phase_completed: number;
+  result?: DiagnoseResult | null;
+  error?: string | null;
+};
+
 export type ObjectiveWeights = {
   gap5: number;
   soft_unavailable: number;
