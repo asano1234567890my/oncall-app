@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Shield } from "lucide-react";
 import type { useOnCallCore } from "../hooks/useOnCallCore";
 import type { DoctorScoreEntry, ShiftType } from "../types/dashboard";
 import { getShiftKey } from "../hooks/useScheduleConstraints";
@@ -236,7 +236,13 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
       <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-1.5">
         <div className="grid grid-cols-4 gap-1 text-[10px]">
           {scoreEntries.map((e) => (
-            <div key={e.doctorId} className="flex items-center justify-between rounded bg-white px-1.5 py-0.5 border border-gray-100">
+            <div key={e.doctorId}
+              onClick={() => toggleHighlightedDoctor(e.doctorId)}
+              className={`flex cursor-pointer items-center justify-between rounded px-1.5 py-0.5 border transition ${
+                highlightedDoctorId === e.doctorId
+                  ? "border-blue-400 bg-blue-50 ring-1 ring-blue-300"
+                  : "border-gray-100 bg-white active:bg-gray-50"
+              }`}>
               <span className="truncate font-semibold text-gray-700 max-w-[3.5rem]">{getDoctorName(e.doctorId)}</span>
               <span className={`shrink-0 font-bold ${stClass(e.tone)}`}>{fmt(e.score)}</span>
             </div>
@@ -274,6 +280,12 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
           <button type="button" onClick={handleGenerateWithGuard} disabled={isLoading || isOverrideMode}
             className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow transition hover:bg-blue-700 disabled:opacity-50">
             {isLoading ? "生成中..." : lockedCount > 0 ? "再生成" : "生成"}
+          </button>
+          <button type="button" onClick={handleToggleOverrideMode}
+            className={`flex items-center gap-1 rounded-xl border px-2.5 py-2.5 text-xs font-bold transition ${
+              isOverrideMode ? "border-amber-300 bg-amber-100 text-amber-800" : "border-gray-200 bg-white text-gray-500 active:bg-gray-100"
+            }`}>
+            <Shield className="h-3.5 w-3.5" /> 強制
           </button>
           <div className="flex-1" />
           {onShowGuide && (
