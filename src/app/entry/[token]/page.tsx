@@ -116,6 +116,8 @@ export default function EntryPage() {
   const [doctor, setDoctor] = useState<PublicDoctor | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<UnavailableDateEntry[]>([]);
+  const [fixedWeekdayEntries, setFixedWeekdayEntries] = useState<FixedUnavailableWeekdayEntry[]>([]);
+  const [doctorMessage, setDoctorMessage] = useState<string | null>(null);
   const [month, setMonth] = useState<Date>(() => getNextMonthDate());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -202,12 +204,14 @@ export default function EntryPage() {
       }
       if (!res.ok) throw new Error("取得に失敗しました");
 
-      const data: PublicDoctor = await res.json();
+      const data: PublicDoctor & { doctor_message?: string | null } = await res.json();
       const normalizedDoctor: PublicDoctor = {
         ...data,
         fixed_weekdays: toFixedWeekdayEntriesFromDoctor(data),
       };
       setDoctor(normalizedDoctor);
+      setFixedWeekdayEntries(normalizedDoctor.fixed_weekdays ?? []);
+      if (data.doctor_message) setDoctorMessage(data.doctor_message);
 
       const selected = toUnavailableEntriesFromDoctor(normalizedDoctor);
       setSelectedEntries(selected);
@@ -278,7 +282,7 @@ export default function EntryPage() {
 
       const payload = {
         unavailable_days: unavailableDays,
-        fixed_weekdays: doctor?.fixed_weekdays ?? [],
+        fixed_weekdays: fixedWeekdayEntries,
         unavailable_year: displayedYear,
         unavailable_month: displayedMonthNumber,
       };
@@ -361,12 +365,59 @@ export default function EntryPage() {
             <div className="mt-6 text-sm text-gray-500">読み込み中...</div>
           ) : (
             <>
-              <section className="mt-6">
+              {/* 管理者からの案内メッセージ */}
+              {doctorMessage && (
+                <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 whitespace-pre-wrap">
+                  {doctorMessage}
+                </div>
+              )}
+
+              {/* 固定不可曜日 */}
+              <section className="mt-5">
+                <div className="text-sm font-bold text-gray-700">固定不可曜日</div>
+                <div className="mt-1 text-xs text-gray-500">
+                  毎週決まった曜日に当直できない場合はここで設定してください。
+                </div>
+                <div className={`mt-2 flex gap-1 ${locked ? "opacity-75 pointer-events-none" : ""}`}>
+                  {([0, 1, 2, 3, 4, 5, 6] as const).map((pyWd) => {
+                    const labels = ["月", "火", "水", "木", "金", "土", "日"];
+                    const entry = fixedWeekdayEntries.find((e) => e.day_of_week === pyWd);
+                    const isActive = !!entry;
+                    return (
+                      <button
+                        key={pyWd}
+                        type="button"
+                        disabled={locked}
+                        onClick={() => {
+                          setFixedWeekdayEntries((prev) => {
+                            if (isActive) {
+                              return prev.filter((e) => e.day_of_week !== pyWd);
+                            }
+                            return [...prev, { day_of_week: pyWd, target_shift: "all" as const }];
+                          });
+                        }}
+                        className={`flex-1 rounded-lg border py-2 text-center text-xs font-bold transition ${
+                          isActive
+                            ? pyWd === 6
+                              ? "border-red-300 bg-red-100 text-red-700"
+                              : pyWd === 5
+                                ? "border-blue-300 bg-blue-100 text-blue-700"
+                                : "border-red-300 bg-red-100 text-red-700"
+                            : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                        }`}
+                      >
+                        {labels[pyWd]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-1 text-[10px] text-gray-400">タップで不可 ↔ 解除</div>
+              </section>
+
+              <section className="mt-5">
                 <div className="text-sm font-bold text-gray-700">個別不可日（カレンダー）</div>
                 <div className="mt-1 text-xs text-gray-500">
-                  平日・土曜は1タップで[休] 終日不可、日曜・祝日は日直/当直を分けて設定できます。<br />
-                  前提条件として研究日とその前日は当直には入りません。<br />
-                  外来日前日は当直に含まれるため、ご自身で不可日指定をお願いします。
+                  平日・土曜は1タップで[休] 終日不可、日曜・祝日は日直/当直を分けて設定できます。
                   {locked ? (
                     <>
                       <br />現在はロック中です。

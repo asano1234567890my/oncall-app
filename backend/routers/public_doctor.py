@@ -9,6 +9,7 @@ from core.db import get_db
 from models.doctor import Doctor
 from models.unavailable_day import UnavailableDay
 from schemas.doctor import PublicDoctorUpdate
+from services.settings_service import get_system_setting
 from services.unavailable_day_service import (
     FixedWeekdayEntry,
     UnavailableDateEntry,
@@ -41,6 +42,13 @@ async def get_doctor_by_token(access_token: str, db: AsyncSession = Depends(get_
     if doctor is None:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
+    # Fetch hospital's doctor_message
+    doctor_message = None
+    if doctor.hospital_id:
+        raw = await get_system_setting(db, doctor.hospital_id, "doctor_message")
+        if raw and isinstance(raw, str):
+            doctor_message = raw
+
     return {
         "id": str(doctor.id),
         "name": doctor.name,
@@ -51,6 +59,7 @@ async def get_doctor_by_token(access_token: str, db: AsyncSession = Depends(get_
             _serialize_unavailable_day(unavailable_day)
             for unavailable_day in (doctor.unavailable_days or [])
         ],
+        "doctor_message": doctor_message,
     }
 
 

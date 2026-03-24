@@ -35,6 +35,8 @@ export default function PublicViewPage() {
   const [schedule, setSchedule] = useState<ScheduleRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [published, setPublished] = useState(true);
+  const [publishComment, setPublishComment] = useState<string | null>(null);
+  const [doctorName, setDoctorName] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [isDownloading, setIsDownloading] = useState(false);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,20 @@ export default function PublicViewPage() {
     return next;
   }, [customError, disabledSet, manualSet, standardHolidaySet, year]);
 
+  // Fetch doctor name once
+  useEffect(() => {
+    if (!token) return;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/public/doctors/${token}`, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.name) setDoctorName(data.name);
+        }
+      } catch { /* ignore */ }
+    })();
+  }, [token]);
+
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -67,6 +83,7 @@ export default function PublicViewPage() {
         if (!cancelled) {
           setPublished(data.published !== false);
           setSchedule(Array.isArray(data.schedule) ? [...data.schedule].sort((a: ScheduleRow, b: ScheduleRow) => a.day - b.day) : []);
+          setPublishComment(data.publish_comment || null);
         }
       } catch {
         if (!cancelled) {
@@ -230,6 +247,13 @@ export default function PublicViewPage() {
           )}
         </div>
 
+        {/* 公開コメント */}
+        {publishComment && (
+          <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 whitespace-pre-wrap">
+            {publishComment}
+          </div>
+        )}
+
         {error ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-8 text-center text-sm text-red-600">
             {error}
@@ -247,13 +271,60 @@ export default function PublicViewPage() {
             この月の当直表はまだ作成されていません。
           </div>
         ) : (
-          <div ref={tableRef} className="grid grid-cols-2 items-start gap-2">
-            {scheduleColumns.map((rows, i) => (
-              <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border-2 border-gray-400 bg-white shadow-sm">
-                {renderColumn(rows)}
-              </div>
-            ))}
-          </div>
+          <>
+            <div ref={tableRef} className="grid grid-cols-2 items-start gap-2">
+              {scheduleColumns.map((rows, i) => (
+                <div key={i === 0 ? "left" : "right"} className="overflow-hidden rounded-xl border-2 border-gray-400 bg-white shadow-sm">
+                  {renderColumn(rows)}
+                </div>
+              ))}
+            </div>
+
+            {/* 医師個別サマリー */}
+            {doctorName && (() => {
+              let weekdayNight = 0, satNight = 0, sunholDay = 0, sunholNight = 0;
+              const shiftDates: number[] = [];
+              for (const row of schedule) {
+                const dateKey = toDateKey(year, month, row.day);
+                const wd = new Date(year, month - 1, row.day).getDay();
+                const isSat = wd === 6;
+                const isHol = wd === 0 || mergedHolidaySet.has(dateKey);
+                if (row.night_shift === doctorName) {
+                  shiftDates.push(row.day);
+                  if (isSat) satNight++;
+                  else if (isHol) sunholNight++;
+                  else weekdayNight++;
+                }
+                if (row.day_shift === doctorName) {
+                  if (isHol || isSat) sunholDay++;
+                }
+              }
+              const total = weekdayNight + satNight + sunholDay + sunholNight;
+              if (total === 0) return null;
+              shiftDates.sort((a, b) => a - b);
+              const intervals = [];
+              for (let i = 1; i < shiftDates.length; i++) intervals.push(shiftDates[i] - shiftDates[i - 1]);
+              const minInterval = intervals.length > 0 ? Math.min(...intervals) : null;
+              const avgInterval = intervals.length > 0 ? (intervals.reduce((a, b) => a + b, 0) / intervals.length).toFixed(1) : null;
+              return (
+                <div className="mt-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+                  <h3 className="text-xs font-bold text-gray-800 mb-2">{doctorName}先生の{month}月</h3>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                    <span>当直回数: <b className="text-gray-800">{weekdayNight + satNight + sunholNight}回</b></span>
+                    <span>日直回数: <b className="text-gray-800">{sunholDay}回</b></span>
+                    <span className="text-gray-400">平日{weekdayNight} / 土曜{satNight} / 日祝{sunholNight}</span>
+                    <span />
+                    {minInterval !== null && (
+                      <>
+                        <span>最短間隔: <b className="text-gray-800">{minInterval}日</b></span>
+                        <span>平均間隔: <b className="text-gray-800">{avgInterval}日</b></span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </>
         )}
       </main>
     </div>

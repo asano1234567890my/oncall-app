@@ -175,7 +175,7 @@ async def get_public_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     """トークンで認証し、公開月の全体スケジュールを医師名付きで返す。"""
-    from services.settings_service import get_published_months
+    from services.settings_service import get_published_months, get_system_setting
 
     result = await db.execute(
         select(Doctor)
@@ -225,10 +225,17 @@ async def get_public_schedule(
         else:
             formatted[day]["night_shift"] = name
 
+    # Fetch publish comment for this month
+    publish_comment = None
+    raw = await get_system_setting(db, doctor.hospital_id, f"publish_comment_{month_key}")
+    if raw and isinstance(raw, str):
+        publish_comment = raw
+
     return {
         "published": True,
         "schedule": sorted(formatted.values(), key=lambda x: x["day"]),
         "doctors": doctor_name_map,
+        "publish_comment": publish_comment,
     }
 
 

@@ -72,6 +72,9 @@ export default function ViewSchedulePage() {
   const [publishedMonths, setPublishedMonths] = useState<Set<string>>(new Set());
   const [isTogglingPublish, setIsTogglingPublish] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [publishComment, setPublishComment] = useState("");
+  const [publishCommentSaved, setPublishCommentSaved] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
   const { auth, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
   const tableRef = useRef<HTMLDivElement>(null);
@@ -174,7 +177,23 @@ export default function ViewSchedulePage() {
         if (!cancelled) setLoading(false);
       }
     };
+    const fetchComment = async () => {
+      try {
+        const key = `publish_comment_${year}-${pad2(month)}`;
+        const res = await fetch(`${API_BASE}/api/settings/kv/${key}`, { headers: getAuthHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          const val = typeof data.value === "string" ? data.value : "";
+          if (!cancelled) { setPublishComment(val); setPublishCommentSaved(val); }
+        } else {
+          if (!cancelled) { setPublishComment(""); setPublishCommentSaved(""); }
+        }
+      } catch {
+        if (!cancelled) { setPublishComment(""); setPublishCommentSaved(""); }
+      }
+    };
     void fetchSchedule();
+    void fetchComment();
     return () => { cancelled = true; };
   }, [month, year]);
 
@@ -416,6 +435,40 @@ export default function ViewSchedulePage() {
               </div>
             )}
           </div>
+
+          {/* 公開コメント */}
+          {isPublished && (
+            <div className="mt-2">
+              <textarea
+                value={publishComment}
+                onChange={(e) => setPublishComment(e.target.value)}
+                placeholder="医師への公開コメント（任意）"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs leading-relaxed text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={2}
+              />
+              {publishComment !== publishCommentSaved && (
+                <button
+                  disabled={savingComment}
+                  onClick={async () => {
+                    setSavingComment(true);
+                    try {
+                      const key = `publish_comment_${year}-${pad2(month)}`;
+                      const res = await fetch(`${API_BASE}/api/settings/kv/${key}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                        body: JSON.stringify({ value: publishComment }),
+                      });
+                      if (res.ok) setPublishCommentSaved(publishComment);
+                    } catch { /* ignore */ }
+                    setSavingComment(false);
+                  }}
+                  className="mt-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {savingComment ? "保存中..." : "コメントを保存"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Schedule table */}

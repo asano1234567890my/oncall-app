@@ -216,6 +216,11 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const [error, setError] = useState("");
   const [lockingId, setLockingId] = useState<string | null>(null);
 
+  // 医師への案内メッセージ
+  const [doctorMessage, setDoctorMessage] = useState("");
+  const [doctorMessageSaved, setDoctorMessageSaved] = useState("");
+  const [savingMessage, setSavingMessage] = useState(false);
+
   // ファイル取込
   const [importStep, setImportStep] = useState<"idle" | "parsing" | "confirm">("idle");
   const [importNames, setImportNames] = useState<string[]>([]);
@@ -246,6 +251,18 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
       setError("");
       setEditingId(null);
       setNewName("");
+      // Fetch doctor_message
+      void (async () => {
+        try {
+          const res = await fetch(`${apiBase()}/api/settings/kv/doctor_message`, { headers: getAuthHeaders() });
+          if (res.ok) {
+            const data = await res.json();
+            const val = typeof data.value === "string" ? data.value : "";
+            setDoctorMessage(val);
+            setDoctorMessageSaved(val);
+          }
+        } catch { /* ignore */ }
+      })();
     }
   }, [isOpen, fetchDoctors]);
 
@@ -663,6 +680,39 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                     )}
                   </div>
                 )}
+
+                {/* 医師への案内メッセージ */}
+                <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-600 mb-1.5">医師への案内メッセージ</div>
+                  <p className="text-[10px] text-gray-400 mb-2">入力画面（マジックリンク）の上部に表示されます</p>
+                  <textarea
+                    value={doctorMessage}
+                    onChange={(e) => setDoctorMessage(e.target.value)}
+                    placeholder="例: 研究日の前日も不可曜日として申請してください。不可日は月5日までにしてください。"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                    rows={3}
+                  />
+                  {doctorMessage !== doctorMessageSaved && (
+                    <button
+                      disabled={savingMessage}
+                      onClick={async () => {
+                        setSavingMessage(true);
+                        try {
+                          const res = await fetch(`${apiBase()}/api/settings/kv/doctor_message`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ value: doctorMessage }),
+                          });
+                          if (res.ok) setDoctorMessageSaved(doctorMessage);
+                        } catch { /* ignore */ }
+                        setSavingMessage(false);
+                      }}
+                      className="mt-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {savingMessage ? "保存中..." : "保存"}
+                    </button>
+                  )}
+                </div>
 
                 <p className="mt-4 text-xs text-gray-400 text-center">
                   {activeDoctors.length}名 登録中
