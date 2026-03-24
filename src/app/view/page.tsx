@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { domToPng } from "modern-screenshot";
 import AppHeader from "../components/AppHeader";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
@@ -47,7 +48,8 @@ export default function ViewSchedulePage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [publishedMonths, setPublishedMonths] = useState<Set<string>>(new Set());
   const [isTogglingPublish, setIsTogglingPublish] = useState(false);
-  const { auth, logout } = useAuth();
+  const { auth, isLoading: authLoading, logout } = useAuth();
+  const router = useRouter();
   const tableRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
   const { manualSet, disabledSet, customError } = useCustomHolidays(year);
@@ -78,7 +80,6 @@ export default function ViewSchedulePage() {
   };
 
   useEffect(() => {
-    if (!auth.isAuthenticated) return;
     let cancelled = false;
     const fetchPublished = async () => {
       try {
@@ -92,7 +93,7 @@ export default function ViewSchedulePage() {
     };
     void fetchPublished();
     return () => { cancelled = true; };
-  }, [auth.isAuthenticated]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,25 +239,25 @@ export default function ViewSchedulePage() {
     </table>
   );
 
+  // 未認証ならログインページへリダイレクト
+  useEffect(() => {
+    if (!auth.isAuthenticated && !authLoading) {
+      router.replace("/login");
+    }
+  }, [auth.isAuthenticated, authLoading, router]);
+
+  if (!auth.isAuthenticated) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-gray-50">
+        <div className="text-sm text-gray-500">リダイレクト中...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-dvh bg-gray-50">
       {/* ── Header ── */}
-      {auth.isAuthenticated ? (
-        <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
-      ) : (
-        <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-3">
-              <span className="text-base font-extrabold text-gray-800">シフらく</span>
-              <span className="text-sm text-gray-400">当直表</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <a href="/login" className="rounded-md px-3 py-1.5 text-xs font-bold text-blue-600 hover:bg-blue-50 transition-colors">ログイン</a>
-              <a href="/register" className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors">新規登録</a>
-            </div>
-          </div>
-        </header>
-      )}
+      <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
 
       {/* ── Content ── */}
       <main className="mx-auto max-w-3xl px-4 py-4">
@@ -285,7 +286,7 @@ export default function ViewSchedulePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {auth.isAuthenticated && schedule.length > 0 && (
+            {schedule.length > 0 && (
               <>
                 <Link
                   href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
@@ -316,7 +317,7 @@ export default function ViewSchedulePage() {
               <Download className="h-3.5 w-3.5" />
               {isDownloading ? "保存中..." : "画像"}
             </button>
-            {auth.isAuthenticated && schedule.length > 0 && (
+            {schedule.length > 0 && (
               <>
                 <button
                   onClick={() => { void handleExport("pdf"); }}

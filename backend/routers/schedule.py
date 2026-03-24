@@ -167,6 +167,71 @@ async def get_ical_feed(
     )
 
 
+@router.get("/public/{doctor_token}/{year}/{month}")
+async def get_public_schedule(
+    doctor_token: str,
+    year: int,
+    month: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """トークンで認証し、公開月の全体スケジュールを医師名付きで返す。"""
+    from services.settings_service import get_published_months
+
+    result = await db.execute(
+        select(Doctor)
+        .options(selectinload(Doctor.hospital))
+        .where(Doctor.access_token == doctor_token)
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    month_key = f"{year}-{month:02d}"
+    published = await get_published_months(db, doctor.hospital_id)
+    if month_key not in published:
+        return {"published": False, "schedule": [], "doctors": {}}
+
+    # 全医師名マップ
+    doctors_result = await db.execute(
+        select(Doctor).where(Doctor.hospital_id == doctor.hospital_id)
+    )
+    all_doctors = doctors_result.scalars().all()
+    doctor_name_map = {str(d.id): d.name for d in all_doctors}
+
+    start_date, end_date = _month_bounds(year, month)
+    hospital_doctor_ids = [d.id for d in all_doctors]
+
+    shift_result = await db.execute(
+        select(ShiftAssignment)
+        .where(
+            ShiftAssignment.date >= start_date,
+            ShiftAssignment.date < end_date,
+            ShiftAssignment.doctor_id.in_(hospital_doctor_ids),
+        )
+        .order_by(ShiftAssignment.date)
+    )
+    assignments = shift_result.scalars().all()
+
+    days_in_month = _calendar.monthrange(year, month)[1]
+    formatted: dict = {
+        day: {"day": day, "day_shift": None, "night_shift": None}
+        for day in range(1, days_in_month + 1)
+    }
+    for a in assignments:
+        day = a.date.day
+        name = doctor_name_map.get(str(a.doctor_id), "?")
+        if _normalize_shift_type(a.shift_type) == "day":
+            formatted[day]["day_shift"] = name
+        else:
+            formatted[day]["night_shift"] = name
+
+    return {
+        "published": True,
+        "schedule": sorted(formatted.values(), key=lambda x: x["day"]),
+        "doctors": doctor_name_map,
+    }
+
+
 @router.get("/public-shifts/{doctor_token}")
 async def get_public_shifts(
     doctor_token: str,

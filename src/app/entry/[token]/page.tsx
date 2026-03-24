@@ -509,7 +509,7 @@ export default function EntryPage() {
                     <Calendar className="h-4 w-4" />Googleカレンダーに登録
                   </button>
                   <Link
-                    href="/view"
+                    href={`/view/${token}`}
                     className="mt-2 block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-600 hover:bg-gray-50"
                   >
                     全体の当直表を見る
