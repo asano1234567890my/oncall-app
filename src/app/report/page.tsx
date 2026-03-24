@@ -270,11 +270,6 @@ export default function ReportPage() {
       });
     }
 
-    const dayShiftKeys = new Set<string>();
-    for (const s of data.shifts) {
-      if (s.shift_type === "day") dayShiftKeys.add(`${s.doctor_id}_${s.date}`);
-    }
-
     for (const s of data.shifts) {
       const entry = map.get(s.doctor_id);
       if (!entry) continue;
@@ -283,17 +278,32 @@ export default function ReportPage() {
       if (si === undefined) continue; // outside window
       if (s.shift_type === "night") {
         if (isSaturdayDate(s.date)) entry.satNight[si]++;
-        else if (isSundayOrHoliday(s.date, holidaySet)) {
-          entry.sunholNight[si]++;
-          if (!dayShiftKeys.has(`${s.doctor_id}_${s.date}`)) {
-            entry.sunholDay[si]++;
-          }
-        }
+        else if (isSundayOrHoliday(s.date, holidaySet)) entry.sunholNight[si]++;
         else entry.weekdayNight[si]++;
-      } else {
-        if (isSundayOrHoliday(s.date, holidaySet)) entry.sunholDay[si]++;
-        else entry.sunholDay[si]++;
+      } else if (s.shift_type === "day") {
+        if (isSundayOrHoliday(s.date, holidaySet) || isSaturdayDate(s.date)) entry.sunholDay[si]++;
       }
+    }
+    return map;
+  }, [data, holidaySet, slotIndexMap]);
+
+  // Combined holiday bonus: 日祝の当直で同日に日直がない → +0.5 (スコアのみ、回数には含めない)
+  const combinedBonusCounts = useMemo(() => {
+    if (!data) return new Map<string, number[]>();
+    const dayShiftKeys = new Set<string>();
+    for (const s of data.shifts) {
+      if (s.shift_type === "day") dayShiftKeys.add(`${s.doctor_id}_${s.date}`);
+    }
+    const map = new Map<string, number[]>();
+    for (const doc of data.doctors) map.set(doc.id, Array(12).fill(0) as number[]);
+    for (const s of data.shifts) {
+      if (s.shift_type !== "night") continue;
+      if (!isSundayOrHoliday(s.date, holidaySet)) continue;
+      if (dayShiftKeys.has(`${s.doctor_id}_${s.date}`)) continue;
+      const si = slotIndexMap.get(s.date.substring(0, 7));
+      if (si === undefined) continue;
+      const arr = map.get(s.doctor_id);
+      if (arr) arr[si]++;
     }
     return map;
   }, [data, holidaySet, slotIndexMap]);
@@ -303,16 +313,18 @@ export default function ReportPage() {
     if (!monthlyCounts) return new Map<string, number[]>();
     const map = new Map<string, number[]>();
     for (const [docId, c] of monthlyCounts) {
+      const bonus = combinedBonusCounts.get(docId) ?? Array(12).fill(0) as number[];
       const scores = Array.from({ length: 12 }, (_, i) =>
         c.weekdayNight[i] * SCORE_WEEKDAY_NIGHT +
         c.satNight[i] * SCORE_SAT_NIGHT +
         c.sunholNight[i] * SCORE_SUNHOL_NIGHT +
-        c.sunholDay[i] * SCORE_DAY
+        c.sunholDay[i] * SCORE_DAY +
+        bonus[i] * SCORE_DAY
       );
       map.set(docId, scores);
     }
     return map;
-  }, [monthlyCounts]);
+  }, [monthlyCounts, combinedBonusCounts]);
 
   // Doctor shifts for selected slot (calendar)
   const calendarSlot = monthSlots[selectedSlot] || monthSlots[11];
