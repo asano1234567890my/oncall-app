@@ -497,16 +497,27 @@ export default function EntryPage() {
                   </div>
                   <button
                     type="button"
-                    onClick={() => {
-                      const apiBase = getApiBase();
-                      const icalUrl = `${apiBase}/api/schedule/ical/${token}?year=${displayedYear}&month=${displayedMonthNumber}`;
-                      const webcalUrl = icalUrl.replace(/^https?:\/\//, "webcal://");
-                      const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
-                      window.open(googleUrl, "_blank");
+                    onClick={async () => {
+                      try {
+                        const apiBase = getApiBase();
+                        const res = await fetch(`${apiBase}/api/schedule/ical/${token}?year=${displayedYear}&month=${displayedMonthNumber}`);
+                        if (!res.ok) throw new Error("failed");
+                        const blob = await res.blob();
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `shifts_${displayedYear}_${String(displayedMonthNumber).padStart(2, "0")}.ics`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                      } catch {
+                        window.alert("カレンダーファイルのダウンロードに失敗しました。");
+                      }
                     }}
                     className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800 transition hover:bg-green-100"
                   >
-                    <Calendar className="h-4 w-4" />{displayedMonthNumber}月のシフトをGoogleカレンダーに登録
+                    <Calendar className="h-4 w-4" />{displayedMonthNumber}月のシフトをカレンダーに登録（.ics）
                   </button>
                   <Link
                     href={`/view/${token}`}

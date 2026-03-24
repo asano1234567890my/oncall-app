@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff, HelpCircle, ChevronDown, Image } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -76,20 +76,25 @@ export default function ViewSchedulePage() {
   const router = useRouter();
   const tableRef = useRef<HTMLDivElement>(null);
   const exportRef = useRef<HTMLDivElement>(null);
+  const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
+  const monthDropdownRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
   const { manualSet, disabledSet, customError } = useCustomHolidays(year);
 
-  // Close export dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!exportOpen) return;
+    if (!exportOpen && !monthDropdownOpen) return;
     const handler = (e: MouseEvent) => {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+      if (exportOpen && exportRef.current && !exportRef.current.contains(e.target as Node)) {
         setExportOpen(false);
+      }
+      if (monthDropdownOpen && monthDropdownRef.current && !monthDropdownRef.current.contains(e.target as Node)) {
+        setMonthDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [exportOpen]);
+  }, [exportOpen, monthDropdownOpen]);
 
   const doctorNameById = useMemo(
     () => Object.fromEntries(doctors.map((doctor) => [doctor.id, doctor.name])),
@@ -310,20 +315,36 @@ export default function ViewSchedulePage() {
               aria-label="年"
             />
             <span className="text-gray-500">年</span>
-            <select
-              value={month}
-              onChange={(e) => setMonth(Number(e.target.value))}
-              className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="月"
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
-                const key = `${year}-${pad2(m)}`;
-                const pub = publishedMonths.has(key);
-                return (
-                  <option key={m} value={m}>{pub ? "\u25CF " : "\u25CB "}{m}月</option>
-                );
-              })}
-            </select>
+            <div ref={monthDropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMonthDropdownOpen((v) => !v)}
+                className="flex items-center gap-1.5 h-8 rounded-md border border-gray-300 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="月"
+              >
+                <span className={`inline-block w-2 h-2 rounded-full ${publishedMonths.has(`${year}-${pad2(month)}`) ? "bg-green-400" : "bg-amber-400"}`} />
+                {month}月
+                <ChevronDown className={`h-3 w-3 text-gray-400 transition-transform ${monthDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+              {monthDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-32 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                    const key = `${year}-${pad2(m)}`;
+                    const pub = publishedMonths.has(key);
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => { setMonth(m); setMonthDropdownOpen(false); }}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm hover:bg-gray-50 ${m === month ? "font-bold bg-gray-50" : ""}`}
+                      >
+                        <span className={`inline-block w-2 h-2 rounded-full ${pub ? "bg-green-400" : "bg-amber-400"}`} />
+                        {m}月
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">

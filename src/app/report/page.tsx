@@ -138,8 +138,9 @@ export default function ReportPage() {
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [targetScore, setTargetScore] = useState<{ min: number; max: number }>({ min: 0.5, max: 4.5 });
-  const [rangeStart, setRangeStart] = useState(0);
-  const [rangeEnd, setRangeEnd] = useState(11);
+  const [rangeMode, setRangeMode] = useState<"3m" | "1y">("3m");
+  const rangeStart = rangeMode === "3m" ? 9 : 0;
+  const rangeEnd = 11;
   const [hiddenDoctorIds, setHiddenDoctorIds] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
@@ -458,16 +459,24 @@ export default function ReportPage() {
             </button>
           </div>
         </div>
-        {/* Row 2: range */}
-        <div className="mb-3 flex items-center gap-1 text-[10px] sm:text-xs text-gray-600">
+        {/* Row 2: range toggle */}
+        <div className="mb-3 flex items-center gap-1.5 text-[10px] sm:text-xs text-gray-600">
           <span className="font-bold">期間:</span>
-          <button onClick={() => setRangeStart(rangeStart - 1)} disabled={rangeStart <= 0} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-          <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{slotLabels[rangeStart]}</span>
-          <button onClick={() => setRangeStart(rangeStart + 1)} disabled={rangeStart >= rangeEnd} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
-          <span className="text-gray-400">〜</span>
-          <button onClick={() => setRangeEnd(rangeEnd - 1)} disabled={rangeEnd <= rangeStart} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-          <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{slotLabels[rangeEnd]}</span>
-          <button onClick={() => setRangeEnd(rangeEnd + 1)} disabled={rangeEnd >= 11} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
+          <div className="flex rounded-md border border-gray-300 overflow-hidden">
+            <button
+              onClick={() => setRangeMode("3m")}
+              className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${rangeMode === "3m" ? "bg-gray-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            >
+              3ヶ月
+            </button>
+            <button
+              onClick={() => setRangeMode("1y")}
+              className={`px-2.5 py-1 text-[11px] font-bold transition-colors ${rangeMode === "1y" ? "bg-gray-800 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+            >
+              1年
+            </button>
+          </div>
+          <span className="text-gray-400 text-[10px]">{slotLabels[rangeStart]}〜{slotLabels[rangeEnd]}</span>
         </div>
 
         {loading ? (
@@ -739,7 +748,7 @@ function OverviewTab({
           <thead>
             <tr className="bg-gray-50 text-gray-500">
               <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left font-bold border-b border-r border-gray-200 min-w-[5rem]">医師名</th>
-              <th className="px-2 py-2 text-center font-bold border-b border-gray-200 min-w-[3rem] text-indigo-600">平日</th>
+              <th className="px-2 py-2 text-center font-bold border-b border-gray-200 min-w-[3rem] text-green-600">平日</th>
               <th className="px-2 py-2 text-center font-bold border-b border-gray-200 min-w-[3rem] text-blue-600">土曜</th>
               <th colSpan={3} className="px-2 py-2 text-center font-bold border-b border-l-2 border-gray-200 min-w-[6rem] text-red-600">日祝</th>
               <th className="px-2 py-2 text-center font-bold border-b border-l-2 border-gray-300 min-w-[3rem] bg-gray-100">合計</th>
@@ -771,7 +780,7 @@ function OverviewTab({
               return (
                 <tr key={doc.id} className={di % 2 === 0 ? "" : "bg-gray-50/50"}>
                   <td className="sticky left-0 z-10 bg-white px-3 py-1.5 font-medium text-gray-800 border-r border-gray-200 whitespace-nowrap">{doc.name}</td>
-                  {cell(wn, "text-indigo-700")}
+                  {cell(wn, "text-green-700")}
                   {cell(sn, "text-blue-700")}
                   <td className={`px-2 py-1.5 text-center border-l-2 border-gray-200 ${shd === 0 ? "text-gray-300" : "font-medium text-orange-600"}`}>{shd || "-"}</td>
                   {cell(shn, "text-red-600")}
@@ -799,7 +808,7 @@ function OverviewTab({
                 const tg = twn + tsn + tshd + tshn;
                 return (
                   <>
-                    <td className="px-2 py-1.5 text-center font-bold text-indigo-700">{twn}</td>
+                    <td className="px-2 py-1.5 text-center font-bold text-green-700">{twn}</td>
                     <td className="px-2 py-1.5 text-center font-bold text-blue-700">{tsn}</td>
                     <td className="px-2 py-1.5 text-center font-bold text-orange-600 border-l-2 border-gray-200">{tshd}</td>
                     <td className="px-2 py-1.5 text-center font-bold text-red-600">{tshn}</td>
@@ -956,7 +965,7 @@ function DoctorTab({
         <select
           value={selectedDoctorId}
           onChange={e => setSelectedDoctorId(e.target.value)}
-          className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-8 max-w-[10rem] truncate rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {data.doctors.map(d => (
             <option key={d.id} value={d.id}>{d.name}</option>
@@ -1054,7 +1063,7 @@ function DoctorTab({
               : `${slotLabels[rangeStart]}〜${slotLabels[rangeEnd]} 集計`}
           </h3>
           <div className="grid grid-cols-2 gap-1.5">
-            <StatCard label="平日当直" value={yearTotalNight} color="indigo" />
+            <StatCard label="平日当直" value={yearTotalNight} color="green" />
             <StatCard label="日直" value={yearTotalDay} color="orange" />
             <StatCard label="土曜当直" value={yearTotalSat} color="blue" />
             <StatCard label="日祝当直" value={yearTotalSunhol} color="red" />
@@ -1096,10 +1105,10 @@ function DoctorTab({
                       <span className={`text-[11px] w-10 text-right truncate ${selectedSlot === i ? "font-bold text-blue-600" : "text-gray-500"}`}>{lbl}</span>
                       <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden">
                         <div className="h-full flex" style={{ width: `${barW}%` }}>
-                          {wn > 0 && <div className="h-full bg-indigo-500" style={{ flex: wn }} />}
-                          {sn > 0 && <div className="h-full bg-amber-500" style={{ flex: sn }} />}
+                          {wn > 0 && <div className="h-full bg-green-500" style={{ flex: wn }} />}
+                          {sn > 0 && <div className="h-full bg-blue-500" style={{ flex: sn }} />}
                           {shd > 0 && <div className="h-full bg-orange-400" style={{ flex: shd }} />}
-                          {shn > 0 && <div className="h-full bg-rose-500" style={{ flex: shn }} />}
+                          {shn > 0 && <div className="h-full bg-red-500" style={{ flex: shn }} />}
                         </div>
                       </div>
                       <span className={`text-[11px] w-4 text-right ${total === 0 ? "text-gray-300" : "font-bold text-gray-700"}`}>{total || "-"}</span>
@@ -1110,10 +1119,10 @@ function DoctorTab({
             );
           })()}
           <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] text-gray-400">
-            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />平日</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />土曜</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />平日</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />土曜</span>
             <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />日祝日</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500" />日祝夜</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500" />日祝夜</span>
           </div>
         </div>
       </div>
@@ -1125,7 +1134,7 @@ function DoctorTab({
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   const colorMap: Record<string, string> = {
-    indigo: "bg-indigo-50 text-indigo-700",
+    green: "bg-green-50 text-green-700",
     orange: "bg-orange-50 text-orange-700",
     blue: "bg-blue-50 text-blue-700",
     red: "bg-red-50 text-red-700",

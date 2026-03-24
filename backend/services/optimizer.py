@@ -1694,49 +1694,66 @@ class OnCallOptimizer:
         insights: List[str] = []
         days = range(1, self.num_days + 1)
 
-        # 1) Same-day unavailable concentration
-        day_unavail_counts: Dict[int, List[str]] = {}
+        # 1) Same-day unavailable concentration (deduplicate per doctor per day)
+        day_unavail_doctors: Dict[int, set] = {}
         for d, items in self.unavailable.items():
+            name = self.doctor_names.get(d, f"医師{d+1}")
             for item in items:
                 normalized = self._normalize_unavailable_entry(item)
-                if normalized is None:
+                if normalized is None or normalized["is_soft_penalty"]:
                     continue
-                if normalized["is_soft_penalty"]:
+                day_unavail_doctors.setdefault(normalized["date"], set()).add(name)
+        # Also include fixed weekday unavailable (expand to actual dates)
+        for d, items in self.fixed_unavailable_weekdays.items():
+            name = self.doctor_names.get(d, f"医師{d+1}")
+            for item in items:
+                normalized = self._normalize_fixed_weekday_entry(item)
+                if normalized is None or normalized["is_soft_penalty"]:
                     continue
-                day_unavail_counts.setdefault(normalized["date"], []).append(
-                    self.doctor_names.get(d, f"医師{d+1}")
-                )
+                for day in days:
+                    if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                        day_unavail_doctors.setdefault(day, set()).add(name)
 
         threshold = max(2, self.num_doctors * 0.4)
-        for day in sorted(day_unavail_counts.keys()):
-            names = day_unavail_counts[day]
+        for day in sorted(day_unavail_doctors.keys()):
+            names = sorted(day_unavail_doctors[day])
             if len(names) >= threshold:
                 date_obj = datetime.date(self.year, self.month, day)
                 weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
                 holiday_tag = "・祝" if self.is_holiday(day) else ""
                 insights.append(
-                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可日申請（{', '.join(names)}）"
+                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可（{', '.join(names)}）"
                 )
 
-        # 2) Doctors with too many unavailable days
+        # 2) Doctors with too many unavailable days (deduplicate by actual date)
         for d in range(self.num_doctors):
-            hard_count = 0
+            unavail_days: set = set()
             for item in self.unavailable.get(d, []):
                 normalized = self._normalize_unavailable_entry(item)
                 if normalized and not normalized["is_soft_penalty"]:
-                    hard_count += 1
+                    unavail_days.add(normalized["date"])
             for item in self.fixed_unavailable_weekdays.get(d, []):
                 normalized = self._normalize_fixed_weekday_entry(item)
                 if normalized and not normalized["is_soft_penalty"]:
-                    # Count how many days this weekday covers
                     for day in days:
                         if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
-                            hard_count += 1
+                            unavail_days.add(day)
 
+            hard_count = len(unavail_days)
+            # Count total shift slots: weekdays=1(night), sat=1(night), sun/hol=2(day+night)
+            total_slots = 0
+            for day in days:
+                if day in unavail_days:
+                    continue
+                if self.is_sunday_or_holiday(day):
+                    total_slots += 2
+                else:
+                    total_slots += 1
+            all_slots = sum(2 if self.is_sunday_or_holiday(d) else 1 for d in days)
             ratio = hard_count / self.num_days if self.num_days > 0 else 0
-            if ratio > 0.25:
+            if ratio > 0.30:
                 insights.append(
-                    f"{self.doctor_names.get(d, f'医師{d+1}')}: {self.num_days}日中{hard_count}日が不可日（{ratio:.0%}）"
+                    f"{self.doctor_names.get(d, f'医師{d+1}')}: 全{all_slots}枠中{hard_count}日が不可（勤務可能{total_slots}枠、不可率{ratio:.0%}）"
                 )
 
         # 3) Many holidays
@@ -1766,18 +1783,17 @@ class OnCallOptimizer:
         if score_max - score_min <= 1.5:
             insights.append(f"スコア許容幅が{score_min}〜{score_max}（幅{score_max - score_min:.1f}点）と狭い")
 
-        # 6) Fixed weekday unavailable concentration
-        dow_counts: Dict[int, List[str]] = {}
+        # 6) Fixed weekday unavailable concentration (deduplicate per doctor per weekday)
+        dow_doctors: Dict[int, set] = {}
         for d, items in self.fixed_unavailable_weekdays.items():
+            name = self.doctor_names.get(d, f"医師{d+1}")
             for item in items:
                 normalized = self._normalize_fixed_weekday_entry(item)
                 if normalized and not normalized["is_soft_penalty"]:
-                    dow_counts.setdefault(normalized["day_of_week"], []).append(
-                        self.doctor_names.get(d, f"医師{d+1}")
-                    )
+                    dow_doctors.setdefault(normalized["day_of_week"], set()).add(name)
         weekday_names = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]
-        for dow, names in sorted(dow_counts.items()):
-            if dow < 7 and len(names) >= max(2, self.num_doctors * 0.3):
+        for dow, names in sorted(dow_doctors.items()):
+            if dow < 7 and len(names) >= max(2, self.num_doctors * 0.4):
                 insights.append(
                     f"{weekday_names[dow]}の当直に{self.num_doctors}人中{len(names)}人が固定不可（外来日？）"
                 )
