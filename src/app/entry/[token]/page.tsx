@@ -499,14 +499,14 @@ export default function EntryPage() {
                     type="button"
                     onClick={() => {
                       const apiBase = getApiBase();
-                      const icalUrl = `${apiBase}/api/schedule/ical/${token}`;
+                      const icalUrl = `${apiBase}/api/schedule/ical/${token}?year=${displayedYear}&month=${displayedMonthNumber}`;
                       const webcalUrl = icalUrl.replace(/^https?:\/\//, "webcal://");
                       const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
                       window.open(googleUrl, "_blank");
                     }}
                     className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800 transition hover:bg-green-100"
                   >
-                    <Calendar className="h-4 w-4" />Googleカレンダーに登録
+                    <Calendar className="h-4 w-4" />{displayedMonthNumber}月のシフトをGoogleカレンダーに登録
                   </button>
                   <Link
                     href={`/view/${token}`}

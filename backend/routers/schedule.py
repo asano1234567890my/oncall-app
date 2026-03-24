@@ -91,21 +91,16 @@ def _build_ics(doctor_name: str, hospital_name: str, assignments: list) -> str:
     for a in assignments:
         shift_label = "日直" if _normalize_shift_type(a.shift_type) == "day" else "当直"
         d = a.date
-        # Day shift: 8:30-17:00, Night shift: 17:00-next 8:30
-        if _normalize_shift_type(a.shift_type) == "day":
-            dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}T083000"
-            dtend = f"{d.year:04d}{d.month:02d}{d.day:02d}T170000"
-        else:
-            next_day = d + datetime.timedelta(days=1)
-            dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}T170000"
-            dtend = f"{next_day.year:04d}{next_day.month:02d}{next_day.day:02d}T083000"
+        next_day = d + datetime.timedelta(days=1)
+        dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}"
+        dtend = f"{next_day.year:04d}{next_day.month:02d}{next_day.day:02d}"
 
         uid = f"{d.isoformat()}-{_normalize_shift_type(a.shift_type)}-{doctor_name}@shiftraku"
         lines.extend([
             "BEGIN:VEVENT",
             f"UID:{uid}",
-            f"DTSTART;TZID=Asia/Tokyo:{dtstart}",
-            f"DTEND;TZID=Asia/Tokyo:{dtend}",
+            f"DTSTART;VALUE=DATE:{dtstart}",
+            f"DTEND;VALUE=DATE:{dtend}",
             f"SUMMARY:{shift_label}（{hospital_name}）",
             f"DESCRIPTION:{doctor_name} {shift_label}",
             "STATUS:CONFIRMED",
@@ -119,9 +114,11 @@ def _build_ics(doctor_name: str, hospital_name: str, assignments: list) -> str:
 @router.get("/ical/{doctor_token}")
 async def get_ical_feed(
     doctor_token: str,
+    year: Optional[int] = Query(None, description="対象年（指定時はその月のみ）"),
+    month: Optional[int] = Query(None, description="対象月（yearと併用）"),
     db: AsyncSession = Depends(get_db),
 ):
-    """ICSフィード — 医師個人の確定済みシフトを .ics 形式で返す。公開月のみ。認証不要（トークンがアクセス権）。"""
+    """ICSフィード — 医師個人の確定済みシフトを .ics 形式で返す（終日イベント）。公開月のみ。認証不要。"""
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.hospital))
@@ -134,10 +131,13 @@ async def get_ical_feed(
     published = await get_published_months_by_doctor_token(db, doctor_token)
     published_set = set(published)
 
-    # 過去3ヶ月〜未来6ヶ月のシフトを返す
-    today = datetime.date.today()
-    start = today.replace(day=1) - datetime.timedelta(days=90)
-    end = today + datetime.timedelta(days=180)
+    # 年月指定時はその月のみ、未指定時は過去3ヶ月〜未来6ヶ月
+    if year and month:
+        start, end = _month_bounds(year, month)
+    else:
+        today = datetime.date.today()
+        start = today.replace(day=1) - datetime.timedelta(days=90)
+        end = today + datetime.timedelta(days=180)
 
     shift_result = await db.execute(
         select(ShiftAssignment)
