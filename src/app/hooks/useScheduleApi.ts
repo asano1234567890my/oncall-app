@@ -302,6 +302,19 @@ export function useScheduleApi({
         throw new Error("有効な医師がいないため、自動生成できません");
       }
 
+      // 前月データがDBにない場合の警告
+      if (previousMonthShifts.length === 0) {
+        const proceed = window.confirm(
+          "前月の当直表がまだ読み込まれていません。\n\n" +
+          "月またぎでの連続当直を防ぐには、先に前月の当直表を保存してください。\n\n" +
+          "このまま生成しますか？"
+        );
+        if (!proceed) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const lockedShifts = buildLockedShiftsPayload();
       setSchedule(clearUnlockedSchedule(scheduleBeforeGenerate));
 

@@ -9,7 +9,6 @@ import StepperNumberInput from "./inputs/StepperNumberInput";
 import WeightsConfig from "./settings/WeightsConfig";
 import RulesConfig from "./settings/RulesConfig";
 import ShiftScoresConfig from "./settings/ShiftScoresConfig";
-import PreviousMonthShiftsConfig from "./settings/PreviousMonthShiftsConfig";
 import {
   baseCalendarModifierClasses,
   dayPickerBaseClassName,
@@ -135,15 +134,6 @@ type DashboardSettingsPanelProps = {
   // Shift scores
   shiftScores: ShiftScores;
   setShiftScores: (scores: ShiftScores) => void;
-  // Previous month
-  isPreviousMonthShiftsOpen: boolean;
-  onTogglePreviousMonthShifts: () => void;
-  onClosePreviousMonthShifts: () => void;
-  prevMonthLastDay: number;
-  prevMonthTailDays: number[];
-  getPreviousMonthShiftDoctorId: (prevDay: number, shiftType: ShiftType) => string;
-  onPrevMonthLastDayChange: (value: number) => void;
-  onSetPreviousMonthShift: (prevDay: number, shiftType: ShiftType, doctorId: string) => void;
 };
 
 const pad2 = (v: number) => String(v).padStart(2, "0");
@@ -172,9 +162,6 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
     ratioOverrides, onRatioOverridesChange,
     onToggleHardConstraints, onResetHardConstraints, onCloseHardConstraints,
     shiftScores, setShiftScores,
-    isPreviousMonthShiftsOpen, onTogglePreviousMonthShifts, onClosePreviousMonthShifts,
-    prevMonthLastDay, prevMonthTailDays, getPreviousMonthShiftDoctorId,
-    onPrevMonthLastDayChange, onSetPreviousMonthShift,
   } = props;
 
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
@@ -234,12 +221,6 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
     const entry = fixedEntries.find((e) => e.day_of_week === weekdayPy);
     return entry ? entry.target_shift : null;
   };
-
-  const previousMonthShiftCount = prevMonthTailDays.reduce((count, day) => {
-    const d = getPreviousMonthShiftDoctorId(day, "day");
-    const n = getPreviousMonthShiftDoctorId(day, "night");
-    return count + (d ? 1 : 0) + (n ? 1 : 0);
-  }, 0);
 
   return (
     <div className="space-y-0">
@@ -508,10 +489,6 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
               className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
               優先度の調整{!weightChanges.isDefault && ` (${weightChanges.changedCount}件変更)`}
             </button>
-            <button type="button" onClick={onTogglePreviousMonthShifts}
-              className="rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50">
-              前月の勤務実績{previousMonthShiftCount > 0 && ` (${previousMonthShiftCount}件)`}
-            </button>
           </div>
         </div>
       </Section>
@@ -550,19 +527,6 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
         onReset={() => setShiftScores({ weekday_night: 1.0, saturday_night: 1.5, holiday_day: 0.5, holiday_night: 1.0 })}
         onSave={onSaveOptimizerConfig}
         onShiftScoreChange={(key, value) => setShiftScores({ ...shiftScores, [key]: value })}
-      />
-      <PreviousMonthShiftsConfig
-        isOpen={isPreviousMonthShiftsOpen}
-        year={year}
-        month={month}
-        prevMonthLastDay={prevMonthLastDay}
-        prevMonthTailDays={prevMonthTailDays}
-        activeDoctors={activeDoctors}
-        previousMonthShiftCount={previousMonthShiftCount}
-        getPreviousMonthShiftDoctorId={getPreviousMonthShiftDoctorId}
-        onClose={onClosePreviousMonthShifts}
-        onPrevMonthLastDayChange={onPrevMonthLastDayChange}
-        onSetPreviousMonthShift={onSetPreviousMonthShift}
       />
     </div>
   );

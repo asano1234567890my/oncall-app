@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, CalendarDays, Ban, AlertTriangle, ImagePlus, LogOut, Sparkles } from "lucide-react";
+import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, Ban, AlertTriangle, ImagePlus, LogOut, Sparkles } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
 import OnboardingModal from "../components/OnboardingModal";
@@ -18,7 +18,6 @@ import WeightsConfig from "../components/settings/WeightsConfig";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
 import HolidaySettingsDrawer from "../components/settings/HolidaySettingsDrawer";
 import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
-import PreviousMonthShiftsConfig from "../components/settings/PreviousMonthShiftsConfig";
 import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
@@ -109,14 +108,6 @@ export default function AppPage() {
     }
   }, [hasSchedule, onboarding.hasSeen, onboarding.pendingSection, onboarding.triggerOnboarding]);
 
-  const previousMonthShiftCount = useMemo(() =>
-    core.prevMonthTailDays.reduce((count, day) => {
-      const d = core.getPreviousMonthShiftDoctorId(day, "day");
-      const n = core.getPreviousMonthShiftDoctorId(day, "night");
-      return count + (d ? 1 : 0) + (n ? 1 : 0);
-    }, 0),
-    [core.prevMonthTailDays, core.getPreviousMonthShiftDoctorId],
-  );
 
   // ── ハンドラ ──
   const openSettings = useCallback(() => { setIsSettingsOpen(true); setActiveDrawer(null); }, []);
@@ -311,11 +302,6 @@ export default function AppPage() {
             {/* ── 上級設定 ── */}
             <SettingsSection title="上級設定" collapsible>
               <SettingsMenuItem icon={Scale} title="優先度の調整" onClick={() => openDrawer("weights")} />
-              <SettingsMenuItem
-                icon={CalendarDays} title="前月の勤務実績"
-                detail={previousMonthShiftCount > 0 ? `${previousMonthShiftCount}枠入力済み` : undefined}
-                onClick={() => openDrawer("previous")}
-              />
             </SettingsSection>
 
           </div>
@@ -463,19 +449,6 @@ export default function AppPage() {
         onShowGuide={() => onboarding.showGuide("holidays")}
       />
 
-      <PreviousMonthShiftsConfig
-        isOpen={activeDrawer === "previous"}
-        year={core.year} month={core.month}
-        activeDoctors={core.activeDoctors}
-        prevMonthLastDay={core.prevMonthLastDay}
-        prevMonthTailDays={core.prevMonthTailDays}
-        previousMonthShiftCount={previousMonthShiftCount}
-        getPreviousMonthShiftDoctorId={core.getPreviousMonthShiftDoctorId}
-        onClose={closeDrawer}
-        onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
-        onSetPreviousMonthShift={core.setPreviousMonthShift}
-        onShowGuide={() => onboarding.showGuide("previous")}
-      />
 
 
       <OnboardingModal section={onboarding.pendingSection} onDismiss={onboarding.dismissOnboarding} />

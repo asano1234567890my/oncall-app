@@ -279,14 +279,6 @@ export default function DashboardPage() {
           onCloseHardConstraints={() => core.setIsHardConstraintsOpen(false)}
           shiftScores={core.shiftScores}
           setShiftScores={core.setShiftScores}
-          isPreviousMonthShiftsOpen={core.isPreviousMonthShiftsOpen}
-          onTogglePreviousMonthShifts={core.handleTogglePreviousMonthShiftsPanel}
-          onClosePreviousMonthShifts={() => core.setIsPreviousMonthShiftsOpen(false)}
-          prevMonthLastDay={core.prevMonthLastDay}
-          prevMonthTailDays={core.prevMonthTailDays}
-          getPreviousMonthShiftDoctorId={core.getPreviousMonthShiftDoctorId}
-          onPrevMonthLastDayChange={core.handlePrevMonthLastDayChange}
-          onSetPreviousMonthShift={core.setPreviousMonthShift}
         />
       </SettingsSlidePanel>
 
