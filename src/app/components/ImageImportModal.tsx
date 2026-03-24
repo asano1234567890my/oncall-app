@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { X, Upload, Camera, Loader2, Check, AlertTriangle, Plus, ChevronRight } from "lucide-react";
+import { useState, useMemo, useCallback, useEffect } from "react";
+import { X, Upload, Camera, Loader2, Check, AlertTriangle, Plus, ChevronRight, CalendarDays } from "lucide-react";
 import { getAuthHeaders } from "../hooks/useAuth";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -57,6 +57,10 @@ export default function ImageImportModal({
   const [parsed, setParsed] = useState<ParsedResult | null>(null);
   const [year, setYear] = useState(defaultYear);
   const [month, setMonth] = useState(defaultMonth);
+  const [yearMonthGuessed, setYearMonthGuessed] = useState(false);
+
+  // Holidays for target month
+  const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([]);
 
   // Doctor mappings
   const [mappings, setMappings] = useState<DoctorMapping[]>([]);
@@ -69,6 +73,8 @@ export default function ImageImportModal({
     setParsed(null);
     setYear(defaultYear);
     setMonth(defaultMonth);
+    setYearMonthGuessed(false);
+    setHolidays([]);
     setMappings([]);
   }, [defaultYear, defaultMonth]);
 
@@ -99,6 +105,18 @@ export default function ImageImportModal({
     if (partial) return partial;
     return null;
   };
+
+  // Fetch holidays when mapping step is shown or year/month changes
+  useEffect(() => {
+    if (step !== "mapping") return;
+    let cancelled = false;
+    const ym = `${year}-${String(month).padStart(2, "0")}`;
+    fetch(`${API_BASE}/api/holidays/?year_month=${ym}`, { headers: getAuthHeaders() })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => { if (!cancelled && Array.isArray(data)) setHolidays(data); })
+      .catch(() => { if (!cancelled) setHolidays([]); });
+    return () => { cancelled = true; };
+  }, [step, year, month]);
 
   const ACCEPTED_TYPES = [
     "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp",
@@ -153,6 +171,8 @@ export default function ImageImportModal({
       setParsed(result);
 
       // Set year/month from parsed result or fallback to defaults
+      const guessed = !result.year || !result.month;
+      setYearMonthGuessed(guessed);
       if (result.year) setYear(result.year);
       if (result.month) setMonth(result.month);
 
@@ -339,25 +359,50 @@ export default function ImageImportModal({
           {step === "mapping" && parsed && (
             <>
               {/* Year/Month override */}
-              <div className="flex items-center gap-2 text-sm">
-                <span className="text-xs text-gray-500">対象月:</span>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(Number(e.target.value))}
-                  className="h-7 w-16 rounded border border-gray-300 px-2 text-center text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <span className="text-gray-400">年</span>
-                <select
-                  value={month}
-                  onChange={(e) => setMonth(Number(e.target.value))}
-                  className="h-7 rounded border border-gray-300 px-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                    <option key={m} value={m}>{m}月</option>
-                  ))}
-                </select>
+              <div className={`rounded-lg p-2.5 ${yearMonthGuessed ? "border border-amber-300 bg-amber-50" : ""}`}>
+                {yearMonthGuessed && (
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    <span className="text-[10px] font-bold text-amber-700">年月を読み取れませんでした。正しい年月を確認してください。</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs text-gray-500">対象月:</span>
+                  <input
+                    type="number"
+                    value={year}
+                    onChange={(e) => setYear(Number(e.target.value))}
+                    className={`h-7 w-16 rounded border px-2 text-center text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${yearMonthGuessed ? "border-amber-400 bg-white" : "border-gray-300"}`}
+                  />
+                  <span className="text-gray-400">年</span>
+                  <select
+                    value={month}
+                    onChange={(e) => setMonth(Number(e.target.value))}
+                    className={`h-7 rounded border px-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 ${yearMonthGuessed ? "border-amber-400 bg-white" : "border-gray-300"}`}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                      <option key={m} value={m}>{m}月</option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {/* Holidays info */}
+              {holidays.length > 0 && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-2.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="text-[10px] text-blue-700">
+                    <span className="font-bold">この月の祝日: </span>
+                    {holidays.map((h, i) => (
+                      <span key={h.date}>
+                        {i > 0 && "、"}
+                        {new Date(h.date).getDate()}日({h.name})
+                      </span>
+                    ))}
+                    <p className="mt-0.5 text-blue-500">祝日設定はダッシュボードから確認・変更できます。</p>
+                  </div>
+                </div>
+              )}
 
               {/* Parsed shifts summary */}
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">

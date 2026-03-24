@@ -593,12 +593,12 @@ function OverviewTab({
         <div className="flex items-center gap-2 mb-2">
           <h3 className="text-xs font-bold text-gray-800">月別詳細</h3>
         </div>
-        <div className="flex gap-1 items-center mb-2">
-          {([["weekdayNight", "平日当直"], ["satNight", "土曜当直"], ["sunholDay", "日祝日直"], ["sunholNight", "日祝当直"], ["sunholTotal", "日祝合計"]] as const).map(([key, lbl]) => (
+        <div className="flex gap-1 items-center mb-2 overflow-x-auto">
+          {([["weekdayNight", "平日"], ["satNight", "土曜"], ["sunholDay", "日祝日"], ["sunholNight", "日祝夜"], ["sunholTotal", "日祝計"]] as const).map(([key, lbl]) => (
             <button
               key={key}
               onClick={() => setSubTab(key)}
-              className={`rounded-md px-3 py-1 text-xs font-bold transition-colors ${subTab === key ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              className={`shrink-0 rounded-md px-2.5 py-1 text-xs font-bold transition-colors ${subTab === key ? "bg-gray-800 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               {lbl}
             </button>
