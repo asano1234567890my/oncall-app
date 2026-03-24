@@ -4,7 +4,8 @@ import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -98,6 +99,51 @@ async def bulk_lock_doctors(
         "updated_count": updated_count,
         "is_locked": payload.is_locked,
     }
+
+
+class BulkSoftenPayload(BaseModel):
+    soften: bool = True
+
+
+@router.patch("/bulk-soften")
+async def bulk_soften_unavailable_days(
+    payload: BulkSoftenPayload,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    """個別不可日（is_fixed=False）の is_soft_penalty を一括変更。固定不可曜日は対象外。"""
+    try:
+        # Get all doctor IDs for this hospital
+        doctor_result = await db.execute(
+            select(Doctor.id).where(
+                Doctor.hospital_id == hospital_id,
+                Doctor.is_active != False,  # noqa: E712
+            )
+        )
+        doctor_ids = [row[0] for row in doctor_result.all()]
+        if not doctor_ids:
+            return {"message": "対象の医師がいません", "updated_count": 0}
+
+        # Update only date-based entries (is_fixed=False), skip fixed weekdays
+        result = await db.execute(
+            update(UnavailableDay)
+            .where(
+                UnavailableDay.doctor_id.in_(doctor_ids),
+                UnavailableDay.is_fixed == False,  # noqa: E712
+            )
+            .values(is_soft_penalty=payload.soften)
+        )
+        await db.commit()
+
+        action = "ソフト化" if payload.soften else "ハード化（復元）"
+        return {
+            "message": f"個別不可日を一括{action}しました（固定不可曜日は対象外）",
+            "updated_count": result.rowcount,
+            "soften": payload.soften,
+        }
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail="一括更新に失敗しました") from exc
 
 
 @router.get("/{doctor_id}")

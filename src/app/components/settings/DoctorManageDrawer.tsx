@@ -782,6 +782,66 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                   )}
                 </div>
 
+                {/* 一括ソフト化（最終手段） */}
+                <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
+                  <div className="text-xs font-bold text-amber-800 mb-1">解なし対策（最終手段）</div>
+                  <p className="text-[10px] text-amber-700 leading-relaxed mb-2">
+                    スケジュール生成で解が見つからない場合、全医師の個別不可日をソフト制約に変換できます。
+                    ソフト制約はなるべく尊重されますが、必要に応じて無視されます。
+                    <br />
+                    <span className="font-bold">固定不可曜日はハード制約のまま維持されます。</span>
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(
+                          "⚠️ 全医師の個別不可日をソフト制約に変換します。\n\n" +
+                          "・ソフト制約 = なるべく尊重するが、解なし時は無視される\n" +
+                          "・固定不可曜日はハード制約のまま（変更なし）\n\n" +
+                          "実行しますか？"
+                        )) return;
+                        try {
+                          const res = await fetch(`${apiBase()}/api/doctors/bulk-soften`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ soften: true }),
+                          });
+                          if (!res.ok) throw new Error("失敗しました");
+                          const data = await res.json();
+                          toast.success(data.message || "一括ソフト化しました");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "一括ソフト化に失敗しました");
+                        }
+                      }}
+                      className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-200 transition-colors"
+                    >
+                      全不可日をソフト化
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(
+                          "全医師の個別不可日をハード制約に戻します。\n（ソフト化前の状態に復元）\n\n実行しますか？"
+                        )) return;
+                        try {
+                          const res = await fetch(`${apiBase()}/api/doctors/bulk-soften`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ soften: false }),
+                          });
+                          if (!res.ok) throw new Error("失敗しました");
+                          const data = await res.json();
+                          toast.success(data.message || "ハード制約に復元しました");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "復元に失敗しました");
+                        }
+                      }}
+                      className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      ハード制約に戻す
+                    </button>
+                  </div>
+                </div>
+
                 <p className="mt-4 text-xs text-gray-400 text-center">
                   {activeDoctors.length}名 登録中
                 </p>
