@@ -42,12 +42,19 @@ async def get_doctor_by_token(access_token: str, db: AsyncSession = Depends(get_
     if doctor is None:
         raise HTTPException(status_code=404, detail="Doctor not found")
 
-    # Fetch hospital's doctor_message
+    # Fetch hospital settings
     doctor_message = None
+    unavail_day_limit = None
     if doctor.hospital_id:
         raw = await get_system_setting(db, doctor.hospital_id, "doctor_message")
         if raw and isinstance(raw, str):
             doctor_message = raw
+        raw_limit = await get_system_setting(db, doctor.hospital_id, "unavail_day_limit")
+        if raw_limit is not None:
+            try:
+                unavail_day_limit = int(raw_limit)
+            except (TypeError, ValueError):
+                pass
 
     return {
         "id": str(doctor.id),
@@ -60,6 +67,7 @@ async def get_doctor_by_token(access_token: str, db: AsyncSession = Depends(get_
             for unavailable_day in (doctor.unavailable_days or [])
         ],
         "doctor_message": doctor_message,
+        "unavail_day_limit": unavail_day_limit,
     }
 
 

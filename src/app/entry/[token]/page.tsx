@@ -118,6 +118,7 @@ export default function EntryPage() {
   const [selectedEntries, setSelectedEntries] = useState<UnavailableDateEntry[]>([]);
   const [fixedWeekdayEntries, setFixedWeekdayEntries] = useState<FixedUnavailableWeekdayEntry[]>([]);
   const [doctorMessage, setDoctorMessage] = useState<string | null>(null);
+  const [unavailDayLimit, setUnavailDayLimit] = useState<number | null>(null);
   const [month, setMonth] = useState<Date>(() => getNextMonthDate());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -204,7 +205,7 @@ export default function EntryPage() {
       }
       if (!res.ok) throw new Error("取得に失敗しました");
 
-      const data: PublicDoctor & { doctor_message?: string | null } = await res.json();
+      const data: PublicDoctor & { doctor_message?: string | null; unavail_day_limit?: number | null } = await res.json();
       const normalizedDoctor: PublicDoctor = {
         ...data,
         fixed_weekdays: toFixedWeekdayEntriesFromDoctor(data),
@@ -212,6 +213,7 @@ export default function EntryPage() {
       setDoctor(normalizedDoctor);
       setFixedWeekdayEntries(normalizedDoctor.fixed_weekdays ?? []);
       if (data.doctor_message) setDoctorMessage(data.doctor_message);
+      if (data.unavail_day_limit != null) setUnavailDayLimit(data.unavail_day_limit);
 
       const selected = toUnavailableEntriesFromDoctor(normalizedDoctor);
       setSelectedEntries(selected);
@@ -246,20 +248,28 @@ export default function EntryPage() {
 
   const isHolidayLikeDate = (date: Date) => date.getDay() === 0 || mergedHolidaySet.has(ymd(date));
 
+  const isAtLimit = unavailDayLimit !== null && unavailableCounts.total >= unavailDayLimit;
+
   const handleDayClick = (day: Date) => {
     if (locked) return;
 
     const dateKey = ymd(day);
     if (!isUnavailableDateInMonth(dateKey, displayedYear, displayedMonthNumber)) return;
 
+    // すでに選択済みの日は解除可能（上限関係なし）
+    const currentValue = getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, dateKey);
+
     if (isHolidayLikeDate(day)) {
       setPopover({ dateKey });
       return;
     }
 
+    // 新規追加で上限に達している場合はブロック
+    if (!currentValue && isAtLimit) return;
+
     setSelectedEntries((prev) => {
-      const currentValue = getUnavailableDateTargetShift(prev, dateKey);
-      return setUnavailableDateTargetShift(prev, dateKey, currentValue ? null : "all");
+      const existing = getUnavailableDateTargetShift(prev, dateKey);
+      return setUnavailableDateTargetShift(prev, dateKey, existing ? null : "all");
     });
   };
 
@@ -495,6 +505,9 @@ export default function EntryPage() {
                       currentValue={popover ? getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, popover.dateKey) : null}
                       onSelect={(value) => {
                         if (!popover) return;
+                        // 新規追加で上限に達している場合はブロック（解除・変更は許可）
+                        const existing = getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, popover.dateKey);
+                        if (!existing && value && isAtLimit) return;
                         setSelectedEntries((prev) => setUnavailableDateTargetShift(prev, popover.dateKey, value));
                       }}
                       onClose={() => setPopover(null)}
@@ -504,11 +517,18 @@ export default function EntryPage() {
 
                 <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
                   <span>選択中</span>
-                  <span className="text-sm font-bold text-slate-900">{unavailableCounts.total}件</span>
+                  <span className={`text-sm font-bold ${isAtLimit ? "text-red-600" : "text-slate-900"}`}>
+                    {unavailableCounts.total}{unavailDayLimit !== null ? `/${unavailDayLimit}` : ""}件
+                  </span>
                   <span>終日 {unavailableCounts.all}</span>
                   <span className="text-amber-700">日直のみ {unavailableCounts.day}</span>
                   <span className="text-sky-700">当直のみ {unavailableCounts.night}</span>
                 </div>
+                {isAtLimit && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">
+                    不可日の上限（{unavailDayLimit}日）に達しています。追加するには既存の不可日を解除してください。
+                  </div>
+                )}
               </section>
 
               {/* 確定シフト一覧 */}

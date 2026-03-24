@@ -221,6 +221,11 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const [doctorMessageSaved, setDoctorMessageSaved] = useState("");
   const [savingMessage, setSavingMessage] = useState(false);
 
+  // 不可日の上限
+  const [unavailLimit, setUnavailLimit] = useState<string>("");
+  const [unavailLimitSaved, setUnavailLimitSaved] = useState<string>("");
+  const [savingLimit, setSavingLimit] = useState(false);
+
   // ファイル取込
   const [importStep, setImportStep] = useState<"idle" | "parsing" | "confirm">("idle");
   const [importNames, setImportNames] = useState<string[]>([]);
@@ -251,15 +256,24 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
       setError("");
       setEditingId(null);
       setNewName("");
-      // Fetch doctor_message
+      // Fetch doctor_message + unavail_day_limit
       void (async () => {
         try {
-          const res = await fetch(`${apiBase()}/api/settings/kv/doctor_message`, { headers: getAuthHeaders() });
-          if (res.ok) {
-            const data = await res.json();
+          const [msgRes, limitRes] = await Promise.all([
+            fetch(`${apiBase()}/api/settings/kv/doctor_message`, { headers: getAuthHeaders() }),
+            fetch(`${apiBase()}/api/settings/kv/unavail_day_limit`, { headers: getAuthHeaders() }),
+          ]);
+          if (msgRes.ok) {
+            const data = await msgRes.json();
             const val = typeof data.value === "string" ? data.value : "";
             setDoctorMessage(val);
             setDoctorMessageSaved(val);
+          }
+          if (limitRes.ok) {
+            const data = await limitRes.json();
+            const val = data.value != null ? String(data.value) : "";
+            setUnavailLimit(val);
+            setUnavailLimitSaved(val);
           }
         } catch { /* ignore */ }
       })();
@@ -710,6 +724,53 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                       className="mt-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
                       {savingMessage ? "保存中..." : "保存"}
+                    </button>
+                  )}
+                </div>
+
+                {/* 個別不可日の上限 */}
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-600 mb-1.5">個別不可日の上限</div>
+                  <p className="text-[10px] text-gray-400 mb-2">医師1人あたりの月間不可日数の上限（空欄=無制限）</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="0"
+                      max="31"
+                      value={unavailLimit}
+                      onChange={(e) => setUnavailLimit(e.target.value)}
+                      placeholder="無制限"
+                      className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-gray-500">日 / 月</span>
+                    {unavailLimit && (
+                      <button
+                        onClick={() => setUnavailLimit("")}
+                        className="rounded-lg border border-gray-200 px-2 py-1.5 text-[10px] text-gray-500 hover:bg-gray-100 transition-colors"
+                      >
+                        クリア
+                      </button>
+                    )}
+                  </div>
+                  {unavailLimit !== unavailLimitSaved && (
+                    <button
+                      disabled={savingLimit}
+                      onClick={async () => {
+                        setSavingLimit(true);
+                        try {
+                          const res = await fetch(`${apiBase()}/api/settings/kv/unavail_day_limit`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+                            body: JSON.stringify({ value: unavailLimit || null }),
+                          });
+                          if (res.ok) setUnavailLimitSaved(unavailLimit);
+                        } catch { /* ignore */ }
+                        setSavingLimit(false);
+                      }}
+                      className="mt-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {savingLimit ? "保存中..." : "保存"}
                     </button>
                   )}
                 </div>
