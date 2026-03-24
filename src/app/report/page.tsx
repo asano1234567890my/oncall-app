@@ -125,13 +125,26 @@ export default function ReportPage() {
         sunholNight: Array(12).fill(0) as number[],
       });
     }
+
+    // Build set of (doctor_id, date) with day shifts for combined detection
+    const dayShiftKeys = new Set<string>();
+    for (const s of data.shifts) {
+      if (s.shift_type === "day") dayShiftKeys.add(`${s.doctor_id}_${s.date}`);
+    }
+
     for (const s of data.shifts) {
       const entry = map.get(s.doctor_id);
       if (!entry) continue;
       const m = parseInt(s.date.substring(5, 7), 10) - 1;
       if (s.shift_type === "night") {
         if (isSaturdayDate(s.date)) entry.satNight[m]++;
-        else if (isSundayOrHoliday(s.date, holidaySet)) entry.sunholNight[m]++;
+        else if (isSundayOrHoliday(s.date, holidaySet)) {
+          entry.sunholNight[m]++;
+          // Combined: holiday night without day shift → also count as sunholDay for scoring
+          if (!dayShiftKeys.has(`${s.doctor_id}_${s.date}`)) {
+            entry.sunholDay[m]++;
+          }
+        }
         else entry.weekdayNight[m]++;
       } else {
         // Day shifts only exist on sunhol/sat — count sunhol day shifts

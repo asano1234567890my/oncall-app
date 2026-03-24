@@ -86,7 +86,13 @@ def score_historical_shift(
     shift_type: str,
     holiday_dates: set[date],
     shift_scores: dict[str, float] | None = None,
+    is_combined_holiday: bool = False,
 ) -> float:
+    """1シフトのスコアを計算する。
+
+    is_combined_holiday: 日祝のnightシフトで、同日同医師のdayシフトがない場合True。
+    この場合nightのスコアをholiday_day + holiday_nightの合算にする。
+    """
     ss = shift_scores or DEFAULT_SHIFT_SCORES
     normalized = str(shift_type).strip()
     normalized_lower = normalized.lower()
@@ -97,6 +103,8 @@ def score_historical_shift(
 
     if normalized in NIGHT_SHIFT_TYPES or normalized_lower in NIGHT_SHIFT_TYPES:
         if is_sunday_or_holiday:
+            if is_combined_holiday:
+                return ss.get("holiday_day", 0.5) + ss.get("holiday_night", 1.0)
             return ss.get("holiday_night", 1.0)
         return ss.get("saturday_night", 1.5) if shift_date.weekday() == 5 else ss.get("weekday_night", 1.0)
 
@@ -170,13 +178,29 @@ async def build_past_total_scores(
     raw_scores: Dict[UUID, float] = {doctor_id: 0.0 for doctor_id in doctor_id_list}
     history_counts: Dict[UUID, int] = {doctor_id: 0 for doctor_id in doctor_id_list}
 
-    for doctor_id, shift_date, shift_type in result.all():
+    # Collect all shifts, then detect combined holidays
+    all_shifts = result.all()
+
+    # Build a set of (doctor_id, date) that have day shifts
+    day_shift_keys: set[tuple[UUID, date]] = set()
+    for doctor_id, shift_date, shift_type in all_shifts:
+        normalized = str(shift_type).strip().lower()
+        if normalized in DAY_SHIFT_TYPES or shift_type in DAY_SHIFT_TYPES:
+            day_shift_keys.add((doctor_id, shift_date))
+
+    for doctor_id, shift_date, shift_type in all_shifts:
         history_counts[doctor_id] += 1
+        # Detect combined: night on holiday without a day shift for same doctor/date
+        normalized = str(shift_type).strip().lower()
+        is_night = normalized in NIGHT_SHIFT_TYPES or shift_type in NIGHT_SHIFT_TYPES
+        is_sunhol = shift_date.weekday() == 6 or shift_date in holiday_dates
+        is_combined = is_night and is_sunhol and (doctor_id, shift_date) not in day_shift_keys
         raw_scores[doctor_id] += score_historical_shift(
             shift_date=shift_date,
             shift_type=shift_type,
             holiday_dates=holiday_dates,
             shift_scores=shift_scores,
+            is_combined_holiday=is_combined,
         )
 
     return apply_history_score_baseline(raw_scores, history_counts)

@@ -59,8 +59,10 @@ export function useRealtimeScores({
       }
 
       if (row.night_shift) {
+        // Combined detection: holiday night without a day shift → score as day + night
+        const isCombinedHoliday = isSundayOrHoliday && !row.day_shift;
         const nightWeight = isSundayOrHoliday
-          ? ss.holiday_night
+          ? (isCombinedHoliday ? ss.holiday_day + ss.holiday_night : ss.holiday_night)
           : isSaturday
             ? ss.saturday_night
             : ss.weekday_night;
