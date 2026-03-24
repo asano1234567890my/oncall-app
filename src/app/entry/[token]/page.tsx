@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar } from "lucide-react";
+import { Calendar, CalendarCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
@@ -122,6 +122,7 @@ export default function EntryPage() {
   const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [popover, setPopover] = useState<{ dateKey: string } | null>(null);
+  const [confirmedShifts, setConfirmedShifts] = useState<{ date: string; shift_type: string }[]>([]);
 
   const locked = Boolean(doctor?.is_locked);
   const displayedYear = month.getFullYear();
@@ -210,6 +211,17 @@ export default function EntryPage() {
 
       const selected = toUnavailableEntriesFromDoctor(normalizedDoctor);
       setSelectedEntries(selected);
+
+      // 確定シフトを取得
+      try {
+        const shiftRes = await fetch(`${getApiBase()}/api/schedule/public-shifts/${token}`, { cache: "no-store" });
+        if (shiftRes.ok) {
+          const shifts: { date: string; shift_type: string }[] = await shiftRes.json();
+          setConfirmedShifts(shifts);
+        }
+      } catch {
+        // シフト取得失敗は無視（不可日入力には影響しない）
+      }
 
     } catch (e) {
       console.error(e);
@@ -339,27 +351,6 @@ export default function EntryPage() {
             </div>
           </div>
 
-          <div className="mt-4 space-y-2">
-            <Link
-              href="/view"
-              className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
-            >
-              <Calendar className="inline h-4 w-4 mr-1 align-middle" />確定した当直表を見る
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                const apiBase = getApiBase();
-                const icalUrl = `${apiBase}/api/schedule/ical/${token}`;
-                void navigator.clipboard.writeText(icalUrl);
-                toast.success("カレンダーURLをコピーしました。Googleカレンダーの「URLで追加」に貼り付けてください。");
-              }}
-              className="block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-800 hover:bg-gray-50"
-            >
-              <Calendar className="inline h-4 w-4 mr-1 align-middle" />Googleカレンダーに登録
-            </button>
-          </div>
-
           {locked && !isLoading && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-800">
               入力期間は終了しています（確認のみ可能です）
@@ -468,6 +459,63 @@ export default function EntryPage() {
                   <span className="text-sky-700">当直のみ {unavailableCounts.night}</span>
                 </div>
               </section>
+
+              {/* 確定シフト一覧 */}
+              {confirmedShifts.length > 0 && (
+                <section className="mt-6">
+                  <div className="flex items-center gap-1.5 text-sm font-bold text-gray-700">
+                    <CalendarCheck className="h-4 w-4 text-green-600" />
+                    あなたの確定シフト
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {confirmedShifts.map((s) => {
+                      const d = new Date(s.date + "T00:00:00");
+                      const weekday = ["日", "月", "火", "水", "木", "金", "土"][d.getDay()];
+                      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                      const isHol = mergedHolidaySet.has(s.date);
+                      const label = s.shift_type === "day" ? "日直" : "当直";
+                      return (
+                        <div key={`${s.date}-${s.shift_type}`}
+                          className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                            isHol || d.getDay() === 0
+                              ? "border-red-100 bg-red-50/50"
+                              : d.getDay() === 6
+                                ? "border-blue-100 bg-blue-50/50"
+                                : "border-gray-100 bg-white"
+                          }`}>
+                          <span className={`font-medium ${isHol || d.getDay() === 0 ? "text-red-700" : isWeekend ? "text-blue-700" : "text-gray-800"}`}>
+                            {d.getMonth() + 1}/{d.getDate()}({weekday})
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                            s.shift_type === "day"
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-indigo-100 text-indigo-800"
+                          }`}>{label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const apiBase = getApiBase();
+                      const icalUrl = `${apiBase}/api/schedule/ical/${token}`;
+                      const webcalUrl = icalUrl.replace(/^https?:\/\//, "webcal://");
+                      const googleUrl = `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(webcalUrl)}`;
+                      window.open(googleUrl, "_blank");
+                    }}
+                    className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800 transition hover:bg-green-100"
+                  >
+                    <Calendar className="h-4 w-4" />Googleカレンダーに登録
+                  </button>
+                  <Link
+                    href="/view"
+                    className="mt-2 block w-full rounded-lg border bg-white px-4 py-3 text-center text-sm font-bold text-gray-600 hover:bg-gray-50"
+                  >
+                    全体の当直表を見る
+                  </Link>
+                </section>
+              )}
 
               {error && (
                 <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">

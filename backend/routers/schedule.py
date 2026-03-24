@@ -159,6 +159,43 @@ async def get_ical_feed(
     )
 
 
+@router.get("/public-shifts/{doctor_token}")
+async def get_public_shifts(
+    doctor_token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """医師トークンからその医師の確定済みシフトをJSON返却。認証不要。"""
+    result = await db.execute(
+        select(Doctor).where(Doctor.access_token == doctor_token)
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    today = datetime.date.today()
+    start = today.replace(day=1) - datetime.timedelta(days=90)
+    end = today + datetime.timedelta(days=180)
+
+    shift_result = await db.execute(
+        select(ShiftAssignment)
+        .where(
+            ShiftAssignment.doctor_id == doctor.id,
+            ShiftAssignment.date >= start,
+            ShiftAssignment.date <= end,
+        )
+        .order_by(ShiftAssignment.date)
+    )
+    assignments = shift_result.scalars().all()
+
+    return [
+        {
+            "date": str(a.date),
+            "shift_type": a.shift_type,
+        }
+        for a in assignments
+    ]
+
+
 @router.post("/save")
 async def save_schedule(
     req: SaveScheduleRequest,
