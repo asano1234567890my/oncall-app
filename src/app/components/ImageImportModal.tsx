@@ -62,6 +62,9 @@ export default function ImageImportModal({
   // Holidays for target month
   const [holidays, setHolidays] = useState<{ date: string; name: string }[]>([]);
 
+  // Shift mode from current config
+  const [currentShiftMode, setCurrentShiftMode] = useState<"split" | "combined">("split");
+
   // Doctor mappings
   const [mappings, setMappings] = useState<DoctorMapping[]>([]);
 
@@ -175,6 +178,15 @@ export default function ImageImportModal({
       setYearMonthGuessed(guessed);
       if (result.year) setYear(result.year);
       if (result.month) setMonth(result.month);
+
+      // Fetch current shift mode
+      try {
+        const cfgRes = await fetch(`${API_BASE}/api/settings/optimizer_config`, { headers: getAuthHeaders() });
+        if (cfgRes.ok) {
+          const cfg = await cfgRes.json();
+          setCurrentShiftMode(cfg?.hard_constraints?.holiday_shift_mode === "combined" ? "combined" : "split");
+        }
+      } catch { /* ignore */ }
 
       // Build initial mappings with auto-match
       const names = extractDoctorNames(result.shifts);
@@ -403,6 +415,28 @@ export default function ImageImportModal({
                   </div>
                 </div>
               )}
+
+              {/* Shift mode mismatch detection */}
+              {(() => {
+                const hasDayShift = parsed.shifts.some((s) => s.day_shift);
+                const hasNightShift = parsed.shifts.some((s) => s.night_shift);
+                const importedMode = hasDayShift && hasNightShift ? "split" : "combined";
+                if (importedMode !== currentShiftMode) {
+                  return (
+                    <div className="flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                      <div className="text-[10px] text-amber-700">
+                        {importedMode === "split" ? (
+                          <><span className="font-bold">取込データに日直と当直が別々に含まれています。</span>現在の設定は「日当直（一体型）」です。取込後、ダッシュボードで設定を確認してください。</>
+                        ) : (
+                          <><span className="font-bold">取込データに日直が含まれていません。</span>現在の設定は「日直＋当直（分離型）」です。取込後、ダッシュボードで設定を確認してください。</>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               {/* Parsed shifts summary */}
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
