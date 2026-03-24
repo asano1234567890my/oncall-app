@@ -21,7 +21,7 @@ export function useOnCallCore() {
   const autoLoadDraftRef = useRef<string | null>(null);
 
   // ── 履歴管理 ──
-  const { schedule, setSchedule, commitSchedule, commitScheduleFrom, clearHistory, undo, redo, canUndo, canRedo, changedShiftKeys } = useScheduleHistory();
+  const { schedule, setSchedule, commitSchedule, commitScheduleFrom, resetSchedule, clearHistory, undo, redo, canUndo, canRedo, changedShiftKeys } = useScheduleHistory();
   const [, setScores] = useState<Record<string, number | string>>({});
   const savedScheduleSignatureRef = useRef<string>(getScheduleSignature([]));
   const latestScheduleRef = useRef<ScheduleRow[]>([]);
@@ -262,8 +262,12 @@ export function useOnCallCore() {
   useEffect(() => {
     setPrevMonthLastDay(calcPrevMonthLastDay(year, month));
     setPreviousMonthShifts([]);
-    clearHistory();
-  }, [year, month, clearHistory]);
+    resetSchedule();
+    setScores({});
+    savedScheduleSignatureRef.current = getScheduleSignature([]);
+    dirtyRef.current = false;
+    setIsDirty(false);
+  }, [year, month, resetSchedule]);
 
   useEffect(() => {
     const controller = new AbortController();

@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   DiagnoseResponse,
   DiagnoseResult,
@@ -136,6 +136,14 @@ export function useScheduleApi({
   const [diagnostics, setDiagnostics] = useState<DiagnosticInfo | null>(null);
   const [isDiagnosing, setIsDiagnosing] = useState(false);
   const [diagnoseResult, setDiagnoseResult] = useState<DiagnoseResult | null>(null);
+
+  // Reset transient state when year/month changes
+  useEffect(() => {
+    setError("");
+    setDiagnostics(null);
+    setDiagnoseResult(null);
+    setSaveMessage("");
+  }, [year, month]);
 
   const { getUnsavedDoctorNames, saveAllDoctorsSettings, refetchDoctors } = useDoctorSettings({
     activeDoctors,
