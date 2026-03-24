@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff, HelpCircle, ChevronDown, Image } from "lucide-react";
+import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { domToPng } from "modern-screenshot";
@@ -458,7 +459,10 @@ export default function ViewSchedulePage() {
                         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                         body: JSON.stringify({ value: publishComment }),
                       });
-                      if (res.ok) setPublishCommentSaved(publishComment);
+                      if (res.ok) {
+                        setPublishCommentSaved(publishComment);
+                        toast.success("保存しました");
+                      }
                     } catch { /* ignore */ }
                     setSavingComment(false);
                   }}

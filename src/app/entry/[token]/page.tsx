@@ -122,7 +122,6 @@ export default function EntryPage() {
   const [month, setMonth] = useState<Date>(() => getNextMonthDate());
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [message, setMessage] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [popover, setPopover] = useState<{ dateKey: string } | null>(null);
   const [confirmedShifts, setConfirmedShifts] = useState<{ date: string; shift_type: string }[]>([]);
@@ -192,7 +191,6 @@ export default function EntryPage() {
 
     setIsLoading(true);
     setInvalid(false);
-    setMessage("");
     setError("");
 
     try {
@@ -277,7 +275,6 @@ export default function EntryPage() {
     if (!token || locked) return;
 
     setIsSaving(true);
-    setMessage("");
     setError("");
 
     try {
@@ -324,7 +321,6 @@ export default function EntryPage() {
       }
 
       await fetchDoctor();
-      setMessage("保存しました");
       toast.success("保存しました");
     } catch (e) {
       console.error(e);
@@ -602,12 +598,6 @@ export default function EntryPage() {
               {error && (
                 <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
                   {error}
-                </div>
-              )}
-
-              {message && (
-                <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-800">
-                  {message}
                 </div>
               )}
             </>

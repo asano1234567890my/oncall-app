@@ -28,7 +28,16 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <ServerStatusBanner />
-        <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
+        <Toaster
+          position="bottom-center"
+          containerStyle={{ bottom: 100 }}
+          toastOptions={{
+            duration: 1500,
+            success: { duration: 1500 },
+            error: { duration: 3000 },
+            style: { fontSize: "14px", borderRadius: "10px", padding: "10px 16px" },
+          }}
+        />
         {children}
       </body>
     </html>

@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X, Upload } from "lucide-react";
+import { toast } from "react-hot-toast";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getAuthHeaders } from "../../hooks/useAuth";
 
@@ -717,7 +718,10 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                             body: JSON.stringify({ value: doctorMessage }),
                           });
-                          if (res.ok) setDoctorMessageSaved(doctorMessage);
+                          if (res.ok) {
+                            setDoctorMessageSaved(doctorMessage);
+                            toast.success("保存しました");
+                          }
                         } catch { /* ignore */ }
                         setSavingMessage(false);
                       }}
@@ -764,7 +768,10 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                             headers: { "Content-Type": "application/json", ...getAuthHeaders() },
                             body: JSON.stringify({ value: unavailLimit || null }),
                           });
-                          if (res.ok) setUnavailLimitSaved(unavailLimit);
+                          if (res.ok) {
+                            setUnavailLimitSaved(unavailLimit);
+                            toast.success("保存しました");
+                          }
                         } catch { /* ignore */ }
                         setSavingLimit(false);
                       }}
