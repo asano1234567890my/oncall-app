@@ -422,15 +422,43 @@ export default function ImageImportModal({
                 const hasNightShift = parsed.shifts.some((s) => s.night_shift);
                 const importedMode = hasDayShift && hasNightShift ? "split" : "combined";
                 if (importedMode !== currentShiftMode) {
+                  const switchMode = async () => {
+                    try {
+                      const cfgRes = await fetch(`${API_BASE}/api/settings/optimizer_config`, { headers: getAuthHeaders() });
+                      if (!cfgRes.ok) return;
+                      const cfg = await cfgRes.json();
+                      const updated = {
+                        ...cfg,
+                        hard_constraints: { ...cfg.hard_constraints, holiday_shift_mode: importedMode },
+                      };
+                      await fetch(`${API_BASE}/api/settings/optimizer_config`, {
+                        method: "PUT",
+                        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+                        body: JSON.stringify(updated),
+                      });
+                      setCurrentShiftMode(importedMode);
+                    } catch { /* ignore */ }
+                  };
                   return (
-                    <div className="flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 p-2.5">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
-                      <div className="text-[10px] text-amber-700">
-                        {importedMode === "split" ? (
-                          <><span className="font-bold">取込データに日直と当直が別々に含まれています。</span>現在の設定は「日当直（一体型）」です。取込後、ダッシュボードで設定を確認してください。</>
-                        ) : (
-                          <><span className="font-bold">取込データに日直が含まれていません。</span>現在の設定は「日直＋当直（分離型）」です。取込後、ダッシュボードで設定を確認してください。</>
-                        )}
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 space-y-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="text-[10px] text-amber-700">
+                          {importedMode === "split" ? (
+                            <><span className="font-bold">取込データに日直と当直が別々に含まれています。</span>現在の設定は「日当直（一体型）」です。</>
+                          ) : (
+                            <><span className="font-bold">取込データに日直が含まれていません。</span>現在の設定は「日直＋当直（分離型）」です。</>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 ml-5">
+                        <button
+                          onClick={() => { void switchMode(); }}
+                          className="rounded-md bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-amber-700 transition-colors"
+                        >
+                          {importedMode === "split" ? "日直＋当直に切替" : "日当直に切替"}
+                        </button>
+                        <span className="text-[10px] text-amber-500 self-center">このまま取込むこともできます</span>
                       </div>
                     </div>
                   );

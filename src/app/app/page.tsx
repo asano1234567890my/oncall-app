@@ -25,6 +25,7 @@ import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
 import ImageImportModal from "../components/ImageImportModal";
+import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
 import type { HardConstraints, ShiftScores } from "../types/dashboard";
@@ -242,6 +243,13 @@ export default function AppPage() {
 
           <main className="mx-auto w-full max-w-5xl px-4 py-4">
             {core.isLoading && <LoadingOverlay />}
+
+            <HolidayMismatchBanner
+              mismatchDays={core.holidayMismatchDays}
+              onAddHolidays={core.addHolidaysForMismatch}
+              onSaveCustomHolidays={core.saveCustomHolidays}
+              isSaving={core.isSavingCustom}
+            />
 
             {hasSchedule ? (
               <MobileScheduleBoard

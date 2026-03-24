@@ -15,6 +15,7 @@ import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
 import ImageImportModal from "../components/ImageImportModal";
+import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
@@ -154,6 +155,14 @@ export default function DashboardPage() {
             onCreateBlank={core.handleCreateBlankSchedule}
             hasSchedule={core.schedule.length > 0}
             onOpenImport={() => setShowImportModal(true)}
+          />
+
+          {/* Holiday mismatch warning */}
+          <HolidayMismatchBanner
+            mismatchDays={core.holidayMismatchDays}
+            onAddHolidays={core.addHolidaysForMismatch}
+            onSaveCustomHolidays={core.saveCustomHolidays}
+            isSaving={core.isSavingCustom}
           />
 
           {/* Schedule table */}

@@ -446,6 +446,30 @@ export function useOnCallCore() {
     };
   }, [objectiveWeights]);
 
+  // ── 祝日不整合の検知 ──
+  const holidayMismatchDays = useMemo(() => {
+    if (schedule.length === 0) return [];
+    const mismatches: { day: number; ymd: string }[] = [];
+    for (const row of schedule) {
+      if (!row.day_shift) continue;
+      const { isHolidayLike, ymd } = isHolidayLikeDay(row.day);
+      if (!isHolidayLike) {
+        mismatches.push({ day: row.day, ymd });
+      }
+    }
+    return mismatches;
+  }, [schedule, holidaySet, manualHolidaySetInMonth, year, month]);
+
+  const addHolidaysForMismatch = () => {
+    setManualHolidaySetYear((prev) => {
+      const next = new Set(prev);
+      for (const m of holidayMismatchDays) {
+        next.add(m.ymd);
+      }
+      return next;
+    });
+  };
+
   const daysInMonth = getDaysInMonth(year, month);
 
   // ── 白紙作成 ──
@@ -533,6 +557,7 @@ export function useOnCallCore() {
     isLoadingCustom, isSavingCustom, customError,
     customSaveMessage, hasUnsavedCustomChanges,
     saveCustomHolidays, toggleHoliday, handleHolidayOverrideToggle,
+    holidayMismatchDays, addHolidaysForMismatch,
 
     // D&D
     ...dndState,
