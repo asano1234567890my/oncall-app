@@ -169,7 +169,10 @@ def _call_gemini_text(prompt: str, text: str) -> str:
 
 # ── 当直表 画像取込 ──────────────────────────────────────
 
-SCHEDULE_ACCEPTED_EXTENSIONS = ACCEPTED_EXTENSIONS | {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+ACCEPTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
+                       ".xlsx", ".xls", ".docx", ".pdf", ".txt", ".csv"}
+
+SCHEDULE_ACCEPTED_EXTENSIONS = ACCEPTED_EXTENSIONS
 
 
 @router.post("/parse-image")
@@ -300,9 +303,6 @@ async def confirm_import(
 
 
 # ── 医師名 一括取込 ──────────────────────────────────────
-
-ACCEPTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp",
-                       ".xlsx", ".xls", ".docx", ".pdf", ".txt", ".csv"}
 
 
 @router.post("/parse-doctors")

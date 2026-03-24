@@ -305,7 +305,7 @@ function OverviewTab({
   const [highlightDoctorId, setHighlightDoctorId] = useState<string | null>(null);
 
   // Custom target score per month (initialized from optimizer config)
-  const [customTarget, setCustomTarget] = useState(() => (targetScore.min + targetScore.max) / 2);
+  const [customTarget, setCustomTarget] = useState(() => Math.round((targetScore.min + targetScore.max) / 2 * 2) / 2);
 
   // Auto-detect last month with data
   const lastDataMonth = useMemo(() => {
@@ -501,13 +501,14 @@ function OverviewTab({
       </div>
 
       {/* ── Summary table: all shift types at a glance ── */}
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-baseline gap-2 px-3 pt-2 pb-1">
           <h3 className="text-xs font-bold text-gray-800">回数サマリー</h3>
           <span className="text-[10px] text-gray-400">
             {rangeStart === 0 && rangeEnd === 11 ? `${year}年` : `${year}年 ${rangeStart + 1}月〜${rangeEnd + 1}月`}
           </span>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-xs sm:text-sm border-collapse">
           <thead>
             <tr className="bg-gray-50 text-gray-500">
@@ -584,6 +585,7 @@ function OverviewTab({
             </tr>
           </tfoot>
         </table>
+        </div>
       </div>
 
       {/* ── Monthly detail ── */}
