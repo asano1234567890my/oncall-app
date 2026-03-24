@@ -1,20 +1,41 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { BarChart3, User, ChevronLeft, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BarChart3, User, ChevronLeft, ChevronRight, HelpCircle, X, Filter } from "lucide-react";
 import AppHeader from "../components/AppHeader";
 import { getAuthHeaders, useAuth } from "../hooks/useAuth";
 import { useHolidays } from "../hooks/useHolidays";
 import { useCustomHolidays } from "../hooks/useCustomHolidays";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-const MONTH_LABELS = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
 const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"] as const;
 
 type DoctorInfo = { id: string; name: string };
 type ShiftEntry = { date: string; doctor_id: string; shift_type: string };
 type StatsData = { doctors: DoctorInfo[]; shifts: ShiftEntry[]; holidays: string[] };
 type MonthlyCounts = { weekdayNight: number[]; satNight: number[]; sunholDay: number[]; sunholNight: number[] };
+type MonthSlot = { year: number; month: number };
+
+/** 基準月から過去12ヶ月のスロット配列を生成 */
+function computeMonthSlots(baseYear: number, baseMonth: number): MonthSlot[] {
+  const slots: MonthSlot[] = [];
+  for (let i = 11; i >= 0; i--) {
+    let m = baseMonth - i;
+    let y = baseYear;
+    while (m <= 0) { m += 12; y--; }
+    slots.push({ year: y, month: m });
+  }
+  return slots;
+}
+
+/** スロットの表示ラベル（年またぎ時は "4月'25" 形式、同年なら "4月"） */
+function slotLabel(slot: MonthSlot, slots: MonthSlot[]): string {
+  const hasMultipleYears = slots[0].year !== slots[slots.length - 1].year;
+  if (hasMultipleYears) {
+    return `${slot.month}月'${String(slot.year).slice(2)}`;
+  }
+  return `${slot.month}月`;
+}
 
 // ── Score weights (must match optimizer) ──
 const SCORE_WEEKDAY_NIGHT = 1.0;
@@ -43,49 +64,205 @@ function getWeekday(year: number, month: number, day: number) {
   return WEEKDAY_LABELS[new Date(year, month - 1, day).getDay()];
 }
 
+// ── Help tooltip ──
+
+function HelpTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setOpen(false)}
+        className="ml-0.5 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+        aria-label="ヘルプ"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-2.5 text-[11px] leading-relaxed text-gray-600 shadow-lg">
+          {text}
+          <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-white" />
+        </div>
+      )}
+    </span>
+  );
+}
+
+// ── Initial wizard ──
+
+const WIZARD_STORAGE_KEY = "report_wizard_dismissed";
+
+function ReportWizard({ onDismiss }: { onDismiss: () => void }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    {
+      title: "レポート画面へようこそ",
+      body: "ここでは、当直・日直の回数やスコアを直近12ヶ月間で可視化できます。医師ごとの負担バランスが一目でわかります。",
+    },
+    {
+      title: "「全体」タブ",
+      body: "医師全員のスコア比較（目標との乖離）、累積推移グラフ、回数サマリー、月別詳細を確認できます。",
+    },
+    {
+      title: "「各医師」タブ",
+      body: "医師を選択すると、その医師のカレンダー、年間集計、月別当直回数の棒グラフを表示します。",
+    },
+    {
+      title: "期間と目標の調整",
+      body: "基準月を変えると過去12ヶ月の対象期間が移動します。「期間」で範囲を絞り込み、「目標」でスコア基準値を変更できます。各セクションの「?」マークで詳しい説明も見られます。",
+    },
+  ];
+  const s = steps[step];
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+        <div className="flex items-start justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-800">{s.title}</h2>
+          <button onClick={onDismiss} className="rounded p-0.5 text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+        </div>
+        <p className="text-xs text-gray-600 leading-relaxed mb-4">{s.body}</p>
+        <div className="flex items-center justify-between">
+          <div className="flex gap-1">
+            {steps.map((_, i) => (
+              <span key={i} className={`inline-block h-1.5 w-1.5 rounded-full ${i === step ? "bg-blue-600" : "bg-gray-300"}`} />
+            ))}
+          </div>
+          <div className="flex gap-2">
+            {step > 0 && (
+              <button onClick={() => setStep(step - 1)} className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50">
+                戻る
+              </button>
+            )}
+            {step < steps.length - 1 ? (
+              <button onClick={() => setStep(step + 1)} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
+                次へ
+              </button>
+            ) : (
+              <button onClick={onDismiss} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
+                はじめる
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ──
 
 export default function ReportPage() {
   const { auth, logout } = useAuth();
-  const [year, setYear] = useState(() => new Date().getFullYear());
+  const [showWizard, setShowWizard] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return !localStorage.getItem(WIZARD_STORAGE_KEY);
+  });
+  const dismissWizard = () => {
+    setShowWizard(false);
+    localStorage.setItem(WIZARD_STORAGE_KEY, "1");
+  };
+  const now = new Date();
+  const [baseYear, setBaseYear] = useState(() => now.getFullYear());
+  const [baseMonth, setBaseMonth] = useState(() => now.getMonth() + 1);
   const [tab, setTab] = useState<"overview" | "doctor">("overview");
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
-  const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth() + 1);
+  const [selectedSlot, setSelectedSlot] = useState(11); // default: base month (last slot)
   const [data, setData] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(false);
   const [targetScore, setTargetScore] = useState<{ min: number; max: number }>({ min: 0.5, max: 4.5 });
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(11);
-  const { holidaySet: standardHolidaySet } = useHolidays(year);
-  const { manualSet, disabledSet, customError } = useCustomHolidays(year);
+  const [hiddenDoctorIds, setHiddenDoctorIds] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  // Close filter on outside click
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [filterOpen]);
+
+  // 12-month window from base
+  const monthSlots = useMemo(() => computeMonthSlots(baseYear, baseMonth), [baseYear, baseMonth]);
+  const slotLabels = useMemo(() => monthSlots.map(s => slotLabel(s, monthSlots)), [monthSlots]);
+
+  // Years needed for data fetch
+  const fetchYears = useMemo(() => {
+    const years = new Set(monthSlots.map(s => s.year));
+    return [...years].sort();
+  }, [monthSlots]);
+
+  // Holidays for both years
+  const { holidaySet: hol1 } = useHolidays(fetchYears[0]);
+  const { holidaySet: hol2 } = useHolidays(fetchYears.length > 1 ? fetchYears[1] : fetchYears[0]);
+  const { manualSet: manual1, disabledSet: disabled1, customError: cErr1 } = useCustomHolidays(fetchYears[0]);
+  const { manualSet: manual2, disabledSet: disabled2, customError: cErr2 } = useCustomHolidays(fetchYears.length > 1 ? fetchYears[1] : fetchYears[0]);
 
   const mergedHolidaySet = useMemo(() => {
-    const s = new Set<string>(standardHolidaySet);
-    if (customError) return s;
-    for (const d of disabledSet) s.delete(d);
-    for (const d of manualSet) s.add(d);
+    const s = new Set<string>([...hol1, ...hol2]);
+    if (!cErr1) { for (const d of disabled1) s.delete(d); for (const d of manual1) s.add(d); }
+    if (!cErr2) { for (const d of disabled2) s.delete(d); for (const d of manual2) s.add(d); }
     return s;
-  }, [standardHolidaySet, manualSet, disabledSet, customError]);
+  }, [hol1, hol2, manual1, manual2, disabled1, disabled2, cErr1, cErr2]);
 
-  // Merge API holidays + custom holidays
   const holidaySet = useMemo(() => {
     const s = new Set(mergedHolidaySet);
     if (data) for (const h of data.holidays) s.add(h);
     return s;
   }, [mergedHolidaySet, data]);
 
+  // Slot index lookup: "YYYY-MM" → slot index
+  const slotIndexMap = useMemo(() => {
+    const m = new Map<string, number>();
+    monthSlots.forEach((s, i) => m.set(`${s.year}-${pad2(s.month)}`, i));
+    return m;
+  }, [monthSlots]);
+
+  // Base month navigation
+  const moveBase = (delta: number) => {
+    let m = baseMonth + delta;
+    let y = baseYear;
+    while (m > 12) { m -= 12; y++; }
+    while (m <= 0) { m += 12; y--; }
+    setBaseYear(y);
+    setBaseMonth(m);
+  };
+
+  // Fetch stats for all needed years, merge
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     let cancelled = false;
     setLoading(true);
     (async () => {
       try {
-        const [statsRes, configRes] = await Promise.all([
-          fetch(`${API_BASE}/api/schedule/stats?year=${year}`, { headers: getAuthHeaders() }),
+        const fetches = fetchYears.map(y =>
+          fetch(`${API_BASE}/api/schedule/stats?year=${y}`, { headers: getAuthHeaders() })
+        );
+        const [configRes, ...statsResponses] = await Promise.all([
           fetch(`${API_BASE}/api/settings/optimizer_config`, { headers: getAuthHeaders() }),
+          ...fetches,
         ]);
-        if (!statsRes.ok) throw new Error();
-        const d: StatsData = await statsRes.json();
+        // Merge stats
+        const allDoctors = new Map<string, DoctorInfo>();
+        const allShifts: ShiftEntry[] = [];
+        const allHolidays = new Set<string>();
+        for (const res of statsResponses) {
+          if (!res.ok) continue;
+          const d: StatsData = await res.json();
+          for (const doc of d.doctors) allDoctors.set(doc.id, doc);
+          allShifts.push(...d.shifts);
+          for (const h of d.holidays) allHolidays.add(h);
+        }
+        const merged: StatsData = {
+          doctors: [...allDoctors.values()].sort((a, b) => naturalCompare(a.name, b.name)),
+          shifts: allShifts,
+          holidays: [...allHolidays].sort(),
+        };
         if (configRes.ok) {
           const cfg = await configRes.json();
           if (!cancelled && typeof cfg.score_min === "number" && typeof cfg.score_max === "number") {
@@ -93,9 +270,8 @@ export default function ReportPage() {
           }
         }
         if (!cancelled) {
-          d.doctors.sort((a, b) => naturalCompare(a.name, b.name));
-          setData(d);
-          if (!selectedDoctorId && d.doctors.length > 0) setSelectedDoctorId(d.doctors[0].id);
+          setData(merged);
+          if (!selectedDoctorId && merged.doctors.length > 0) setSelectedDoctorId(merged.doctors[0].id);
         }
       } catch {
         if (!cancelled) setData(null);
@@ -104,7 +280,7 @@ export default function ReportPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [auth.isAuthenticated, year]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auth.isAuthenticated, fetchYears.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derived data ──
 
@@ -113,7 +289,7 @@ export default function ReportPage() {
     return new Map(data.doctors.map(d => [d.id, d.name]));
   }, [data]);
 
-  // Per-doctor per-month counts
+  // Per-doctor per-slot counts (12 slots matching monthSlots)
   const monthlyCounts = useMemo(() => {
     if (!data) return new Map<string, MonthlyCounts>();
     const map = new Map<string, MonthlyCounts>();
@@ -126,7 +302,6 @@ export default function ReportPage() {
       });
     }
 
-    // Build set of (doctor_id, date) with day shifts for combined detection
     const dayShiftKeys = new Set<string>();
     for (const s of data.shifts) {
       if (s.shift_type === "day") dayShiftKeys.add(`${s.doctor_id}_${s.date}`);
@@ -135,28 +310,27 @@ export default function ReportPage() {
     for (const s of data.shifts) {
       const entry = map.get(s.doctor_id);
       if (!entry) continue;
-      const m = parseInt(s.date.substring(5, 7), 10) - 1;
+      const ym = s.date.substring(0, 7); // "YYYY-MM"
+      const si = slotIndexMap.get(ym);
+      if (si === undefined) continue; // outside window
       if (s.shift_type === "night") {
-        if (isSaturdayDate(s.date)) entry.satNight[m]++;
+        if (isSaturdayDate(s.date)) entry.satNight[si]++;
         else if (isSundayOrHoliday(s.date, holidaySet)) {
-          entry.sunholNight[m]++;
-          // Combined: holiday night without day shift → also count as sunholDay for scoring
+          entry.sunholNight[si]++;
           if (!dayShiftKeys.has(`${s.doctor_id}_${s.date}`)) {
-            entry.sunholDay[m]++;
+            entry.sunholDay[si]++;
           }
         }
-        else entry.weekdayNight[m]++;
+        else entry.weekdayNight[si]++;
       } else {
-        // Day shifts only exist on sunhol/sat — count sunhol day shifts
-        if (isSundayOrHoliday(s.date, holidaySet)) entry.sunholDay[m]++;
-        // Saturday day shifts are rare; group with sunholDay for simplicity
-        else entry.sunholDay[m]++;
+        if (isSundayOrHoliday(s.date, holidaySet)) entry.sunholDay[si]++;
+        else entry.sunholDay[si]++;
       }
     }
     return map;
-  }, [data, holidaySet]);
+  }, [data, holidaySet, slotIndexMap]);
 
-  // Per-doctor monthly scores (weighted)
+  // Per-doctor slot scores (weighted)
   const monthlyScores = useMemo(() => {
     if (!monthlyCounts) return new Map<string, number[]>();
     const map = new Map<string, number[]>();
@@ -172,10 +346,11 @@ export default function ReportPage() {
     return map;
   }, [monthlyCounts]);
 
-  // Doctor shifts for selected month (calendar)
+  // Doctor shifts for selected slot (calendar)
+  const calendarSlot = monthSlots[selectedSlot] || monthSlots[11];
   const doctorMonthShifts = useMemo(() => {
     if (!data || !selectedDoctorId) return new Map<number, { day: boolean; night: boolean }>();
-    const prefix = `${year}-${pad2(selectedMonth)}`;
+    const prefix = `${calendarSlot.year}-${pad2(calendarSlot.month)}`;
     const map = new Map<number, { day: boolean; night: boolean }>();
     for (const s of data.shifts) {
       if (s.doctor_id !== selectedDoctorId || !s.date.startsWith(prefix)) continue;
@@ -186,18 +361,21 @@ export default function ReportPage() {
       map.set(dayNum, existing);
     }
     return map;
-  }, [data, selectedDoctorId, selectedMonth, year]);
+  }, [data, selectedDoctorId, calendarSlot]);
 
-  // Average interval for selected doctor (filtered by range)
+  // Average interval for selected doctor (filtered by range slots)
   const avgInterval = useMemo(() => {
     if (!data || !selectedDoctorId) return null;
-    const rangeStartMonth = rangeStart + 1;
-    const rangeEndMonth = rangeEnd + 1;
+    // Build set of valid YYYY-MM for range
+    const validMonths = new Set<string>();
+    for (let i = rangeStart; i <= rangeEnd; i++) {
+      const s = monthSlots[i];
+      validMonths.add(`${s.year}-${pad2(s.month)}`);
+    }
     const dates = data.shifts
       .filter(s => {
         if (s.doctor_id !== selectedDoctorId || s.shift_type !== "night") return false;
-        const m = parseInt(s.date.substring(5, 7), 10);
-        return m >= rangeStartMonth && m <= rangeEndMonth;
+        return validMonths.has(s.date.substring(0, 7));
       })
       .map(s => new Date(s.date).getTime())
       .sort((a, b) => a - b);
@@ -205,10 +383,24 @@ export default function ReportPage() {
     let totalGap = 0;
     for (let i = 1; i < dates.length; i++) totalGap += (dates[i] - dates[i - 1]) / 86400000;
     return (totalGap / (dates.length - 1)).toFixed(1);
-  }, [data, selectedDoctorId, rangeStart, rangeEnd]);
+  }, [data, selectedDoctorId, rangeStart, rangeEnd, monthSlots]);
 
-  const selectedDoctor = data?.doctors.find(d => d.id === selectedDoctorId);
-  const daysInMonth = new Date(year, selectedMonth, 0).getDate();
+  // Filtered data (excluding hidden doctors)
+  const filteredData = useMemo(() => {
+    if (!data || hiddenDoctorIds.size === 0) return data;
+    return { ...data, doctors: data.doctors.filter(d => !hiddenDoctorIds.has(d.id)) };
+  }, [data, hiddenDoctorIds]);
+
+  const toggleDoctor = (id: string) => {
+    setHiddenDoctorIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectedDoctor = filteredData?.doctors.find(d => d.id === selectedDoctorId);
+  const daysInMonth = new Date(calendarSlot.year, calendarSlot.month, 0).getDate();
 
   if (!auth.isAuthenticated) {
     return (
@@ -224,64 +416,112 @@ export default function ReportPage() {
 
   return (
     <div className="min-h-dvh bg-gray-50">
+      {showWizard && <ReportWizard onDismiss={dismissWizard} />}
       <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
 
       <main className="mx-auto max-w-5xl px-4 py-4">
-        {/* Year selector + tabs + range */}
+        {/* Base month selector + tabs + range */}
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1">
-            <button onClick={() => setYear(y => y - 1)} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="text-lg font-bold text-gray-800 min-w-[4rem] text-center">{year}年</span>
-            <button onClick={() => setYear(y => y + 1)} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
+            <button onClick={() => moveBase(-1)} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="text-sm font-bold text-gray-800 min-w-[6rem] text-center">〜{baseYear}年{baseMonth}月</span>
+            <button onClick={() => moveBase(1)} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
+            <HelpTooltip text="基準月を選ぶと、そこから過去12ヶ月間のレポートを表示します。矢印で1ヶ月ずつ移動できます。" />
           </div>
-          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-            <button
-              onClick={() => setTab("overview")}
-              className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "overview" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-            >
-              <BarChart3 className="h-3.5 w-3.5" />
-              全体
-            </button>
-            <button
-              onClick={() => setTab("doctor")}
-              className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "doctor" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
-            >
-              <User className="h-3.5 w-3.5" />
-              各医師
-            </button>
+          <div className="flex items-center">
+            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+              <button
+                onClick={() => setTab("overview")}
+                className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "overview" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                全体
+              </button>
+              <button
+                onClick={() => setTab("doctor")}
+                className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "doctor" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+              >
+                <User className="h-3.5 w-3.5" />
+                各医師
+              </button>
+            </div>
+            <HelpTooltip text="「全体」は全医師のスコア比較・累積推移・回数サマリー。「各医師」は個別のカレンダー・年間集計・月別回数を表示します。" />
           </div>
           <div className="flex items-center gap-1 text-xs text-gray-600">
             <span className="font-bold">期間:</span>
             <button onClick={() => setRangeStart(rangeStart - 1)} disabled={rangeStart <= 0} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-            <span className="font-bold text-gray-800 min-w-[2rem] text-center">{rangeStart + 1}月</span>
+            <span className="font-bold text-gray-800 min-w-[3rem] text-center">{slotLabels[rangeStart]}</span>
             <button onClick={() => setRangeStart(rangeStart + 1)} disabled={rangeStart >= rangeEnd} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
             <span className="text-gray-400">〜</span>
             <button onClick={() => setRangeEnd(rangeEnd - 1)} disabled={rangeEnd <= rangeStart} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-            <span className="font-bold text-gray-800 min-w-[2rem] text-center">{rangeEnd + 1}月</span>
+            <span className="font-bold text-gray-800 min-w-[3rem] text-center">{slotLabels[rangeEnd]}</span>
             <button onClick={() => setRangeEnd(rangeEnd + 1)} disabled={rangeEnd >= 11} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
+            <HelpTooltip text="集計対象の月範囲を絞り込めます。スコア・回数・グラフすべてがこの期間に連動します。" />
           </div>
+          {data && data.doctors.length > 0 && (
+            <div ref={filterRef} className="relative">
+              <button
+                onClick={() => setFilterOpen(v => !v)}
+                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                  hiddenDoctorIds.size > 0
+                    ? "border-amber-300 bg-amber-50 text-amber-700"
+                    : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                <Filter className="h-3 w-3" />
+                医師{hiddenDoctorIds.size > 0 ? ` (${data.doctors.length - hiddenDoctorIds.size}/${data.doctors.length})` : ""}
+              </button>
+              {filterOpen && (
+                <div className="absolute right-0 top-full z-50 mt-1 w-56 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg">
+                  <div className="flex items-center justify-between px-3 pb-1.5 border-b border-gray-100">
+                    <span className="text-[10px] font-bold text-gray-500">表示する医師</span>
+                    <div className="flex gap-1">
+                      <button onClick={() => setHiddenDoctorIds(new Set())} className="text-[10px] text-blue-600 hover:underline">全選択</button>
+                      <span className="text-gray-300">|</span>
+                      <button onClick={() => setHiddenDoctorIds(new Set(data.doctors.map(d => d.id)))} className="text-[10px] text-blue-600 hover:underline">全解除</button>
+                    </div>
+                  </div>
+                  {data.doctors.map(d => (
+                    <label key={d.id} className="flex items-center gap-2 px-3 py-1 hover:bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!hiddenDoctorIds.has(d.id)}
+                        onChange={() => toggleDoctor(d.id)}
+                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-xs text-gray-700">{d.name}</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {loading ? (
           <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">読み込み中...</div>
-        ) : !data || data.doctors.length === 0 ? (
-          <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">データがありません</div>
+        ) : !filteredData || filteredData.doctors.length === 0 ? (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-500">
+            {data && data.doctors.length > 0 ? "表示する医師が選択されていません" : "データがありません"}
+          </div>
         ) : tab === "overview" ? (
-          <OverviewTab data={data} monthlyCounts={monthlyCounts} monthlyScores={monthlyScores} doctorMap={doctorMap} holidaySet={holidaySet} year={year} targetScore={targetScore} rangeStart={rangeStart} rangeEnd={rangeEnd} />
+          <OverviewTab data={filteredData} monthlyCounts={monthlyCounts} monthlyScores={monthlyScores} doctorMap={doctorMap} holidaySet={holidaySet} monthSlots={monthSlots} slotLabels={slotLabels} targetScore={targetScore} rangeStart={rangeStart} rangeEnd={rangeEnd} />
         ) : (
           <DoctorTab
-            data={data}
+            data={filteredData}
             selectedDoctorId={selectedDoctorId}
             setSelectedDoctorId={setSelectedDoctorId}
-            selectedMonth={selectedMonth}
-            setSelectedMonth={setSelectedMonth}
+            selectedSlot={selectedSlot}
+            setSelectedSlot={setSelectedSlot}
             selectedDoctor={selectedDoctor}
             doctorMonthShifts={doctorMonthShifts}
             monthlyCounts={monthlyCounts}
             holidaySet={holidaySet}
             avgInterval={avgInterval}
-            year={year}
+            calendarSlot={calendarSlot}
             daysInMonth={daysInMonth}
+            monthSlots={monthSlots}
+            slotLabels={slotLabels}
             rangeStart={rangeStart}
             rangeEnd={rangeEnd}
           />
@@ -301,7 +541,7 @@ const DOCTOR_COLORS = [
 // ── 全体タブ ──
 
 function OverviewTab({
-  data, monthlyCounts, monthlyScores, doctorMap, holidaySet, year, targetScore,
+  data, monthlyCounts, monthlyScores, doctorMap, holidaySet, monthSlots, slotLabels, targetScore,
   rangeStart, rangeEnd,
 }: {
   data: StatsData;
@@ -309,7 +549,8 @@ function OverviewTab({
   monthlyScores: Map<string, number[]>;
   doctorMap: Map<string, string>;
   holidaySet: Set<string>;
-  year: number;
+  monthSlots: MonthSlot[];
+  slotLabels: string[];
   targetScore: { min: number; max: number };
   rangeStart: number;
   rangeEnd: number;
@@ -388,6 +629,7 @@ function OverviewTab({
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <div className="flex items-center gap-1 text-gray-600">
           <span className="font-bold">目標:</span>
+          <HelpTooltip text="月あたりの目標スコア。棒グラフの黒い線と累積グラフの点線がこの値に連動します。最適化設定のscore_min/maxの中間値が初期値です。" />
           <button onClick={() => setCustomTarget(Math.max(0.5, +(customTarget - 0.5).toFixed(1)))} className="rounded p-0.5 hover:bg-gray-200"><ChevronLeft className="h-3 w-3" /></button>
           <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{customTarget.toFixed(1)}</span>
           <button onClick={() => setCustomTarget(+(customTarget + 0.5).toFixed(1))} className="rounded p-0.5 hover:bg-gray-200"><ChevronRight className="h-3 w-3" /></button>
@@ -399,7 +641,7 @@ function OverviewTab({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Score deviation */}
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <h3 className="text-xs font-bold text-gray-800 mb-2">スコア（目標との乖離）<span className="font-normal text-gray-400 ml-1">{rangeStart + 1}月〜{rangeEnd + 1}月</span></h3>
+          <h3 className="text-xs font-bold text-gray-800 mb-2">スコア（目標との乖離）<HelpTooltip text="各医師の加重スコア合計を棒グラフで表示。黒い縦線が目標値。クリックで医師をハイライトできます。" /><span className="font-normal text-gray-400 ml-1">{slotLabels[rangeStart]}〜{slotLabels[rangeEnd]}</span></h3>
           <div className="space-y-1">
             {rangeScores.map(d => {
               const targetTotal = customTarget * rangeLength;
@@ -430,7 +672,7 @@ function OverviewTab({
 
         {/* Cumulative trend */}
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <h3 className="text-xs font-bold text-gray-800 mb-2">累積スコア推移<span className="font-normal text-gray-400 ml-1">目標 {customTarget.toFixed(1)}/月</span></h3>
+          <h3 className="text-xs font-bold text-gray-800 mb-2">累積スコア推移<HelpTooltip text="月ごとのスコアを累積した折れ線グラフ。点線が理想的な均等ペース。線が点線より上なら目標以上、下なら少なめです。" /><span className="font-normal text-gray-400 ml-1">目標 {customTarget.toFixed(1)}/月</span></h3>
           <svg viewBox="0 0 400 200" className="w-full" style={{ maxHeight: "220px" }}>
             {/* Grid lines */}
             {Array.from({ length: 5 }, (_, i) => {
@@ -446,7 +688,7 @@ function OverviewTab({
             {/* Month labels (at each month's right edge) */}
             {rangeMonths.map((m, i) => {
               const x = 40 + ((i + 1) * 350) / Math.max(numPoints - 1, 1);
-              return <text key={i} x={x} y={198} textAnchor="middle" className="text-[7px]" fill="#9ca3af">{MONTH_LABELS[m]}</text>;
+              return <text key={i} x={x} y={198} textAnchor="middle" className="text-[7px]" fill="#9ca3af">{slotLabels[m]}</text>;
             })}
             {/* Target reference line (from 0,0 to end) */}
             <line
@@ -516,9 +758,9 @@ function OverviewTab({
       {/* ── Summary table: all shift types at a glance ── */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-baseline gap-2 px-3 pt-2 pb-1">
-          <h3 className="text-xs font-bold text-gray-800">回数サマリー</h3>
+          <h3 className="text-xs font-bold text-gray-800">回数サマリー<HelpTooltip text="選択期間内の医師別シフト回数。平日当直(×1.0)、土曜当直(×1.5)、日祝日直(×0.5)、日祝当直(×1.0)でスコア加重されます。" /></h3>
           <span className="text-[10px] text-gray-400">
-            {rangeStart === 0 && rangeEnd === 11 ? `${year}年` : `${year}年 ${rangeStart + 1}月〜${rangeEnd + 1}月`}
+            {rangeStart === 0 && rangeEnd === 11 ? `${slotLabels[0]}〜${slotLabels[11]}` : `${slotLabels[rangeStart]}〜${slotLabels[rangeEnd]}`}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -604,7 +846,7 @@ function OverviewTab({
       {/* ── Monthly detail ── */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-xs font-bold text-gray-800">月別詳細</h3>
+          <h3 className="text-xs font-bold text-gray-800">月別詳細<HelpTooltip text="シフト種別ごとの月別内訳。タブで平日当直・土曜・日祝（日直/当直/計）を切り替えられます。" /></h3>
         </div>
         <div className="flex gap-1 items-center mb-2 overflow-x-auto">
           {([["weekdayNight", "平日"], ["satNight", "土曜"], ["sunholDay", "日祝日"], ["sunholNight", "日祝夜"], ["sunholTotal", "日祝計"]] as const).map(([key, lbl]) => (
@@ -622,8 +864,8 @@ function OverviewTab({
             <thead>
               <tr className="bg-gray-50 text-gray-500">
                 <th className="sticky left-0 z-10 bg-gray-50 px-3 py-2 text-left font-bold border-b border-r border-gray-200 min-w-[5rem]">医師名</th>
-                {MONTH_LABELS.map((m, i) => (
-                  <th key={i} className="px-2 py-2 text-center font-medium border-b border-gray-200 min-w-[2.5rem]">{m}</th>
+                {slotLabels.map((lbl, i) => (
+                  <th key={i} className="px-2 py-2 text-center font-medium border-b border-gray-200 min-w-[2.5rem]">{lbl}</th>
                 ))}
                 <th className="px-3 py-2 text-center font-bold border-b border-l-2 border-gray-300 min-w-[3rem] bg-gray-100">合計</th>
               </tr>
@@ -684,22 +926,24 @@ function OverviewTab({
 // ── 各医師タブ ──
 
 function DoctorTab({
-  data, selectedDoctorId, setSelectedDoctorId, selectedMonth, setSelectedMonth,
+  data, selectedDoctorId, setSelectedDoctorId, selectedSlot, setSelectedSlot,
   selectedDoctor, doctorMonthShifts, monthlyCounts, holidaySet, avgInterval,
-  year, daysInMonth, rangeStart, rangeEnd,
+  calendarSlot, daysInMonth, monthSlots, slotLabels, rangeStart, rangeEnd,
 }: {
   data: StatsData;
   selectedDoctorId: string;
   setSelectedDoctorId: (id: string) => void;
-  selectedMonth: number;
-  setSelectedMonth: (m: number) => void;
+  selectedSlot: number;
+  setSelectedSlot: (s: number) => void;
   selectedDoctor: DoctorInfo | undefined;
   doctorMonthShifts: Map<number, { day: boolean; night: boolean }>;
   monthlyCounts: Map<string, MonthlyCounts>;
   holidaySet: Set<string>;
   avgInterval: string | null;
-  year: number;
+  calendarSlot: MonthSlot;
   daysInMonth: number;
+  monthSlots: MonthSlot[];
+  slotLabels: string[];
   rangeStart: number;
   rangeEnd: number;
 }) {
@@ -716,7 +960,7 @@ function DoctorTab({
   const yearTotalSunhol = counts ? sumRange(counts.sunholNight) : 0;
 
   // Build calendar grid (always 6 weeks for consistent height)
-  const firstDayOfWeek = new Date(year, selectedMonth - 1, 1).getDay(); // 0=Sun
+  const firstDayOfWeek = new Date(calendarSlot.year, calendarSlot.month - 1, 1).getDay(); // 0=Sun
   const calendarWeeks: (number | null)[][] = [];
   let week: (number | null)[] = Array(firstDayOfWeek).fill(null);
   for (let d = 1; d <= daysInMonth; d++) {
@@ -748,17 +992,17 @@ function DoctorTab({
           ))}
         </select>
         <div className="flex items-center gap-1">
-          <button onClick={() => setSelectedMonth(Math.max(1, selectedMonth - 1))} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
+          <button onClick={() => setSelectedSlot(Math.max(0, selectedSlot - 1))} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
           <select
-            value={selectedMonth}
-            onChange={e => setSelectedMonth(Number(e.target.value))}
+            value={selectedSlot}
+            onChange={e => setSelectedSlot(Number(e.target.value))}
             className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            {MONTH_LABELS.map((m, i) => (
-              <option key={i} value={i + 1}>{m}</option>
+            {slotLabels.map((lbl, i) => (
+              <option key={i} value={i}>{lbl}</option>
             ))}
           </select>
-          <button onClick={() => setSelectedMonth(Math.min(12, selectedMonth + 1))} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={() => setSelectedSlot(Math.min(11, selectedSlot + 1))} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
         </div>
       </div>
 
@@ -780,7 +1024,7 @@ function DoctorTab({
                 <tr key={wi} className="border-t border-gray-100">
                   {weekRow.map((day, di) => {
                     if (day === null) return <td key={di} className="p-0.5" />;
-                    const dateKey = `${year}-${pad2(selectedMonth)}-${pad2(day)}`;
+                    const dateKey = `${calendarSlot.year}-${pad2(calendarSlot.month)}-${pad2(day)}`;
                     const isHol = di === 0 || holidaySet.has(dateKey);
                     const isSat = di === 6;
                     const shift = doctorMonthShifts.get(day);
@@ -812,14 +1056,13 @@ function DoctorTab({
               <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />当直</span>
             </div>
             {(() => {
-              const mi = selectedMonth - 1;
-              const mNight = counts ? counts.weekdayNight[mi] : 0;
-              const mDay = counts ? counts.sunholDay[mi] : 0;
-              const mSat = counts ? counts.satNight[mi] : 0;
-              const mSunhol = counts ? counts.sunholNight[mi] : 0;
+              const mNight = counts ? counts.weekdayNight[selectedSlot] : 0;
+              const mDay = counts ? counts.sunholDay[selectedSlot] : 0;
+              const mSat = counts ? counts.satNight[selectedSlot] : 0;
+              const mSunhol = counts ? counts.sunholNight[selectedSlot] : 0;
               return (mNight + mDay + mSat + mSunhol) > 0 ? (
                 <div className="text-[10px] text-gray-500 space-y-0.5">
-                  <p className="font-bold text-gray-700 text-[11px]">{selectedMonth}月の集計</p>
+                  <p className="font-bold text-gray-700 text-[11px]">{slotLabels[selectedSlot]}の集計</p>
                   <div className="grid grid-cols-2 gap-x-2">
                     <span>平日 <b className="text-gray-800">{mNight}</b></span>
                     <span>日直 <b className="text-gray-800">{mDay}</b></span>
@@ -836,8 +1079,8 @@ function DoctorTab({
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm h-full">
           <h3 className="text-xs font-bold text-gray-800 mb-2">
             {rangeStart === 0 && rangeEnd === 11
-              ? `${year}年 年間集計`
-              : `${year}年 ${rangeStart + 1}月〜${rangeEnd + 1}月`}
+              ? `${slotLabels[0]}〜${slotLabels[11]} 集計`
+              : `${slotLabels[rangeStart]}〜${slotLabels[rangeEnd]} 集計`}
           </h3>
           <div className="grid grid-cols-2 gap-1.5">
             <StatCard label="平日当直" value={yearTotalNight} color="indigo" />
@@ -853,40 +1096,53 @@ function DoctorTab({
           )}
         </div>
 
-        {/* Right: Monthly breakdown */}
+        {/* Right: Monthly stacked breakdown */}
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm h-full">
-          <h3 className="text-xs font-bold text-gray-800 mb-2">月別当直回数</h3>
-          <div className="space-y-0.5">
-            {MONTH_LABELS.map((m, i) => {
-              const inRange = i >= rangeStart && i <= rangeEnd;
-              const nightCount = counts ? (counts.weekdayNight[i] + counts.satNight[i] + counts.sunholNight[i]) : 0;
-              const dayCount = counts ? counts.sunholDay[i] : 0;
-              const total = nightCount + dayCount;
-              return (
-                <div key={i} className={`flex items-center gap-1.5 ${inRange ? "" : "opacity-25"}`}>
-                  <span className={`text-[11px] w-7 text-right ${selectedMonth === i + 1 ? "font-bold text-blue-600" : "text-gray-500"}`}>{m}</span>
-                  <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden flex">
-                    {nightCount > 0 && (
-                      <div
-                        className="h-full bg-indigo-400 rounded-l-full"
-                        style={{ width: `${(nightCount / Math.max(total, 1)) * 100}%`, minWidth: nightCount > 0 ? "4px" : 0 }}
-                      />
-                    )}
-                    {dayCount > 0 && (
-                      <div
-                        className="h-full bg-orange-300"
-                        style={{ width: `${(dayCount / Math.max(total, 1)) * 100}%`, minWidth: dayCount > 0 ? "4px" : 0 }}
-                      />
-                    )}
-                  </div>
-                  <span className={`text-[11px] w-4 text-right ${total === 0 ? "text-gray-300" : "font-bold text-gray-700"}`}>{total || "-"}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="mt-1.5 flex gap-3 text-[10px] text-gray-400">
-            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400" />当直</span>
-            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-300" />日直</span>
+          <h3 className="text-xs font-bold text-gray-800 mb-2">月別内訳</h3>
+          {(() => {
+            // Find max total across all months for consistent bar scale
+            let maxTotal = 0;
+            for (let i = 0; i < 12; i++) {
+              const wn = counts ? counts.weekdayNight[i] : 0;
+              const sn = counts ? counts.satNight[i] : 0;
+              const shd = counts ? counts.sunholDay[i] : 0;
+              const shn = counts ? counts.sunholNight[i] : 0;
+              maxTotal = Math.max(maxTotal, wn + sn + shd + shn);
+            }
+            if (maxTotal === 0) maxTotal = 1;
+            return (
+              <div className="space-y-0.5">
+                {slotLabels.map((lbl, i) => {
+                  const inRange = i >= rangeStart && i <= rangeEnd;
+                  const wn = counts ? counts.weekdayNight[i] : 0;
+                  const sn = counts ? counts.satNight[i] : 0;
+                  const shd = counts ? counts.sunholDay[i] : 0;
+                  const shn = counts ? counts.sunholNight[i] : 0;
+                  const total = wn + sn + shd + shn;
+                  const barW = (total / maxTotal) * 100;
+                  return (
+                    <div key={i} className={`flex items-center gap-1.5 ${inRange ? "" : "opacity-25"}`}>
+                      <span className={`text-[11px] w-10 text-right truncate ${selectedSlot === i ? "font-bold text-blue-600" : "text-gray-500"}`}>{lbl}</span>
+                      <div className="flex-1 h-3.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full flex" style={{ width: `${barW}%` }}>
+                          {wn > 0 && <div className="h-full bg-indigo-500" style={{ flex: wn }} />}
+                          {sn > 0 && <div className="h-full bg-amber-500" style={{ flex: sn }} />}
+                          {shd > 0 && <div className="h-full bg-orange-400" style={{ flex: shd }} />}
+                          {shn > 0 && <div className="h-full bg-rose-500" style={{ flex: shn }} />}
+                        </div>
+                      </div>
+                      <span className={`text-[11px] w-4 text-right ${total === 0 ? "text-gray-300" : "font-bold text-gray-700"}`}>{total || "-"}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+          <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px] text-gray-400">
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500" />平日</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />土曜</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400" />日祝日</span>
+            <span className="flex items-center gap-1"><span className="inline-block w-1.5 h-1.5 rounded-full bg-rose-500" />日祝夜</span>
           </div>
         </div>
       </div>

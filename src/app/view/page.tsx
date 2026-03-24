@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Download, FileText, FileSpreadsheet, Pencil, Eye, EyeOff, HelpCircle, ChevronDown, Image } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { domToPng } from "modern-screenshot";
@@ -37,6 +37,29 @@ const isUuidLike = (value: string) =>
 const pad2 = (value: number) => String(value).padStart(2, "0");
 const toDateKey = (year: number, month: number, day: number) => `${year}-${pad2(month)}-${pad2(day)}`;
 
+function HelpTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setOpen(false)}
+        className="ml-0.5 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 transition-colors"
+        aria-label="ヘルプ"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-2.5 text-[11px] leading-relaxed text-gray-600 shadow-lg">
+          {text}
+          <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-white" />
+        </div>
+      )}
+    </span>
+  );
+}
+
 export default function ViewSchedulePage() {
   const defaultTargetMonth = getDefaultTargetMonth();
   const [year, setYear] = useState(defaultTargetMonth.year);
@@ -48,11 +71,25 @@ export default function ViewSchedulePage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [publishedMonths, setPublishedMonths] = useState<Set<string>>(new Set());
   const [isTogglingPublish, setIsTogglingPublish] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const { auth, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
   const tableRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const { holidaySet: standardHolidaySet } = useHolidays(year);
   const { manualSet, disabledSet, customError } = useCustomHolidays(year);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [exportOpen]);
 
   const doctorNameById = useMemo(
     () => Object.fromEntries(doctors.map((doctor) => [doctor.id, doctor.name])),
@@ -279,61 +316,83 @@ export default function ViewSchedulePage() {
               className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="月"
             >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                <option key={m} value={m}>{m}月</option>
-              ))}
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
+                const key = `${year}-${pad2(m)}`;
+                const pub = publishedMonths.has(key);
+                return (
+                  <option key={m} value={m}>{pub ? "\u25CF " : "\u25CB "}{m}月</option>
+                );
+              })}
             </select>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
             {schedule.length > 0 && (
               <>
-                <Link
-                  href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
-                  className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  編集する
-                </Link>
-                <button
-                  onClick={() => { void handleTogglePublish(); }}
-                  disabled={isTogglingPublish}
-                  className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
-                    isPublished
-                      ? "border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
-                      : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                  }`}
-                >
-                  {isPublished ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                  {isPublished ? "公開中" : "非公開"}
-                </button>
+                <span className="inline-flex items-center">
+                  <Link
+                    href={typeof window !== "undefined" && window.innerWidth >= 768 && !("ontouchstart" in window) ? `/dashboard?edit=${year}-${month}` : `/app?edit=${year}-${month}`}
+                    className="flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 transition-colors"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    編集する
+                  </Link>
+                  <HelpTooltip text="シフト作成画面に移動して、当直表を手動で編集できます。ドラッグ&ドロップで医師の入れ替えも可能です。" />
+                </span>
+                <span className="inline-flex items-center">
+                  <button
+                    onClick={() => { void handleTogglePublish(); }}
+                    disabled={isTogglingPublish}
+                    className={`flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors disabled:opacity-50 ${
+                      isPublished
+                        ? "border-green-300 bg-green-50 text-green-800 hover:bg-green-100"
+                        : "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                    }`}
+                  >
+                    {isPublished ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
+                    {isPublished ? "公開中" : "非公開"}
+                  </button>
+                  <HelpTooltip text="「公開」にすると、各医師がマジックリンクからこの月の当直表を閲覧できます。「非公開」の間は管理者のみ閲覧可能です。" />
+                </span>
               </>
             )}
-            <button
-              onClick={() => { void handleDownloadImage(); }}
-              disabled={isDownloading || schedule.length === 0}
-              className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-            >
-              <Download className="h-3.5 w-3.5" />
-              {isDownloading ? "保存中..." : "画像"}
-            </button>
             {schedule.length > 0 && (
-              <>
+              <div ref={exportRef} className="relative">
                 <button
-                  onClick={() => { void handleExport("pdf"); }}
-                  className="flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 transition-colors"
+                  onClick={() => setExportOpen((v) => !v)}
+                  className="flex items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors"
                 >
-                  <FileText className="h-3.5 w-3.5" />
-                  PDF
+                  <Download className="h-3.5 w-3.5" />
+                  保存
+                  <ChevronDown className={`h-3 w-3 transition-transform ${exportOpen ? "rotate-180" : ""}`} />
                 </button>
-                <button
-                  onClick={() => { void handleExport("xlsx"); }}
-                  className="flex items-center gap-1 rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-xs font-bold text-green-700 hover:bg-green-100 transition-colors"
-                >
-                  <FileSpreadsheet className="h-3.5 w-3.5" />
-                  Excel
-                </button>
-              </>
+                {exportOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-1 w-40 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                    <button
+                      onClick={() => { setExportOpen(false); void handleDownloadImage(); }}
+                      disabled={isDownloading}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      <Image className="h-3.5 w-3.5 text-blue-500" />
+                      {isDownloading ? "保存中..." : "画像（PNG）"}
+                    </button>
+                    <button
+                      onClick={() => { setExportOpen(false); void handleExport("pdf"); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-red-500" />
+                      PDF
+                    </button>
+                    <button
+                      onClick={() => { setExportOpen(false); void handleExport("xlsx"); }}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-green-500" />
+                      Excel
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </div>

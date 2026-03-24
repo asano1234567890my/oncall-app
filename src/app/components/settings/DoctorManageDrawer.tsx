@@ -173,6 +173,9 @@ function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (
           <button
             className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
             onClick={async () => {
+              if (!window.confirm(
+                "⚠️ 各URLにアクセスすると、その医師の不可日を編集できます。\n\nURLの取り扱いには十分ご注意ください。\n共有先を間違えると、他の医師の予定を変更されるおそれがあります。\n\n全員のURLをコピーしますか？"
+              )) return;
               const lines = docsWithToken.map((d) => `${d.name}: ${getDoctorUrl(d.access_token!)}`);
               try {
                 await copyText(lines.join("\n"));

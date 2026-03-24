@@ -958,6 +958,144 @@ def _build_xlsx(
     return buf.getvalue()
 
 
+def _build_xlsx_simple(
+    year: int, month: int, hospital_name: str, doctor_map: dict,
+    rows: list, holiday_dates: set,
+) -> bytes:
+    """統計なしのシンプルな当直表Excel（医師向け公開エクスポート用）。"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"{year}年{month}月"
+
+    thin = Side(style="thin", color="999999")
+    thick = Side(style="medium", color="000000")
+    header_fill = PatternFill(start_color="EEEEEE", end_color="EEEEEE", fill_type="solid")
+    sun_fill = PatternFill(start_color="FFF0F0", end_color="FFF0F0", fill_type="solid")
+    sat_fill = PatternFill(start_color="F0F0FF", end_color="F0F0FF", fill_type="solid")
+    sun_font = Font(color="CC2222", size=10)
+    sat_font = Font(color="2222CC", size=10)
+    normal_font = Font(size=10)
+    header_font = Font(bold=True, size=10)
+    title_font = Font(bold=True, size=14)
+    center = Alignment(horizontal="center", vertical="center")
+    left_align = Alignment(horizontal="left", vertical="center")
+
+    ws.column_dimensions["A"].width = 10
+    ws.column_dimensions["B"].width = 14
+    ws.column_dimensions["C"].width = 14
+
+    ws.merge_cells("A1:C1")
+    ws["A1"] = f"{hospital_name}　{year}年{month}月 当直表"
+    ws["A1"].font = title_font
+    ws["A1"].alignment = center
+
+    s_row = 3
+    for col_idx, label in enumerate(["日付", "日直", "当直"], 1):
+        cell = ws.cell(row=s_row, column=col_idx, value=label)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = center
+        cell.border = Border(top=thick, bottom=thick, left=thick if col_idx == 1 else thin, right=thick if col_idx == 3 else thin)
+
+    for idx, r in enumerate(rows):
+        excel_row = s_row + 1 + idx
+        d = r["day"]
+        wd = _weekday_ja(year, month, d)
+        dt = datetime.date(year, month, d)
+        is_sun = dt.weekday() == 6
+        is_sat = dt.weekday() == 5
+        is_holiday = is_sun or dt in holiday_dates
+        show_day = is_holiday or is_sat
+
+        date_cell = ws.cell(row=excel_row, column=1, value=f"{d}({wd})")
+        day_cell = ws.cell(row=excel_row, column=2, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
+        night_cell = ws.cell(row=excel_row, column=3, value=_doctor_label(r["night_shift"], doctor_map))
+
+        fill = sun_fill if is_holiday else sat_fill if is_sat else None
+        font = sun_font if is_holiday else sat_font if is_sat else normal_font
+
+        date_cell.alignment = left_align
+        for c in (day_cell, night_cell):
+            c.alignment = center
+
+        for c in (date_cell, day_cell, night_cell):
+            c.font = font
+            if fill:
+                c.fill = fill
+            c.border = Border(
+                top=thin, bottom=thin,
+                left=thick if c.column == 1 else thin,
+                right=thick if c.column == 3 else thin,
+            )
+
+    last_row = s_row + len(rows)
+    for col_idx in range(1, 4):
+        cell = ws.cell(row=last_row, column=col_idx)
+        b = cell.border
+        cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@router.get("/public-export/{doctor_token}/{year}/{month}")
+async def public_export_schedule(
+    doctor_token: str,
+    year: int,
+    month: int,
+    format: str = Query("pdf", pattern="^(pdf|xlsx)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    """トークン認証で当直表をPDF/Excelダウンロード（統計なし）。"""
+    from services.settings_service import get_published_months
+
+    result = await db.execute(
+        select(Doctor)
+        .options(selectinload(Doctor.hospital))
+        .where(Doctor.access_token == doctor_token)
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(status_code=404, detail="Invalid token")
+
+    month_key = f"{year}-{month:02d}"
+    published = await get_published_months(db, doctor.hospital_id)
+    if month_key not in published:
+        raise HTTPException(status_code=403, detail="この月は公開されていません。")
+
+    hospital_name, doctor_map, rows, holiday_dates = await _fetch_export_data(
+        year, month, doctor.hospital_id, db,
+    )
+
+    if not any(r["day_shift"] or r["night_shift"] for r in rows):
+        raise HTTPException(status_code=404, detail="この月の当直表はまだ保存されていません。")
+
+    from urllib.parse import quote
+    filename_ja = f"{hospital_name}_{year}年{month}月_当直表"
+    filename_ascii = f"oncall_{year}_{month:02d}"
+
+    if format == "xlsx":
+        content = _build_xlsx_simple(year, month, hospital_name, doctor_map, rows, holiday_dates)
+        ext = "xlsx"
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:
+        content = _build_pdf(year, month, hospital_name, doctor_map, rows, holiday_dates)
+        ext = "pdf"
+        media = "application/pdf"
+
+    return Response(
+        content=content,
+        media_type=media,
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename_ascii}.{ext}\"; filename*=UTF-8''{quote(filename_ja)}.{ext}",
+        },
+    )
+
+
 @router.get("/export/{year}/{month}")
 async def export_schedule(
     year: int,
