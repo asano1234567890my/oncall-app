@@ -28,11 +28,11 @@ function computeMonthSlots(baseYear: number, baseMonth: number): MonthSlot[] {
   return slots;
 }
 
-/** スロットの表示ラベル（年またぎ時は "4月'25" 形式、同年なら "4月"） */
+/** スロットの表示ラベル（年またぎ時は "25/4" 形式、同年なら "4月"） */
 function slotLabel(slot: MonthSlot, slots: MonthSlot[]): string {
   const hasMultipleYears = slots[0].year !== slots[slots.length - 1].year;
   if (hasMultipleYears) {
-    return `${slot.month}月'${String(slot.year).slice(2)}`;
+    return `${String(slot.year).slice(2)}/${slot.month}`;
   }
   return `${slot.month}月`;
 }
@@ -64,32 +64,7 @@ function getWeekday(year: number, month: number, day: number) {
   return WEEKDAY_LABELS[new Date(year, month - 1, day).getDay()];
 }
 
-// ── Help tooltip ──
-
-function HelpTooltip({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        onBlur={() => setOpen(false)}
-        className="ml-0.5 inline-flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 transition-colors"
-        aria-label="ヘルプ"
-      >
-        <HelpCircle className="h-3.5 w-3.5" />
-      </button>
-      {open && (
-        <div className="absolute bottom-full left-1/2 z-50 mb-2 w-60 -translate-x-1/2 rounded-lg border border-gray-200 bg-white p-2.5 text-[11px] leading-relaxed text-gray-600 shadow-lg">
-          {text}
-          <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-white" />
-        </div>
-      )}
-    </span>
-  );
-}
-
-// ── Initial wizard ──
+// ── Initial wizard (2 pages, reusable from ? button) ──
 
 const WIZARD_STORAGE_KEY = "report_wizard_dismissed";
 
@@ -97,20 +72,12 @@ function ReportWizard({ onDismiss }: { onDismiss: () => void }) {
   const [step, setStep] = useState(0);
   const steps = [
     {
-      title: "レポート画面へようこそ",
-      body: "ここでは、当直・日直の回数やスコアを直近12ヶ月間で可視化できます。医師ごとの負担バランスが一目でわかります。",
+      title: "レポートの見かた",
+      body: "基準月から過去12ヶ月間の当直データを集計します。「全体」タブで医師全員のスコア比較・累積推移・回数サマリーを、「各医師」タブで個別のカレンダー・集計・月別内訳を確認できます。",
     },
     {
-      title: "「全体」タブ",
-      body: "医師全員のスコア比較（目標との乖離）、累積推移グラフ、回数サマリー、月別詳細を確認できます。",
-    },
-    {
-      title: "「各医師」タブ",
-      body: "医師を選択すると、その医師のカレンダー、年間集計、月別当直回数の棒グラフを表示します。",
-    },
-    {
-      title: "期間と目標の調整",
-      body: "基準月を変えると過去12ヶ月の対象期間が移動します。「期間」で範囲を絞り込み、「目標」でスコア基準値を変更できます。各セクションの「?」マークで詳しい説明も見られます。",
+      title: "操作方法",
+      body: "基準月の矢印で対象期間を移動、「期間」で範囲の絞り込み、「目標」でスコア基準値の変更ができます。「医師」ボタンで表示する医師をフィルターできます。",
     },
   ];
   const s = steps[step];
@@ -140,7 +107,7 @@ function ReportWizard({ onDismiss }: { onDismiss: () => void }) {
               </button>
             ) : (
               <button onClick={onDismiss} className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700">
-                はじめる
+                OK
               </button>
             )}
           </div>
@@ -419,46 +386,32 @@ export default function ReportPage() {
       {showWizard && <ReportWizard onDismiss={dismissWizard} />}
       <AppHeader hospitalName={auth.hospitalName} onLogout={logout} />
 
-      <main className="mx-auto max-w-5xl px-4 py-4">
-        {/* Base month selector + tabs + range */}
-        <div className="mb-4 flex flex-wrap items-center gap-3">
+      <main className="mx-auto max-w-5xl px-4 py-3">
+        {/* Row 1: base month + tabs + help + filter */}
+        <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
-            <button onClick={() => moveBase(-1)} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="text-sm font-bold text-gray-800 min-w-[6rem] text-center">〜{baseYear}年{baseMonth}月</span>
-            <button onClick={() => moveBase(1)} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
-            <HelpTooltip text="基準月を選ぶと、そこから過去12ヶ月間のレポートを表示します。矢印で1ヶ月ずつ移動できます。" />
+            <button onClick={() => moveBase(-1)} className="rounded p-0.5 hover:bg-gray-200"><ChevronLeft className="h-3.5 w-3.5" /></button>
+            <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">〜{baseYear}/{baseMonth}</span>
+            <button onClick={() => moveBase(1)} className="rounded p-0.5 hover:bg-gray-200"><ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
-          <div className="flex items-center">
+          <div className="flex items-center gap-1.5">
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
               <button
                 onClick={() => setTab("overview")}
-                className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "overview" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                className={`flex items-center gap-0.5 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold transition-colors ${tab === "overview" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
               >
-                <BarChart3 className="h-3.5 w-3.5" />
+                <BarChart3 className="h-3 w-3" />
                 全体
               </button>
               <button
                 onClick={() => setTab("doctor")}
-                className={`flex items-center gap-1 px-4 py-1.5 text-sm font-bold transition-colors ${tab === "doctor" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                className={`flex items-center gap-0.5 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-bold transition-colors ${tab === "doctor" ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
               >
-                <User className="h-3.5 w-3.5" />
+                <User className="h-3 w-3" />
                 各医師
               </button>
             </div>
-            <HelpTooltip text="「全体」は全医師のスコア比較・累積推移・回数サマリー。「各医師」は個別のカレンダー・年間集計・月別回数を表示します。" />
-          </div>
-          <div className="flex items-center gap-1 text-xs text-gray-600">
-            <span className="font-bold">期間:</span>
-            <button onClick={() => setRangeStart(rangeStart - 1)} disabled={rangeStart <= 0} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-            <span className="font-bold text-gray-800 min-w-[3rem] text-center">{slotLabels[rangeStart]}</span>
-            <button onClick={() => setRangeStart(rangeStart + 1)} disabled={rangeStart >= rangeEnd} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
-            <span className="text-gray-400">〜</span>
-            <button onClick={() => setRangeEnd(rangeEnd - 1)} disabled={rangeEnd <= rangeStart} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
-            <span className="font-bold text-gray-800 min-w-[3rem] text-center">{slotLabels[rangeEnd]}</span>
-            <button onClick={() => setRangeEnd(rangeEnd + 1)} disabled={rangeEnd >= 11} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
-            <HelpTooltip text="集計対象の月範囲を絞り込めます。スコア・回数・グラフすべてがこの期間に連動します。" />
-          </div>
-          {data && data.doctors.length > 0 && (
+            {data && data.doctors.length > 0 && (
             <div ref={filterRef} className="relative">
               <button
                 onClick={() => setFilterOpen(v => !v)}
@@ -496,6 +449,25 @@ export default function ReportPage() {
               )}
             </div>
           )}
+            <button
+              onClick={() => setShowWizard(true)}
+              className="rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              aria-label="使い方"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        {/* Row 2: range */}
+        <div className="mb-3 flex items-center gap-1 text-[10px] sm:text-xs text-gray-600">
+          <span className="font-bold">期間:</span>
+          <button onClick={() => setRangeStart(rangeStart - 1)} disabled={rangeStart <= 0} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
+          <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{slotLabels[rangeStart]}</span>
+          <button onClick={() => setRangeStart(rangeStart + 1)} disabled={rangeStart >= rangeEnd} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
+          <span className="text-gray-400">〜</span>
+          <button onClick={() => setRangeEnd(rangeEnd - 1)} disabled={rangeEnd <= rangeStart} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft className="h-3 w-3" /></button>
+          <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{slotLabels[rangeEnd]}</span>
+          <button onClick={() => setRangeEnd(rangeEnd + 1)} disabled={rangeEnd >= 11} className="rounded p-0.5 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed"><ChevronRight className="h-3 w-3" /></button>
         </div>
 
         {loading ? (
@@ -629,7 +601,6 @@ function OverviewTab({
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <div className="flex items-center gap-1 text-gray-600">
           <span className="font-bold">目標:</span>
-          <HelpTooltip text="月あたりの目標スコア。棒グラフの黒い線と累積グラフの点線がこの値に連動します。最適化設定のscore_min/maxの中間値が初期値です。" />
           <button onClick={() => setCustomTarget(Math.max(0.5, +(customTarget - 0.5).toFixed(1)))} className="rounded p-0.5 hover:bg-gray-200"><ChevronLeft className="h-3 w-3" /></button>
           <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{customTarget.toFixed(1)}</span>
           <button onClick={() => setCustomTarget(+(customTarget + 0.5).toFixed(1))} className="rounded p-0.5 hover:bg-gray-200"><ChevronRight className="h-3 w-3" /></button>
@@ -641,7 +612,7 @@ function OverviewTab({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {/* Score deviation */}
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <h3 className="text-xs font-bold text-gray-800 mb-2">スコア（目標との乖離）<HelpTooltip text="各医師の加重スコア合計を棒グラフで表示。黒い縦線が目標値。クリックで医師をハイライトできます。" /><span className="font-normal text-gray-400 ml-1">{slotLabels[rangeStart]}〜{slotLabels[rangeEnd]}</span></h3>
+          <h3 className="text-[11px] sm:text-xs font-bold text-gray-800 mb-2">スコア（目標との乖離）<span className="font-normal text-gray-400 ml-1">{slotLabels[rangeStart]}〜{slotLabels[rangeEnd]}</span></h3>
           <div className="space-y-1">
             {rangeScores.map(d => {
               const targetTotal = customTarget * rangeLength;
@@ -672,7 +643,7 @@ function OverviewTab({
 
         {/* Cumulative trend */}
         <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
-          <h3 className="text-xs font-bold text-gray-800 mb-2">累積スコア推移<HelpTooltip text="月ごとのスコアを累積した折れ線グラフ。点線が理想的な均等ペース。線が点線より上なら目標以上、下なら少なめです。" /><span className="font-normal text-gray-400 ml-1">目標 {customTarget.toFixed(1)}/月</span></h3>
+          <h3 className="text-[11px] sm:text-xs font-bold text-gray-800 mb-2">累積スコア推移<span className="font-normal text-gray-400 ml-1">目標 {customTarget.toFixed(1)}/月</span></h3>
           <svg viewBox="0 0 400 200" className="w-full" style={{ maxHeight: "220px" }}>
             {/* Grid lines */}
             {Array.from({ length: 5 }, (_, i) => {
@@ -758,7 +729,7 @@ function OverviewTab({
       {/* ── Summary table: all shift types at a glance ── */}
       <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="flex items-baseline gap-2 px-3 pt-2 pb-1">
-          <h3 className="text-xs font-bold text-gray-800">回数サマリー<HelpTooltip text="選択期間内の医師別シフト回数。平日当直(×1.0)、土曜当直(×1.5)、日祝日直(×0.5)、日祝当直(×1.0)でスコア加重されます。" /></h3>
+          <h3 className="text-[11px] sm:text-xs font-bold text-gray-800">回数サマリー</h3>
           <span className="text-[10px] text-gray-400">
             {rangeStart === 0 && rangeEnd === 11 ? `${slotLabels[0]}〜${slotLabels[11]}` : `${slotLabels[rangeStart]}〜${slotLabels[rangeEnd]}`}
           </span>
@@ -846,7 +817,7 @@ function OverviewTab({
       {/* ── Monthly detail ── */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <h3 className="text-xs font-bold text-gray-800">月別詳細<HelpTooltip text="シフト種別ごとの月別内訳。タブで平日当直・土曜・日祝（日直/当直/計）を切り替えられます。" /></h3>
+          <h3 className="text-[11px] sm:text-xs font-bold text-gray-800">月別詳細</h3>
         </div>
         <div className="flex gap-1 items-center mb-2 overflow-x-auto">
           {([["weekdayNight", "平日"], ["satNight", "土曜"], ["sunholDay", "日祝日"], ["sunholNight", "日祝夜"], ["sunholTotal", "日祝計"]] as const).map(([key, lbl]) => (
