@@ -1674,11 +1674,8 @@ class OnCallOptimizer:
             for g in unavail_groups:
                 # Extract date from group_id like "unavail_d3_day15" or description
                 date_groups.setdefault(g["description_ja"], [])
-            if len(unavail_groups) <= 5:
-                for g in unavail_groups:
-                    violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
-            else:
-                violations.append(f"不可日が{len(unavail_groups)}件競合しています。一部を「できれば避けたい」（ソフト制約）に変更してください")
+            for g in unavail_groups[:5]:
+                violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
 
         if "score" in categories:
             score_groups = categories["score"]
