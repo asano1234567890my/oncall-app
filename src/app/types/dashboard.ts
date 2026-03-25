@@ -124,6 +124,8 @@ export type SolvableRemoval = {
   doctor_name?: string | null;
   description_ja: string;
   is_admin_setting?: boolean;
+  set_number?: number;
+  set_size?: number;
 };
 
 export type DiagnoseResult = {

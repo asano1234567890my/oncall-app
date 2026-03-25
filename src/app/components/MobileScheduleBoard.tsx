@@ -172,14 +172,25 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
               ))}
             </div>
           )}
-          {diagnoseResult.solvable_removals?.filter(r => !r.is_admin_setting).length > 0 && (
-            <div className="mb-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
-              <p className="font-semibold text-amber-700">以下の不可日をすべて解除すれば解けます（検証済み・最小セット）</p>
-              {diagnoseResult.solvable_removals.filter(r => !r.is_admin_setting).map((r, i) => (
-                <p key={i} className="ml-3 mt-0.5 text-amber-800">・{r.description_ja}</p>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const unavailRemovals = diagnoseResult.solvable_removals?.filter(r => !r.is_admin_setting) ?? [];
+            if (unavailRemovals.length === 0) return null;
+            const setNumbers = [...new Set(unavailRemovals.map(r => r.set_number ?? 1))].sort((a, b) => a - b);
+            return setNumbers.map(setNum => {
+              const items = unavailRemovals.filter(r => (r.set_number ?? 1) === setNum);
+              const setSize = items[0]?.set_size ?? items.length;
+              return (
+                <div key={setNum} className="mb-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1.5">
+                  <p className="font-semibold text-amber-700">
+                    修正案{setNum}（{setSize}人変更）— 以下をすべて解除すれば解けます
+                  </p>
+                  {items.map((r, i) => (
+                    <p key={i} className="ml-3 mt-0.5 text-amber-800">・{r.description_ja}</p>
+                  ))}
+                </div>
+              );
+            });
+          })()}
           {diagnoseResult.specific_violations.length > 0 && (
             <div className="mt-1">
               {diagnoseResult.specific_violations.map((v, i) => (

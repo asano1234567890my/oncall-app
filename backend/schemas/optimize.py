@@ -136,6 +136,8 @@ class SolvableRemoval(BaseModel):
     doctor_name: Optional[str] = None
     description_ja: str
     is_admin_setting: bool = False
+    set_number: int = 1  # 修正案の番号（1=最小、2=次善、3=…）
+    set_size: int = 0    # この修正案の変更人数
 
 
 class DiagnoseResult(BaseModel):

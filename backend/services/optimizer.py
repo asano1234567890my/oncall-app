@@ -1969,18 +1969,18 @@ class OnCallOptimizer:
         self,
         conflict_groups: List[Dict[str, Any]],
         time_limit: float = 10.0,
+        max_sets: int = 3,
     ) -> List[Dict[str, Any]]:
-        """競合している不可日の中から、最小限の解除セットを検証して返す。
+        """競合している不可日の中から、修正案を最大max_sets個検証して返す。
 
         CP-SATで「残すか外すか」の変数を付け、外す数を最小化する。
-        結果は「この組み合わせを全部解除すれば確実に解ける」という検証済みセット。
+        1つ見つけたらその組み合わせを除外して再ソルブし、次の修正案を探す。
         """
         # 1. conflict_groupsから不可日関連を抽出・パース
         removable: List[Dict[str, Any]] = []
         for g in conflict_groups:
             gid = g["group_id"]
             if gid.startswith("unavail_d"):
-                # unavail_d{idx}_day{day}
                 parts = gid.replace("unavail_d", "").split("_day")
                 if len(parts) != 2:
                     continue
@@ -1989,7 +1989,6 @@ class OnCallOptimizer:
                     day = int(parts[1])
                 except ValueError:
                     continue
-                # target_shiftを元データから取得
                 shift = "all"
                 for item in self.unavailable.get(d_idx, []):
                     norm = self._normalize_unavailable_entry(item)
@@ -1998,7 +1997,6 @@ class OnCallOptimizer:
                         break
                 removable.append({"type": "date", "d_idx": d_idx, "day": day, "shift": shift, "group": g})
             elif gid.startswith("fixdow_d"):
-                # fixdow_d{idx}_dow{dow}
                 parts = gid.replace("fixdow_d", "").split("_dow")
                 if len(parts) != 2:
                     continue
@@ -2019,8 +2017,8 @@ class OnCallOptimizer:
             return []
 
         # 2. 競合不可日を除いた unavailable / fixed_weekdays を作成
-        remove_dates: set = set()  # (d_idx, day)
-        remove_dows: set = set()   # (d_idx, dow)
+        remove_dates: set = set()
+        remove_dows: set = set()
         for entry in removable:
             if entry["type"] == "date":
                 remove_dates.add((entry["d_idx"], entry["day"]))
@@ -2068,7 +2066,7 @@ class OnCallOptimizer:
         trial.build_model()
 
         # 4. 除いた不可日を「残す(keep=1) or 外す(keep=0)」の条件付きで追加
-        keep_vars: List[tuple] = []  # (keep_var, entry)
+        keep_vars: List[tuple] = []
         for entry in removable:
             keep = trial.model.NewBoolVar(f"keep_{entry['group']['group_id']}")
             keep_vars.append((keep, entry))
@@ -2090,30 +2088,50 @@ class OnCallOptimizer:
                         if shift in ("day", "all"):
                             trial.model.Add(trial.day_shifts[(d, day)] == 0).OnlyEnforceIf(keep)
 
-        # 5. 「残す数を最大化」= 外す数を最小化
+        # 5. 修正案を最大max_sets個探索（前の解を除外しながら繰り返す）
         trial.model.Maximize(sum(k for k, _ in keep_vars))
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = time_limit
-        status = solver.Solve(trial.model)
+        all_results: List[Dict[str, Any]] = []
+        excluded_sets: List[List[int]] = []  # 除外済みセットのインデックスリスト
 
-        if status not in (cp_model.FEASIBLE, cp_model.OPTIMAL):
-            return []
+        for set_num in range(1, max_sets + 1):
+            solver = cp_model.CpSolver()
+            solver.parameters.max_time_in_seconds = time_limit
+            status = solver.Solve(trial.model)
 
-        # 6. keep=0 の不可日 = 外す必要がある
-        results: List[Dict[str, Any]] = []
-        for keep, entry in keep_vars:
-            if solver.Value(keep) == 0:
+            if status not in (cp_model.FEASIBLE, cp_model.OPTIMAL):
+                break
+
+            # keep=0 のインデックスを収集
+            removed_indices = [
+                idx for idx, (keep, _) in enumerate(keep_vars)
+                if solver.Value(keep) == 0
+            ]
+
+            if not removed_indices:
+                break
+
+            set_size = len(removed_indices)
+            for idx in removed_indices:
+                _, entry = keep_vars[idx]
                 g = entry["group"]
-                results.append({
+                all_results.append({
                     "group_id": g["group_id"],
                     "category": "unavailable_verified",
                     "doctor_name": g.get("doctor_name"),
                     "description_ja": f"{g['description_ja']}を解除",
                     "is_admin_setting": False,
+                    "set_number": set_num,
+                    "set_size": set_size,
                 })
 
-        return results
+            # この組み合わせを除外: 「このセットの全員がkeep=0」を禁止
+            # = 少なくとも1人はkeep=1にする
+            excluded_keeps = [keep_vars[idx][0] for idx in removed_indices]
+            trial.model.Add(sum(excluded_keeps) >= 1)
+            excluded_sets.append(removed_indices)
+
+        return all_results
 
     def _diagnose_phase2(
         self, conflict_groups: List[Dict[str, Any]], time_limit_seconds: float = 5.0
