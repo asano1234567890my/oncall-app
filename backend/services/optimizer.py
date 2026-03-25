@@ -138,7 +138,7 @@ class OnCallOptimizer:
             sat_consec=int(ow.get("sat_consec", 0)),
             sunhol_3rd=int(ow.get("sunhol_3rd", 0)),
             weekend_hol_3rd=int(ow.get("weekend_hol_3rd", 0)),
-            soft_unavailable=int(ow.get("soft_unavailable", 0)),
+            soft_unavailable=1000,  # 固定値: ソフト化した不可日はほぼハード制約として扱う
         )
 
         self.model = cp_model.CpModel()

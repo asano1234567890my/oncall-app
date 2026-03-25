@@ -16,7 +16,7 @@ class ObjectiveWeights(BaseModel):
     sunhol_fairness: int = Field(200)
     sunhol_3rd: int = Field(80)
     weekend_hol_3rd: int = Field(0)
-    soft_unavailable: int = Field(500)
+    soft_unavailable: int = Field(0)  # UI非表示・optimizer内部で1000固定
 
     month_fairness: int = Field(100)
     past_sat_gap: int = Field(10)
