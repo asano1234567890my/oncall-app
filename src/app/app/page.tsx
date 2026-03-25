@@ -646,7 +646,19 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
 
       {core.diagnoseResult && (
         <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-900">
-          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />AI制約診断の結果</p>
+          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />制約診断の結果</p>
+          {core.diagnoseResult.solvable_removals?.length > 0 && (
+            <div className="mb-1.5 rounded border border-green-300 bg-green-50 px-2 py-1.5">
+              <p className="font-semibold text-green-700">
+                {core.diagnoseResult.solvable_removals[0]?.is_admin_setting
+                  ? "以下の設定のいずれかを変更すれば解けます（検証済み）"
+                  : "以下のいずれか1つを外せば解けます（検証済み）"}
+              </p>
+              {core.diagnoseResult.solvable_removals.map((r, i) => (
+                <p key={i} className="ml-3 mt-0.5 text-green-800">・{r.description_ja}</p>
+              ))}
+            </div>
+          )}
           {core.diagnoseResult.specific_violations.map((v, i) => (
             <p key={i} className="ml-3 mt-0.5">・{v}</p>
           ))}
