@@ -508,12 +508,12 @@ function LoadingOverlay() {
 function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenImport }: { core: ReturnType<typeof useOnCallCore>; onOpenSettings: () => void; onOpenDoctorManage: () => void; onOpenImport: () => void }) {
   const hasDoctors = core.numDoctors > 0;
   const [detailDoctorId, setDetailDoctorId] = useState<string | null>(null);
-  const [showGuideModal, setShowGuideModal] = useState(() => {
-    if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search).has("debug_modal");
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug_modal")) {
+      setShowGuideModal(true);
     }
-    return false;
-  });
+  }, []);
 
   // 検証済み解決策がない場合に案内モーダルを自動表示
   const hasVerifiedSolutions = (core.diagnoseResult?.solvable_removals?.length ?? 0) > 0;

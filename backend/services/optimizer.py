@@ -1086,6 +1086,8 @@ class OnCallOptimizer:
 
                 # --- soft constraints ---
 
+        w = self.objective_weights
+
         # Ideal gap gradient: penalize shifts within (hard_interval, hard_interval + extra]
         # Closer to hard minimum = higher penalty, linearly decreasing to 0 at ideal gap
         _base = spacing_days if spacing_days is not None else 4
@@ -1258,7 +1260,6 @@ class OnCallOptimizer:
         else:
             self.model.Add(soft_unavail_sum == 0)
 
-        w = self.objective_weights
         self.model.Minimize(
             w.month_fairness * fairness
             + w.sat_month_fairness * sat_month_gap

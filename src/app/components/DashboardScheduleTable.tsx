@@ -137,12 +137,12 @@ export default function DashboardScheduleTable({
   onOpenDoctorManage,
 }: DashboardScheduleTableProps) {
   const isDragging = draggingDoctorId !== null;
-  const [showGuideModal, setShowGuideModal] = useState(() => {
-    if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search).has("debug_modal");
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("debug_modal")) {
+      setShowGuideModal(true);
     }
-    return false;
-  });
+  }, []);
   const hasVerifiedSolutions = (diagnoseResult?.solvable_removals?.length ?? 0) > 0;
   const prevDiagnoseRef = useRef(diagnoseResult);
   useEffect(() => {
