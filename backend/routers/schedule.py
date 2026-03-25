@@ -78,8 +78,9 @@ def _normalize_shift_type(raw_shift_type: str) -> str:
 ## ── ICS Feed (Google Calendar sync) ──
 
 
-def _build_ics(doctor_name: str, hospital_name: str, assignments: list) -> str:
+def _build_ics(doctor_name: str, hospital_name: str, assignments: list, doctor_id: str = "") -> str:
     """Build an iCalendar (.ics) string from shift assignments."""
+    now_stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
@@ -96,10 +97,12 @@ def _build_ics(doctor_name: str, hospital_name: str, assignments: list) -> str:
         dtstart = f"{d.year:04d}{d.month:02d}{d.day:02d}"
         dtend = f"{next_day.year:04d}{next_day.month:02d}{next_day.day:02d}"
 
-        uid = f"{d.isoformat()}-{_normalize_shift_type(a.shift_type)}-{doctor_name}@shiftraku"
+        # UID must be ASCII — use doctor_id (UUID) instead of doctor_name
+        uid = f"{d.isoformat()}-{_normalize_shift_type(a.shift_type)}-{doctor_id or 'doc'}@shiftraku.com"
         lines.extend([
             "BEGIN:VEVENT",
             f"UID:{uid}",
+            f"DTSTAMP:{now_stamp}",
             f"DTSTART;VALUE=DATE:{dtstart}",
             f"DTEND;VALUE=DATE:{dtend}",
             f"SUMMARY:{shift_label}（{hospital_name}）",
@@ -156,7 +159,7 @@ async def get_ical_feed(
     ]
 
     hospital_name = doctor.hospital.name if doctor.hospital else "病院"
-    ics_content = _build_ics(doctor.name, hospital_name, assignments)
+    ics_content = _build_ics(doctor.name, hospital_name, assignments, doctor_id=str(doctor.id))
 
     return Response(
         content=ics_content,
