@@ -1669,11 +1669,6 @@ class OnCallOptimizer:
 
         if "unavailable" in categories:
             unavail_groups = categories["unavailable"]
-            # Group by date to find concentrated days
-            date_groups: Dict[str, List[str]] = {}
-            for g in unavail_groups:
-                # Extract date from group_id like "unavail_d3_day15" or description
-                date_groups.setdefault(g["description_ja"], [])
             for g in unavail_groups[:5]:
                 violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
 
@@ -1688,8 +1683,21 @@ class OnCallOptimizer:
 
         if "cap" in categories:
             cap_groups = categories["cap"]
+            # Group by constraint type (strip doctor name prefix)
+            cap_by_type: Dict[str, List[str]] = {}
             for g in cap_groups:
-                violations.append(f"{g['description_ja']}を引き上げると解ける可能性があります")
+                desc = g["description_ja"]
+                doctor_name = g.get("doctor_name", "")
+                # Extract constraint label: "医師Xの土曜当直上限（月1回）" → "土曜当直上限（月1回）"
+                constraint_label = desc
+                if doctor_name and "の" in desc:
+                    constraint_label = desc.split("の", 1)[1]
+                cap_by_type.setdefault(constraint_label, []).append(doctor_name)
+            for label, names in cap_by_type.items():
+                if len(names) <= 3:
+                    violations.append(f"{label}を引き上げると解ける可能性があります（{', '.join(names)}）")
+                else:
+                    violations.append(f"{label}を引き上げると解ける可能性があります（{len(names)}名が該当）")
 
         if "locked" in categories:
             locked_groups = categories["locked"]
