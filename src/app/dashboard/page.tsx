@@ -214,6 +214,8 @@ export default function DashboardPage() {
               isOverrideMode={core.isOverrideMode}
               changedShiftKeys={core.changedShiftKeys}
               viewportZoom={viewportZoom}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenDoctorManage={() => setIsDoctorDrawerOpen(true)}
             />
           </div>
         </main>

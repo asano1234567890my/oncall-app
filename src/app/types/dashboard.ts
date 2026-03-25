@@ -66,8 +66,8 @@ export type HardConstraints = {
   interval_days: number;
   max_weekend_holiday_works: number;
   max_saturday_nights: number;
-  max_sunhol_days: number;
-  max_sunhol_works: number;
+  max_sunhol_days?: number | null;
+  max_sunhol_works?: number | null;
   prevent_sunhol_consecutive: boolean;
   respect_unavailable_days: boolean;
   holiday_shift_mode: "combined" | "split";
@@ -160,8 +160,8 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   interval_days: 4,
   max_weekend_holiday_works: 3,
   max_saturday_nights: 1,
-  max_sunhol_days: 2,
-  max_sunhol_works: 3,
+  max_sunhol_days: null,
+  max_sunhol_works: null,
   prevent_sunhol_consecutive: true,
   respect_unavailable_days: true,
   holiday_shift_mode: "split",

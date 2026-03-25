@@ -856,14 +856,14 @@ class OnCallOptimizer:
             "saturday_night_max",
         )
         max_sunhol_days = self._get_hard_constraint_value(
-            2,
+            None,
             "max_sunhol_days",
             "sunhol_day_max",
             "max_holiday_days",
             "max_sunday_holiday_days",
         )
         max_sunhol_works = self._get_hard_constraint_value(
-            3,
+            None,
             "max_sunhol_works",
             "sunhol_work_max",
             "max_holiday_works",
@@ -1382,16 +1382,10 @@ class OnCallOptimizer:
         if min_removals:
             solvable_removals.extend(min_removals)
 
-        # Phase 2c: 検証済み結果がなければ未検証のフォールバック
-        specific_violations = (
-            self._diagnose_phase2(conflict_groups, time_limit_seconds)
-            if not min_removals
-            else []
-        )
-
+        # 未検証フォールバックは廃止 — 検証済み結果がなければ案内モーダルに委ねる
         return {
             "conflict_groups": conflict_groups,
-            "specific_violations": specific_violations,
+            "specific_violations": [],
             "solvable_removals": solvable_removals,
             "human_insights": self._build_human_insights(),
             "phase_completed": 2,
@@ -1506,8 +1500,8 @@ class OnCallOptimizer:
 
         spacing_days = self._get_hard_constraint_value(4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days")
         max_saturday_nights = self._get_hard_constraint_value(1, "max_saturday_nights", "max_sat_nights", "sat_night_max", "saturday_night_max")
-        max_sunhol_days = self._get_hard_constraint_value(2, "max_sunhol_days", "sunhol_day_max", "max_holiday_days", "max_sunday_holiday_days")
-        max_sunhol_works = self._get_hard_constraint_value(3, "max_sunhol_works", "sunhol_work_max", "max_holiday_works", "max_sunday_holiday_works")
+        max_sunhol_days = self._get_hard_constraint_value(None, "max_sunhol_days", "sunhol_day_max", "max_holiday_days", "max_sunday_holiday_days")
+        max_sunhol_works = self._get_hard_constraint_value(None, "max_sunhol_works", "sunhol_work_max", "max_holiday_works", "max_sunday_holiday_works")
         max_weekend_holiday_works = self._get_hard_constraint_value(
             None, "max_weekend_holiday_works", "weekend_holiday_work_max", "weekend_hol_work_max",
             "max_weekend_holiday_count", "weekend_holiday_total_max", "weekend_hol_total_max", "max_shifts",
@@ -1770,16 +1764,24 @@ class OnCallOptimizer:
         self,
         time_limit_per_try: float = 2.0,
     ) -> List[Dict[str, Any]]:
-        """管理者設定を1つずつ外して再ソルブし、解ける設定の最小変更値を探す。
+        """管理者設定を探索して解決策を提案する。
 
         流れ:
-        1. 各設定（interval, wh_max, sat_max）を外してモデル再構築→ソルブ
-        2. 解ければ、元の値から段階的に変えて「どの値で解けるか」を探索
-        3. 「土日祝上限を2→3にすれば解けます」のように具体的に返す
+        1. 単独探索: 各設定を1つずつ外してソルブ → 解ければ最小変更値を探索
+        2. 無意味フィルタ: 実質制限なしになる提案は除外
+        3. 組み合わせ探索: 単独で解けなかった場合、2設定の組み合わせを試す
         """
-        results: List[Dict[str, Any]] = []
+        # --- 共通: カレンダー情報 ---
+        num_wh_days = sum(
+            1 for day in range(1, self.num_days + 1)
+            if self.is_sunday_or_holiday(day) or self.is_saturday(day)
+        )
+        num_sats = sum(
+            1 for day in range(1, self.num_days + 1)
+            if self.is_saturday(day)
+        )
 
-        # 現在の設定値を取得
+        # --- 現在の設定値を取得 ---
         current_interval = self._get_hard_constraint_value(
             4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days"
         )
@@ -1791,47 +1793,65 @@ class OnCallOptimizer:
         current_sat_max = self._get_hard_constraint_value(
             1, "max_saturday_nights", "max_sat_nights", "sat_night_max", "saturday_night_max"
         )
+        # スコア上限: 全医師の max_score のうち最小値を代表値として使用
+        has_score_max = bool(self.max_score_by_doctor) or self.score_max_float is not None
 
-        # 試す設定: (名前, キー, 現在値, 外した値, 探索方向, ラベル)
+        # --- 試す設定の定義 ---
         settings_to_try = []
         if current_interval is not None and current_interval > 0:
             settings_to_try.append({
                 "name": "interval_days",
                 "current": current_interval,
-                "removed_value": 0,  # 外す = 間隔なし
-                "search_range": list(range(current_interval - 1, -1, -1)),  # 現在値-1 → 0
+                "removed_override": {"interval_days": 0},
+                "search_range": list(range(current_interval - 1, -1, -1)),
                 "label": "勤務間隔",
                 "unit": "日",
                 "direction": "decrease",
+                "meaningless_threshold": lambda v: v == 0,  # 0日=制限なし
             })
         if current_wh_max is not None:
-            num_wh_days = sum(1 for day in range(1, self.num_days + 1) if self.is_sunday_or_holiday(day) or self.is_saturday(day))
             settings_to_try.append({
                 "name": "max_weekend_holiday_works",
                 "current": current_wh_max,
-                "removed_value": None,  # 外す = 上限なし
+                "removed_override": {"max_weekend_holiday_works": None},
                 "search_range": list(range(current_wh_max + 1, min(current_wh_max + 6, num_wh_days + 1))),
                 "label": "土日祝合算上限",
                 "unit": "回",
                 "direction": "increase",
+                "meaningless_threshold": lambda v: v is None or v >= num_wh_days,
             })
         if current_sat_max is not None:
-            num_sats = sum(1 for day in range(1, self.num_days + 1) if self.is_saturday(day))
             settings_to_try.append({
                 "name": "max_saturday_nights",
                 "current": current_sat_max,
-                "removed_value": None,  # 外す = 上限なし
+                "removed_override": {"max_saturday_nights": None},
                 "search_range": list(range(current_sat_max + 1, min(current_sat_max + 4, num_sats + 1))),
                 "label": "土曜当直上限",
                 "unit": "回",
                 "direction": "increase",
+                "meaningless_threshold": lambda v: v is None or v >= num_sats,
+            })
+        if has_score_max:
+            settings_to_try.append({
+                "name": "score_max",
+                "current": self.score_max_float,
+                "removed_override": {},  # 特殊: try_solve_withで別処理
+                "search_range": [],  # スコア上限は数値探索しない（外すだけ）
+                "label": "スコア上限",
+                "unit": "",
+                "direction": "increase",
+                "meaningless_threshold": lambda v: True,  # 数値探索しないので常にフィルタ対象外（外せば解ける表示）
+                "is_score_max": True,
             })
 
-        def try_solve_with(overrides: Dict[str, Any]) -> bool:
+        def try_solve_with(
+            overrides: Dict[str, Any],
+            remove_score_max: bool = False,
+        ) -> bool:
             """設定を変えてモデル再構築→ソルブ。"""
             hc = dict(self.hard_constraints)
             hc.update(overrides)
-            trial = OnCallOptimizer(
+            kwargs: Dict[str, Any] = dict(
                 num_doctors=self.num_doctors,
                 year=self.year,
                 month=self.month,
@@ -1844,29 +1864,64 @@ class OnCallOptimizer:
                 hard_constraints=hc,
                 locked_shifts=self.locked_shifts,
             )
+            if not remove_score_max:
+                kwargs["score_min"] = self.score_min_float
+                kwargs["score_max"] = self.score_max_float
+                kwargs["min_score_by_doctor"] = self.min_score_by_doctor
+                kwargs["max_score_by_doctor"] = self.max_score_by_doctor
+            else:
+                # スコア上限を外す: 下限は残す、上限は十分大きな値に
+                kwargs["score_min"] = self.score_min_float
+                kwargs["score_max"] = 99.0
+                kwargs["min_score_by_doctor"] = self.min_score_by_doctor
+                kwargs["max_score_by_doctor"] = {}  # 個別上限も全解除
+            trial = OnCallOptimizer(**kwargs)
             trial.build_model()
             solver = cp_model.CpSolver()
             solver.parameters.max_time_in_seconds = time_limit_per_try
             status = solver.Solve(trial.model)
             return status in (cp_model.FEASIBLE, cp_model.OPTIMAL)
 
+        # --- 単独探索 ---
+        single_results: List[Dict[str, Any]] = []
+        solvable_alone: List[str] = []  # 単独で解けた設定名（組み合わせ探索で除外用）
+
         for setting in settings_to_try:
             name = setting["name"]
             current = setting["current"]
+            is_score = setting.get("is_score_max", False)
 
             # Step 1: 設定を外して解けるか
-            override_removed = {name: setting["removed_value"]}
-            if not try_solve_with(override_removed):
+            if not try_solve_with(
+                setting["removed_override"],
+                remove_score_max=is_score,
+            ):
                 continue  # この設定を外しても解けない → スキップ
 
+            solvable_alone.append(name)
+
+            # スコア上限は数値探索しない（外せるかどうかだけ）
+            if is_score:
+                single_results.append({
+                    "group_id": f"setting_{name}",
+                    "category": "admin_setting",
+                    "doctor_name": None,
+                    "description_ja": "スコア上限を緩和すれば解けます",
+                    "is_admin_setting": True,
+                })
+                continue
+
             # Step 2: 最小変更値を探索
-            found_value = setting["removed_value"]
+            found_value = setting.get("removed_override", {}).get(name)
             for try_value in setting["search_range"]:
                 if try_solve_with({name: try_value}):
                     found_value = try_value
                     break
 
-            # 結果を追加
+            # 無意味フィルタ: 実質制限なしになる値は除外
+            if setting["meaningless_threshold"](found_value):
+                continue
+
             if found_value is not None:
                 if setting["direction"] == "decrease":
                     desc = f"{setting['label']}を{current}{setting['unit']}→{found_value}{setting['unit']}に下げれば解けます"
@@ -1875,18 +1930,36 @@ class OnCallOptimizer:
             else:
                 desc = f"{setting['label']}の制限を外せば解けます"
 
-            results.append({
+            single_results.append({
                 "group_id": f"setting_{name}",
                 "category": "admin_setting",
                 "doctor_name": None,
                 "description_ja": desc,
                 "is_admin_setting": True,
-                "setting_name": name,
-                "current_value": current,
-                "suggested_value": found_value,
             })
 
-        return results
+        # --- 組み合わせ探索（単独で解けなかった場合のみ） ---
+        if not single_results:
+            unsolved = [s for s in settings_to_try if s["name"] not in solvable_alone]
+            for i in range(len(unsolved)):
+                for j in range(i + 1, len(unsolved)):
+                    s1, s2 = unsolved[i], unsolved[j]
+                    is_score_1 = s1.get("is_score_max", False)
+                    is_score_2 = s2.get("is_score_max", False)
+                    combined_override = {}
+                    combined_override.update(s1["removed_override"])
+                    combined_override.update(s2["removed_override"])
+                    remove_score = is_score_1 or is_score_2
+                    if try_solve_with(combined_override, remove_score_max=remove_score):
+                        single_results.append({
+                            "group_id": f"setting_combo_{s1['name']}_{s2['name']}",
+                            "category": "admin_setting",
+                            "doctor_name": None,
+                            "description_ja": f"{s1['label']}と{s2['label']}を両方調整すれば解ける可能性があります",
+                            "is_admin_setting": True,
+                        })
+
+        return single_results
 
     def _diagnose_minimum_unavail_removals(
         self,

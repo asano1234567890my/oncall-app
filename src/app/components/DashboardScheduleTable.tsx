@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, Lock, Unlock } from "lucide-react";
 import type { DragEvent } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import type { DiagnoseResult, DiagnosticInfo, ScheduleRow, ShiftType } from "../types/dashboard";
+import InfeasibleGuideModal from "./InfeasibleGuideModal";
 
 type CellValidityMap = Map<string, string | null>;
 
@@ -80,6 +81,9 @@ type DashboardScheduleTableProps = {
   changedShiftKeys?: Set<string>;
   // Zoom (for inverse-zoom on fixed overlays)
   viewportZoom?: number;
+  // Guide modal callbacks
+  onOpenSettings?: () => void;
+  onOpenDoctorManage?: () => void;
 };
 
 export default function DashboardScheduleTable({
@@ -129,8 +133,19 @@ export default function DashboardScheduleTable({
   isOverrideMode,
   changedShiftKeys,
   viewportZoom = 1,
+  onOpenSettings,
+  onOpenDoctorManage,
 }: DashboardScheduleTableProps) {
   const isDragging = draggingDoctorId !== null;
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const hasVerifiedSolutions = (diagnoseResult?.solvable_removals?.length ?? 0) > 0;
+  const prevDiagnoseRef = useRef(diagnoseResult);
+  useEffect(() => {
+    if (diagnoseResult && diagnoseResult !== prevDiagnoseRef.current && !hasVerifiedSolutions) {
+      setShowGuideModal(true);
+    }
+    prevDiagnoseRef.current = diagnoseResult;
+  }, [diagnoseResult, hasVerifiedSolutions]);
 
   // Floating tooltip for drag constraint messages
   const [dragMousePos, setDragMousePos] = useState<{ x: number; y: number } | null>(null);
@@ -432,7 +447,24 @@ export default function DashboardScheduleTable({
               ))}
             </details>
           )}
+          {!hasVerifiedSolutions && onOpenSettings && (
+            <button
+              onClick={() => setShowGuideModal(true)}
+              className="mt-2 ml-auto flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-blue-400 text-[9px] font-bold">?</span>
+              解決のヒント
+            </button>
+          )}
         </div>
+      )}
+      {onOpenSettings && onOpenDoctorManage && (
+        <InfeasibleGuideModal
+          open={showGuideModal}
+          onClose={() => setShowGuideModal(false)}
+          onOpenSettings={onOpenSettings}
+          onOpenDoctorManage={onOpenDoctorManage}
+        />
       )}
 
       {isOverrideMode && (

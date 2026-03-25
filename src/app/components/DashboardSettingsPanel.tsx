@@ -218,7 +218,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
           {hardConstraintNumberInputs
             .filter((c) => basicRuleKeys.has(c.key))
             .map((c) => {
-              const value = typeof hardConstraints[c.key] === "number" ? hardConstraints[c.key] : 0;
+              const value = typeof hardConstraints[c.key] === "number" ? (hardConstraints[c.key] as number) : 0;
               return (
                 <div key={c.key} className="flex items-center justify-between gap-2">
                   <span className="text-xs text-gray-700">{c.label}</span>

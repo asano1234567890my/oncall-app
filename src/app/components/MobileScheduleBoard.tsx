@@ -1,19 +1,29 @@
 // src/app/components/MobileScheduleBoard.tsx — モバイル専用スケジュール表（タップ→ボトムシート方式）
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Lock, Shield, Sparkles } from "lucide-react";
 import type { useOnCallCore } from "../hooks/useOnCallCore";
 import type { DoctorScoreEntry, ShiftType } from "../types/dashboard";
 import { getShiftKey } from "../hooks/useScheduleConstraints";
 import MobileActionSheet from "./MobileActionSheet";
 import ScheduleValidationAlert from "./schedule/ScheduleValidationAlert";
+import InfeasibleGuideModal from "./InfeasibleGuideModal";
 
-type Props = { core: ReturnType<typeof useOnCallCore>; onOpenSettings?: () => void; onShowGuide?: () => void };
+type Props = { core: ReturnType<typeof useOnCallCore>; onOpenSettings?: () => void; onOpenDoctorManage?: () => void; onShowGuide?: () => void };
 
 type SheetTarget = { day: number; shiftType: ShiftType } | null;
 
-export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide }: Props) {
+export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctorManage, onShowGuide }: Props) {
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  const hasVerifiedSolutions = (core.diagnoseResult?.solvable_removals?.length ?? 0) > 0;
+  const prevDiagnoseRef = useRef(core.diagnoseResult);
+  useEffect(() => {
+    if (core.diagnoseResult && core.diagnoseResult !== prevDiagnoseRef.current && !hasVerifiedSolutions) {
+      setShowGuideModal(true);
+    }
+    prevDiagnoseRef.current = core.diagnoseResult;
+  }, [core.diagnoseResult, hasVerifiedSolutions]);
   const {
     schedule, scoreEntries, year, month,
     holidaySet, manualHolidaySetInMonth, toYmd, getWeekday, getDoctorName,
@@ -191,7 +201,24 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
               <p className="ml-3 mt-0.5 whitespace-pre-wrap text-blue-800">{diagnoseResult.ai_explanation}</p>
             </div>
           )}
+          {!hasVerifiedSolutions && onOpenSettings && (
+            <button
+              onClick={() => setShowGuideModal(true)}
+              className="mt-2 ml-auto flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-blue-400 text-[9px] font-bold">?</span>
+              解決のヒント
+            </button>
+          )}
         </div>
+      )}
+      {onOpenSettings && onOpenDoctorManage && (
+        <InfeasibleGuideModal
+          open={showGuideModal}
+          onClose={() => setShowGuideModal(false)}
+          onOpenSettings={onOpenSettings}
+          onOpenDoctorManage={onOpenDoctorManage}
+        />
       )}
     </>
   );

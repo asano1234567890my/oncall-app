@@ -74,7 +74,7 @@ export default function RulesConfig({
               {hardConstraintNumberInputs
                 .filter((c) => !(hardConstraints.holiday_shift_mode === "combined" && c.key === "max_sunhol_days"))
                 .map((constraint) => {
-                const value = typeof hardConstraints[constraint.key] === "number" ? hardConstraints[constraint.key] : 0;
+                const value = typeof hardConstraints[constraint.key] === "number" ? (hardConstraints[constraint.key] as number) : 0;
                 return (
                   <label key={constraint.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3">
                     <div className="mb-1 text-[11px] font-bold text-gray-700">{constraint.label}</div>

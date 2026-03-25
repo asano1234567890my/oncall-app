@@ -24,6 +24,7 @@ import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
 import ImageImportModal from "../components/ImageImportModal";
+import InfeasibleGuideModal from "../components/InfeasibleGuideModal";
 import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
 import { DEFAULT_SHIFT_SCORES } from "../types/dashboard";
@@ -246,6 +247,7 @@ export default function AppPage() {
               <MobileScheduleBoard
                 core={core}
                 onOpenSettings={openSettings}
+                onOpenDoctorManage={() => openDrawer("doctor-manage")}
                 onShowGuide={() => onboarding.showGuide("dnd")}
               />
             ) : (
@@ -506,6 +508,17 @@ function LoadingOverlay() {
 function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenImport }: { core: ReturnType<typeof useOnCallCore>; onOpenSettings: () => void; onOpenDoctorManage: () => void; onOpenImport: () => void }) {
   const hasDoctors = core.numDoctors > 0;
   const [detailDoctorId, setDetailDoctorId] = useState<string | null>(null);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  // 検証済み解決策がない場合に案内モーダルを自動表示
+  const hasVerifiedSolutions = (core.diagnoseResult?.solvable_removals?.length ?? 0) > 0;
+  const prevDiagnoseRef = useRef(core.diagnoseResult);
+  useEffect(() => {
+    if (core.diagnoseResult && core.diagnoseResult !== prevDiagnoseRef.current && !hasVerifiedSolutions) {
+      setShowGuideModal(true);
+    }
+    prevDiagnoseRef.current = core.diagnoseResult;
+  }, [core.diagnoseResult, hasVerifiedSolutions]);
 
   const monthPrefix = `${core.year}-${String(core.month).padStart(2, "0")}-`;
   const hasMonthEntry = useCallback((doctorId: string) => {
@@ -680,8 +693,24 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
               <p className="ml-3 mt-0.5 whitespace-pre-wrap text-blue-800">{core.diagnoseResult.ai_explanation}</p>
             </div>
           )}
+          {!hasVerifiedSolutions && (
+            <button
+              onClick={() => setShowGuideModal(true)}
+              className="mt-2 ml-auto flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700"
+            >
+              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-blue-400 text-[9px] font-bold">?</span>
+              解決のヒント
+            </button>
+          )}
         </div>
       )}
+
+      <InfeasibleGuideModal
+        open={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        onOpenSettings={onOpenSettings}
+        onOpenDoctorManage={onOpenDoctorManage}
+      />
 
       <div className="mt-3 flex gap-2">
         <button
