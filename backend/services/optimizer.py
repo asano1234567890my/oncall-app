@@ -1747,7 +1747,7 @@ class OnCallOptimizer:
                 weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
                 holiday_tag = "・祝" if self.is_holiday(day) else ""
                 critical_days.append((len(names), day,
-                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可（{', '.join(names)}）"
+                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可"
                 ))
         # Sort by severity (most unavailable first), take top 5
         critical_days.sort(key=lambda x: -x[0])
