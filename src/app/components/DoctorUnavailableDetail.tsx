@@ -1,12 +1,15 @@
 // src/app/components/DoctorUnavailableDetail.tsx — 1医師の不可日詳細モーダル（モバイル用）
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, Check, Share2, QrCode } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
 import SettingsModalPortal from "./settings/SettingsModalPortal";
+import TargetShiftPopover from "./TargetShiftPopover";
+import { useHolidays } from "../hooks/useHolidays";
+import { useCustomHolidays } from "../hooks/useCustomHolidays";
 import {
   dayPickerBaseClassName,
   baseCalendarModifierClasses,
@@ -15,7 +18,12 @@ import {
   getFixedWeekdayButtonTone,
   getFixedWeekdayButtonLabel,
   pad2,
+  toDateKey,
+  unavailableAllModifierClass,
+  unavailableDayModifierClass,
+  unavailableNightModifierClass,
 } from "./settings/shared";
+import { getUnavailableDateTargetShift } from "../utils/unavailableSettings";
 import type {
   Doctor,
   UnavailableDateEntry,
@@ -149,6 +157,8 @@ type DoctorUnavailableDetailProps = {
   pyWeekdays: number[];
   onToggleUnavailable: (doctorId: string, ymd: string, targetShift?: TargetShift | null) => void;
   onToggleFixedWeekday: (doctorId: string, weekdayPy: number, targetShift?: TargetShift | null) => void;
+  onSave?: () => void;
+  isSaving?: boolean;
 };
 
 export default function DoctorUnavailableDetail({
@@ -161,26 +171,53 @@ export default function DoctorUnavailableDetail({
   pyWeekdays,
   onToggleUnavailable,
   onToggleFixedWeekday,
+  onSave,
+  isSaving = false,
 }: DoctorUnavailableDetailProps) {
   const [month, setMonth] = useState(() => new Date(year, targetMonth - 1, 1));
+  const [unavailablePopover, setUnavailablePopover] = useState<{ dateKey: string } | null>(null);
+
+  const displayedYear = month.getFullYear();
+  const displayedMonthNumber = month.getMonth() + 1;
+
+  const { holidaySet: standardHolidaySet } = useHolidays(displayedYear);
+  const { manualSet, disabledSet, customError } = useCustomHolidays(displayedYear);
+  const holidaySet = useMemo(() => {
+    const next = new Set<string>(standardHolidaySet);
+    if (customError) return next;
+    for (const date of disabledSet) next.delete(date);
+    for (const date of manualSet) next.add(date);
+    return next;
+  }, [customError, disabledSet, manualSet, standardHolidaySet]);
 
   if (!doctor) return null;
 
-  const selectedDates: Date[] = [];
-  for (const entry of unavailableEntries) {
-    const match = entry.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) continue;
-    const [, y, m, d] = match;
-    selectedDates.push(new Date(Number(y), Number(m) - 1, Number(d)));
-  }
+  const monthPrefix = `${displayedYear}-${pad2(displayedMonthNumber)}-`;
+  const entriesInMonth = unavailableEntries.filter((e) => e.date.startsWith(monthPrefix));
+
+  const selectedDates: Date[] = entriesInMonth.map((entry) => {
+    const [y, m, d] = entry.date.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  });
 
   const getFixedWeekdayTargetShift = (weekdayPy: number): TargetShift | null => {
     const entry = fixedEntries.find((e) => e.day_of_week === weekdayPy);
     return entry ? entry.target_shift : null;
   };
 
-  const monthPrefix = `${year}-${String(targetMonth).padStart(2, "0")}-`;
-  const hasAny = unavailableEntries.some((e) => e.date.startsWith(monthPrefix));
+  const hasAny = entriesInMonth.length > 0;
+
+  const handleDayClick = (date: Date) => {
+    if (date.getFullYear() !== displayedYear || date.getMonth() !== displayedMonthNumber - 1) return;
+    const dateKey = toDateKey(date);
+    const isSundayOrHoliday = date.getDay() === 0 || holidaySet.has(dateKey);
+    if (!isSundayOrHoliday) {
+      onToggleUnavailable(doctor.id, dateKey);
+      setUnavailablePopover(null);
+      return;
+    }
+    setUnavailablePopover({ dateKey });
+  };
 
   return (
     <SettingsModalPortal isOpen>
@@ -198,6 +235,18 @@ export default function DoctorUnavailableDetail({
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               {doctor.access_token && <ShareDropdown doctor={doctor} />}
+              {onSave && (
+                <button
+                  type="button"
+                  onClick={onSave}
+                  disabled={isSaving}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-bold text-white transition ${
+                    isSaving ? "cursor-not-allowed bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
+                >
+                  {isSaving ? "保存中..." : "保存"}
+                </button>
+              )}
               <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 transition-colors">
                 <X className="h-5 w-5" />
               </button>
@@ -233,24 +282,44 @@ export default function DoctorUnavailableDetail({
               <DayPicker
                 mode="multiple"
                 month={month}
-                onMonthChange={setMonth}
+                onMonthChange={(m) => { setUnavailablePopover(null); setMonth(m); }}
                 locale={ja}
                 selected={selectedDates}
-                onDayClick={(date) => {
-                  const ymd = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-                  onToggleUnavailable(doctor.id, ymd);
-                }}
+                onDayClick={handleDayClick}
                 showOutsideDays
                 className={dayPickerBaseClassName}
                 classNames={dayPickerWithNavClassNames}
                 modifiers={{
                   saturday: (date: Date) => date.getDay() === 6,
                   sunday: (date: Date) => date.getDay() === 0,
+                  holiday: (date: Date) =>
+                    date.getFullYear() === displayedYear &&
+                    date.getMonth() === displayedMonthNumber - 1 &&
+                    holidaySet.has(toDateKey(date)),
+                  allUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "all",
+                  dayUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "day",
+                  nightUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "night",
                 }}
-                modifiersClassNames={baseCalendarModifierClasses}
+                modifiersClassNames={{
+                  ...baseCalendarModifierClasses,
+                  holiday: "[&>button]:bg-red-50/70 [&>button]:text-red-600 hover:[&>button]:bg-red-100/80",
+                  allUnavailable: unavailableAllModifierClass,
+                  dayUnavailable: unavailableDayModifierClass,
+                  nightUnavailable: unavailableNightModifierClass,
+                }}
+              />
+              <TargetShiftPopover
+                open={Boolean(unavailablePopover)}
+                title={unavailablePopover ? `${displayedMonthNumber}月${Number(unavailablePopover.dateKey.slice(-2))}日の不可設定` : "不可設定"}
+                currentValue={unavailablePopover ? getUnavailableDateTargetShift(entriesInMonth, unavailablePopover.dateKey) : null}
+                onSelect={(value) => {
+                  if (!unavailablePopover) return;
+                  onToggleUnavailable(doctor.id, unavailablePopover.dateKey, value);
+                }}
+                onClose={() => setUnavailablePopover(null)}
               />
               <div className="mt-1 text-[10px] text-gray-400">
-                日付タップで不可日を追加/解除（{unavailableEntries.length}日設定中）
+                平日・土曜はタップで終日休み、日曜・祝日はポップアップで日直/当直別に設定（{entriesInMonth.length}日設定中）
               </div>
             </div>
           </div>

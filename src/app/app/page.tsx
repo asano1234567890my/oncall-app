@@ -693,6 +693,8 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
           pyWeekdays={core.pyWeekdays}
           onToggleUnavailable={core.toggleUnavailable}
           onToggleFixedWeekday={core.toggleFixedWeekday}
+          onSave={() => { void core.saveAllDoctorsSettings(); }}
+          isSaving={core.isBulkSavingDoctors}
         />
       )}
     </div>
