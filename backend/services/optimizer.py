@@ -1355,6 +1355,15 @@ class OnCallOptimizer:
         # Phase 1: Build diagnosis model with assumptions → find conflicting groups
         conflict_groups, assumption_map = self._diagnose_phase1(time_limit_seconds)
         if not conflict_groups:
+            # Phase 1 で特定できなかった場合、日別の可用人数を計算してボトルネックを探す
+            staffing_violations = self._diagnose_staffing_shortage()
+            if staffing_violations:
+                return {
+                    "conflict_groups": [],
+                    "specific_violations": staffing_violations,
+                    "human_insights": self._build_human_insights(),
+                    "phase_completed": 1,
+                }
             return {
                 "conflict_groups": [],
                 "specific_violations": ["制約の競合を特定できませんでした。"],
@@ -1371,6 +1380,96 @@ class OnCallOptimizer:
             "human_insights": self._build_human_insights(),
             "phase_completed": 2,
         }
+
+    def _diagnose_staffing_shortage(self) -> List[str]:
+        """日別に当直・日直可能な医師数を計算し、人手不足の日を特定する。"""
+        doctors = range(self.num_doctors)
+        days = range(1, self.num_days + 1)
+        weekday_ja = ["月", "火", "水", "木", "金", "土", "日"]
+
+        holiday_shift_mode = str(self.hard_constraints.get("holiday_shift_mode", "split")).strip().lower()
+        combined_mode = holiday_shift_mode == "combined"
+        spacing_days = self._get_hard_constraint_value(
+            4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days"
+        )
+
+        violations: List[str] = []
+        critical_days: List[Dict[str, Any]] = []
+
+        for day in days:
+            date_obj = datetime.date(self.year, self.month, day)
+            dow_label = weekday_ja[date_obj.weekday()]
+            is_sunhol = self.is_sunday_or_holiday(day)
+            needs_day_shift = is_sunhol and not combined_mode
+
+            night_available: List[str] = []
+            day_available: List[str] = []
+
+            for d in doctors:
+                night_blocked = False
+                day_blocked = False
+
+                # 個別不可日チェック
+                for item in self.unavailable.get(d, []):
+                    normalized = self._normalize_unavailable_entry(item)
+                    if normalized is None:
+                        continue
+                    if normalized["date"] == day:
+                        shift = normalized["target_shift"]
+                        if shift in ("all", "night"):
+                            night_blocked = True
+                        if shift in ("all", "day"):
+                            day_blocked = True
+
+                # 固定不可曜日チェック
+                for item in self.fixed_unavailable_weekdays.get(d, []):
+                    normalized = self._normalize_fixed_weekday_entry(item)
+                    if normalized is None:
+                        continue
+                    if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
+                        shift = normalized["target_shift"]
+                        if shift in ("all", "night"):
+                            night_blocked = True
+                        if shift in ("all", "day"):
+                            day_blocked = True
+
+                doc_name = self.doctor_names.get(d, f"医師{d+1}")
+                if not night_blocked:
+                    night_available.append(doc_name)
+                if not day_blocked:
+                    day_available.append(doc_name)
+
+            if len(night_available) == 0:
+                violations.append(
+                    f"{self.month}/{day}（{dow_label}）は当直可能な医師がいません"
+                )
+                critical_days.append({"day": day, "night": 0, "day_shift": len(day_available)})
+            elif len(night_available) <= 2:
+                violations.append(
+                    f"{self.month}/{day}（{dow_label}）は当直可能な医師が{len(night_available)}名のみです（{', '.join(night_available)}）"
+                )
+                critical_days.append({"day": day, "night": len(night_available), "day_shift": len(day_available)})
+
+            if needs_day_shift and len(day_available) == 0:
+                violations.append(
+                    f"{self.month}/{day}（{dow_label}）は日直可能な医師がいません"
+                )
+            elif needs_day_shift and len(day_available) <= 2:
+                violations.append(
+                    f"{self.month}/{day}（{dow_label}）は日直可能な医師が{len(day_available)}名のみです（{', '.join(day_available)}）"
+                )
+
+        # interval制約との組み合わせで詰む可能性を報告
+        if critical_days and spacing_days and spacing_days > 0:
+            for i in range(len(critical_days) - 1):
+                gap = critical_days[i + 1]["day"] - critical_days[i]["day"]
+                if gap <= spacing_days:
+                    violations.append(
+                        f"{self.month}/{critical_days[i]['day']}日と{critical_days[i+1]['day']}日が{gap}日差で、"
+                        f"勤務間隔{spacing_days}日ルールと合わせると同じ医師が両方に入れません"
+                    )
+
+        return violations
 
     def _diagnose_phase1(
         self, time_limit_seconds: float = 5.0
@@ -1644,10 +1743,11 @@ class OnCallOptimizer:
                         "doctor_name": info["doctor_name"],
                         "description_ja": info["description_ja"],
                     })
-            return conflict_groups, assumption_map
+            if conflict_groups:
+                return conflict_groups, assumption_map
+            # INFEASIBLEだがsufficient_setが空 → フォールバックへ
 
-        # Model was feasible with all assumptions → infeasibility was in slot fulfillment
-        # (which we don't wrap). This means the base problem is likely under-staffed.
+        # 解けた（人手不足ではない）orタイムアウトor原因不明 → 人手不足チェックへ
         return [], assumption_map
 
     def _diagnose_phase2(
