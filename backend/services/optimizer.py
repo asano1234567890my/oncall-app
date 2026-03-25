@@ -947,6 +947,8 @@ class OnCallOptimizer:
 
         # === apply unavailable constraints ===
         soft_unavail_penalties = []
+        # Track metadata for each soft penalty var: (doctor_idx, day, shift_type)
+        self._soft_unavail_vars_meta: list[tuple] = []
 
         # 4) hard/soft: apply date-based unavailable constraints
         # When respect_unavailable_days=False, all entries become soft penalties
@@ -973,6 +975,7 @@ class OnCallOptimizer:
                         p_var = self.model.NewBoolVar(f"soft_unavail_d{d}_day{day}_{shift_type}")
                         self.model.Add(p_var == var)
                         soft_unavail_penalties.append(p_var)
+                        self._soft_unavail_vars_meta.append((d, day, shift_type, p_var))
                     else:
                         self.model.Add(var == 0)
 
@@ -1002,6 +1005,7 @@ class OnCallOptimizer:
                             p_var = self.model.NewBoolVar(f"soft_dow_d{d}_day{day}_{shift_type}")
                             self.model.Add(p_var == var)
                             soft_unavail_penalties.append(p_var)
+                            self._soft_unavail_vars_meta.append((d, day, shift_type, p_var))
                         else:
                             self.model.Add(var == 0)
 
@@ -1304,12 +1308,26 @@ class OnCallOptimizer:
                 schedule.append(day_data)
 
             scores = {d: solver.Value(self.doctor_scores[d]) / 10.0 for d in range(self.num_doctors)}
-            return {
+
+            # Check which soft unavailable constraints were violated
+            soft_unavail_violations = []
+            for d_idx, day, shift_type, p_var in getattr(self, "_soft_unavail_vars_meta", []):
+                if solver.Value(p_var) == 1:
+                    soft_unavail_violations.append({
+                        "doctor_idx": d_idx,
+                        "day": day,
+                        "shift_type": shift_type,
+                    })
+
+            result = {
                 "success": True,
                 "status": "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE",
                 "schedule": schedule,
                 "scores": scores,
             }
+            if soft_unavail_violations:
+                result["soft_unavail_violations"] = soft_unavail_violations
+            return result
 
         return {
             "success": False,

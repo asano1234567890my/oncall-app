@@ -1,4 +1,5 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { toast } from "react-hot-toast";
 import type {
   DiagnoseResponse,
   DiagnoseResult,
@@ -380,6 +381,26 @@ export function useScheduleApi({
       const nextSchedule = normalizeScheduleRows((data.schedule ?? []) as ScheduleRow[]);
       commitScheduleFrom(scheduleBeforeGenerate, nextSchedule);
       setScores(data.scores ?? {});
+
+      // Show warning if soft unavailable days were violated
+      if (Array.isArray(data.soft_unavail_violations) && data.soft_unavail_violations.length > 0) {
+        const violations = data.soft_unavail_violations as { doctor_name: string; day: number; shift_type: string }[];
+        const byDoctor = new Map<string, string[]>();
+        for (const v of violations) {
+          const label = v.shift_type === "day" ? "日直" : v.shift_type === "night" ? "当直" : "当直";
+          const entry = `${v.day}日(${label})`;
+          const list = byDoctor.get(v.doctor_name) || [];
+          list.push(entry);
+          byDoctor.set(v.doctor_name, list);
+        }
+        const lines = Array.from(byDoctor.entries()).map(
+          ([name, days]) => `${name}: ${days.join("・")}`
+        );
+        toast(
+          `不可希望を守れなかった医師:\n${lines.join("\n")}`,
+          { icon: "⚠️", duration: 8000 }
+        );
+      }
     } catch (err: unknown) {
       setSchedule(scheduleBeforeGenerate);
       setError(err instanceof Error ? err.message : "自動生成に失敗しました");

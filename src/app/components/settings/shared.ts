@@ -11,7 +11,7 @@ export type WeightChangeSummary = {
 /** 旧: 個別ウェイト一覧（/app 用に残す） */
 export const weightInputs = [
   { key: "gap5", label: "間隔ルール+1日のペナルティ", min: 0, max: 200, step: 5, hint: "勤務間隔ルールの直上を抑制" },
-  { key: "soft_unavailable", label: "不可日の回避優先度", min: 0, max: 200, step: 5, hint: "不可日を守れない場合の回避強度" },
+  { key: "soft_unavailable", label: "不可日の回避優先度", min: 0, max: 1000, step: 50, hint: "ソフト化した不可日の回避強度（高いほど厳守）" },
   { key: "sat_consec", label: "2か月連続土曜回避", min: 0, max: 200, step: 5, hint: "連続土曜抑制" },
   { key: "sat_month_fairness", label: "同月の土曜回数平準化", min: 0, max: 200, step: 5, hint: "土曜回数の均等化" },
   { key: "weekend_hol_3rd", label: "土日祝合算3回目ペナルティ", min: 0, max: 200, step: 5, hint: "土日祝回数抑制" },

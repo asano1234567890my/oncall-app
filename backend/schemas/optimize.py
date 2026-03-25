@@ -16,7 +16,7 @@ class ObjectiveWeights(BaseModel):
     sunhol_fairness: int = Field(200)
     sunhol_3rd: int = Field(80)
     weekend_hol_3rd: int = Field(0)
-    soft_unavailable: int = Field(100)
+    soft_unavailable: int = Field(500)
 
     month_fairness: int = Field(100)
     past_sat_gap: int = Field(10)
@@ -155,6 +155,13 @@ class DiagnosticInfo(BaseModel):
     pre_check_errors: List[ConstraintDiagnostic] = Field(default_factory=list)
 
 
+class SoftUnavailViolation(BaseModel):
+    doctor_id: str
+    doctor_name: str
+    day: int
+    shift_type: str
+
+
 class OptimizeResponse(BaseModel):
     success: bool
     status: Optional[str] = None
@@ -162,3 +169,4 @@ class OptimizeResponse(BaseModel):
     schedule: Optional[List[Dict[str, Any]]] = None
     scores: Optional[Dict[str, float]] = None
     diagnostics: Optional[DiagnosticInfo] = None
+    soft_unavail_violations: Optional[List[SoftUnavailViolation]] = None

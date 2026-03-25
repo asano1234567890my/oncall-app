@@ -257,6 +257,20 @@ async def generate_schedule(
                     new_scores[str(k)] = v
             solve_result["scores"] = new_scores
 
+        # Map soft unavail violations from index to UUID + name
+        if solve_result.get("soft_unavail_violations"):
+            idx_to_name: Dict[int, str] = {i: d.name for i, d in enumerate(doctors)}
+            mapped = []
+            for v in solve_result["soft_unavail_violations"]:
+                d_idx = v["doctor_idx"]
+                mapped.append({
+                    "doctor_id": idx_to_uuid.get(d_idx, str(d_idx)),
+                    "doctor_name": idx_to_name.get(d_idx, f"医師{d_idx + 1}"),
+                    "day": v["day"],
+                    "shift_type": v["shift_type"],
+                })
+            solve_result["soft_unavail_violations"] = mapped
+
         return solve_result
 
     except HTTPException:
