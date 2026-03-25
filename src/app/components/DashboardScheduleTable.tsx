@@ -386,25 +386,29 @@ export default function DashboardScheduleTable({
 
       {diagnoseResult && (
         <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />AI制約診断の結果</p>
-          {diagnoseResult.specific_violations.map((v, i) => (
-            <p key={i} className="ml-3 mt-0.5">・{v}</p>
-          ))}
+          <p className="mb-1 font-bold flex items-center gap-1"><Sparkles className="h-3.5 w-3.5 text-blue-600" />制約診断の結果</p>
           {diagnoseResult.solvable_removals?.length > 0 && (
-            <div className="mt-2 border-t border-green-200 pt-1.5">
+            <div className="mb-1.5 rounded border border-green-300 bg-green-50 px-2 py-1.5">
               <p className="font-semibold text-green-700">
                 {diagnoseResult.solvable_removals[0]?.is_admin_setting
-                  ? "以下の設定のいずれかを変更すれば解けます"
-                  : "以下のいずれか1つを外せば解けます"}
+                  ? "以下の設定のいずれかを変更すれば解けます（検証済み）"
+                  : "以下のいずれか1つを外せば解けます（検証済み）"}
               </p>
               {diagnoseResult.solvable_removals.map((r, i) => (
                 <p key={i} className="ml-3 mt-0.5 text-green-800">・{r.description_ja}</p>
               ))}
             </div>
           )}
+          {diagnoseResult.specific_violations.length > 0 && (
+            <div className="mt-1">
+              {diagnoseResult.specific_violations.map((v, i) => (
+                <p key={i} className="ml-3 mt-0.5">・{v}</p>
+              ))}
+            </div>
+          )}
           {diagnoseResult.human_insights.length > 0 && (
             <div className="mt-2 border-t border-blue-200 pt-1.5">
-              <p className="font-semibold text-blue-700">補足情報</p>
+              <p className="font-semibold text-blue-700">気づき</p>
               {diagnoseResult.human_insights.map((h, i) => (
                 <p key={i} className="ml-3 mt-0.5 text-blue-800">・{h}</p>
               ))}

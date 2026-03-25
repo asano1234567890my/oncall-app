@@ -1880,62 +1880,27 @@ class OnCallOptimizer:
     def _diagnose_phase2(
         self, conflict_groups: List[Dict[str, Any]], time_limit_seconds: float = 5.0
     ) -> List[str]:
-        """Phase 2: Generate specific actionable suggestions based on conflict groups."""
+        """Phase 2: 不可日・ロック済みシフトの競合を報告する。
+
+        設定系（interval, cap, score）は _diagnose_try_settings が検証済み結果を返すため、
+        ここでは不可日とロックの競合のみを報告する。前月は変更不可なので除外。
+        """
         violations: List[str] = []
 
-        # Count by category
         categories = {}
         for g in conflict_groups:
             cat = g["category"]
             categories.setdefault(cat, []).append(g)
-
-        if "interval" in categories:
-            spacing_days = self._get_hard_constraint_value(4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days")
-            if spacing_days and spacing_days > 1:
-                violations.append(f"勤務間隔を{spacing_days}日→{spacing_days - 1}日に緩和すると解ける可能性があります")
 
         if "unavailable" in categories:
             unavail_groups = categories["unavailable"]
             for g in unavail_groups[:5]:
                 violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
 
-        if "score" in categories:
-            score_groups = categories["score"]
-            min_groups = [g for g in score_groups if "下限" in g["description_ja"]]
-            max_groups = [g for g in score_groups if "上限" in g["description_ja"]]
-            if min_groups:
-                violations.append(f"スコア下限を下げると解ける可能性があります（対象: {', '.join(g.get('doctor_name', '?') for g in min_groups)}）")
-            if max_groups:
-                violations.append(f"スコア上限を上げると解ける可能性があります（対象: {', '.join(g.get('doctor_name', '?') for g in max_groups)}）")
-
-        if "cap" in categories:
-            cap_groups = categories["cap"]
-            # Group by constraint type (strip doctor name prefix)
-            cap_by_type: Dict[str, List[str]] = {}
-            for g in cap_groups:
-                desc = g["description_ja"]
-                doctor_name = g.get("doctor_name", "")
-                # Extract constraint label: "医師Xの土曜当直上限（月1回）" → "土曜当直上限（月1回）"
-                constraint_label = desc
-                if doctor_name and "の" in desc:
-                    constraint_label = desc.split("の", 1)[1]
-                cap_by_type.setdefault(constraint_label, []).append(doctor_name)
-            for label, names in cap_by_type.items():
-                if len(names) <= 3:
-                    violations.append(f"{label}を引き上げると解ける可能性があります（{', '.join(names)}）")
-                else:
-                    violations.append(f"{label}を引き上げると解ける可能性があります（{len(names)}名が該当）")
-
         if "locked" in categories:
             locked_groups = categories["locked"]
             for g in locked_groups:
                 violations.append(f"{g['description_ja']}を解除すると解ける可能性があります")
-
-        if "cross_month" in categories:
-            violations.append("前月末の勤務により月初の割当可能枠が不足しています")
-
-        if not violations:
-            violations.append("制約の競合を特定しましたが、具体的な解決策を生成できませんでした")
 
         return violations
 

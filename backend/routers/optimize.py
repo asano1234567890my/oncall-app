@@ -417,24 +417,24 @@ async def diagnose_constraints(
         phase_completed = diag_result.get("phase_completed", 2)
 
         # Phase 3: Gemini AI explanation (optional — skip if no API key)
+        # Phase 3 (Gemini AI) は現在スキップ — ソルバー側の診断で十分なため
+        # 将来再有効化する場合は以下のコメントを外す
         ai_explanation = None
-        gemini_api_key = os.getenv("GEMINI_API_KEY", "")
-        if gemini_api_key and diag_result.get("conflict_groups"):
-            try:
-                ai_explanation = _call_gemini_diagnosis(
-                    year=req.year,
-                    month=req.month,
-                    num_doctors=req.num_doctors,
-                    num_days=optimizer.num_days,
-                    holidays=req.holidays,
-                    conflict_groups=diag_result["conflict_groups"],
-                    specific_violations=diag_result["specific_violations"],
-                    human_insights=diag_result["human_insights"],
-                    gemini_api_key=gemini_api_key,
-                )
-                phase_completed = 3
-            except Exception:
-                pass  # Gemini failure is non-critical
+        # gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+        # if gemini_api_key and diag_result.get("conflict_groups"):
+        #     try:
+        #         ai_explanation = _call_gemini_diagnosis(
+        #             year=req.year, month=req.month,
+        #             num_doctors=req.num_doctors, num_days=optimizer.num_days,
+        #             holidays=req.holidays,
+        #             conflict_groups=diag_result["conflict_groups"],
+        #             specific_violations=diag_result["specific_violations"],
+        #             human_insights=diag_result["human_insights"],
+        #             gemini_api_key=gemini_api_key,
+        #         )
+        #         phase_completed = 3
+        #     except Exception:
+        #         pass
 
         return DiagnoseResponse(
             success=True,
