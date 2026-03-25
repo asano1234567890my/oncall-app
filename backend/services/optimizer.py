@@ -1370,12 +1370,23 @@ class OnCallOptimizer:
                 "phase_completed": 1,
             }
 
-        # Phase 2: Soften conflicting groups → find specific violations
-        specific_violations = self._diagnose_phase2(conflict_groups, time_limit_seconds)
-
-        # Phase 2b: 管理者設定を変えて解けるか試行 → 最小変更値を探索
+        # Phase 2a: 管理者設定を変えて解けるか試行 → 最小変更値を探索
         solvable_removals = self._diagnose_try_settings(
             time_limit_per_try=min(time_limit_seconds, 2.0),
+        )
+
+        # Phase 2b: 不可日の最小解除セットを検証
+        min_removals = self._diagnose_minimum_unavail_removals(
+            conflict_groups, time_limit=min(time_limit_seconds, 10.0),
+        )
+        if min_removals:
+            solvable_removals.extend(min_removals)
+
+        # Phase 2c: 検証済み結果がなければ未検証のフォールバック
+        specific_violations = (
+            self._diagnose_phase2(conflict_groups, time_limit_seconds)
+            if not min_removals
+            else []
         )
 
         return {
@@ -1877,14 +1888,160 @@ class OnCallOptimizer:
 
         return results
 
+    def _diagnose_minimum_unavail_removals(
+        self,
+        conflict_groups: List[Dict[str, Any]],
+        time_limit: float = 10.0,
+    ) -> List[Dict[str, Any]]:
+        """競合している不可日の中から、最小限の解除セットを検証して返す。
+
+        CP-SATで「残すか外すか」の変数を付け、外す数を最小化する。
+        結果は「この組み合わせを全部解除すれば確実に解ける」という検証済みセット。
+        """
+        # 1. conflict_groupsから不可日関連を抽出・パース
+        removable: List[Dict[str, Any]] = []
+        for g in conflict_groups:
+            gid = g["group_id"]
+            if gid.startswith("unavail_d"):
+                # unavail_d{idx}_day{day}
+                parts = gid.replace("unavail_d", "").split("_day")
+                if len(parts) != 2:
+                    continue
+                try:
+                    d_idx = int(parts[0])
+                    day = int(parts[1])
+                except ValueError:
+                    continue
+                # target_shiftを元データから取得
+                shift = "all"
+                for item in self.unavailable.get(d_idx, []):
+                    norm = self._normalize_unavailable_entry(item)
+                    if norm and norm["date"] == day:
+                        shift = norm["target_shift"]
+                        break
+                removable.append({"type": "date", "d_idx": d_idx, "day": day, "shift": shift, "group": g})
+            elif gid.startswith("fixdow_d"):
+                # fixdow_d{idx}_dow{dow}
+                parts = gid.replace("fixdow_d", "").split("_dow")
+                if len(parts) != 2:
+                    continue
+                try:
+                    d_idx = int(parts[0])
+                    dow = int(parts[1])
+                except ValueError:
+                    continue
+                shift = "all"
+                for item in self.fixed_unavailable_weekdays.get(d_idx, []):
+                    norm = self._normalize_fixed_weekday_entry(item)
+                    if norm and norm["day_of_week"] == dow:
+                        shift = norm["target_shift"]
+                        break
+                removable.append({"type": "dow", "d_idx": d_idx, "dow": dow, "shift": shift, "group": g})
+
+        if not removable:
+            return []
+
+        # 2. 競合不可日を除いた unavailable / fixed_weekdays を作成
+        remove_dates: set = set()  # (d_idx, day)
+        remove_dows: set = set()   # (d_idx, dow)
+        for entry in removable:
+            if entry["type"] == "date":
+                remove_dates.add((entry["d_idx"], entry["day"]))
+            else:
+                remove_dows.add((entry["d_idx"], entry["dow"]))
+
+        modified_unavail: Dict[int, list] = {}
+        for d, items in self.unavailable.items():
+            filtered = []
+            for item in items:
+                norm = self._normalize_unavailable_entry(item)
+                if norm is None:
+                    continue
+                if (d, norm["date"]) in remove_dates:
+                    continue
+                filtered.append(item)
+            modified_unavail[d] = filtered
+
+        modified_fixed: Dict[int, list] = {}
+        for d, items in self.fixed_unavailable_weekdays.items():
+            filtered = []
+            for item in items:
+                norm = self._normalize_fixed_weekday_entry(item)
+                if norm is None:
+                    continue
+                if (d, norm["day_of_week"]) in remove_dows:
+                    continue
+                filtered.append(item)
+            modified_fixed[d] = filtered
+
+        # 3. 競合不可日なしの試行モデルを構築
+        trial = OnCallOptimizer(
+            num_doctors=self.num_doctors,
+            year=self.year,
+            month=self.month,
+            holidays=self.holidays,
+            unavailable=modified_unavail,
+            fixed_unavailable_weekdays=modified_fixed,
+            prev_month_worked_days=self.prev_month_worked_days,
+            prev_month_last_day=self.prev_month_last_day,
+            previous_month_shifts=self.previous_month_shifts,
+            hard_constraints=dict(self.hard_constraints),
+            locked_shifts=self.locked_shifts,
+        )
+        trial.build_model()
+
+        # 4. 除いた不可日を「残す(keep=1) or 外す(keep=0)」の条件付きで追加
+        keep_vars: List[tuple] = []  # (keep_var, entry)
+        for entry in removable:
+            keep = trial.model.NewBoolVar(f"keep_{entry['group']['group_id']}")
+            keep_vars.append((keep, entry))
+            d = entry["d_idx"]
+            shift = entry["shift"]
+
+            if entry["type"] == "date":
+                day = entry["day"]
+                if shift in ("night", "all"):
+                    trial.model.Add(trial.night_shifts[(d, day)] == 0).OnlyEnforceIf(keep)
+                if shift in ("day", "all"):
+                    trial.model.Add(trial.day_shifts[(d, day)] == 0).OnlyEnforceIf(keep)
+            elif entry["type"] == "dow":
+                dow = entry["dow"]
+                for day in range(1, self.num_days + 1):
+                    if self._matches_fixed_unavailable_weekday(day, dow):
+                        if shift in ("night", "all"):
+                            trial.model.Add(trial.night_shifts[(d, day)] == 0).OnlyEnforceIf(keep)
+                        if shift in ("day", "all"):
+                            trial.model.Add(trial.day_shifts[(d, day)] == 0).OnlyEnforceIf(keep)
+
+        # 5. 「残す数を最大化」= 外す数を最小化
+        trial.model.Maximize(sum(k for k, _ in keep_vars))
+
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = time_limit
+        status = solver.Solve(trial.model)
+
+        if status not in (cp_model.FEASIBLE, cp_model.OPTIMAL):
+            return []
+
+        # 6. keep=0 の不可日 = 外す必要がある
+        results: List[Dict[str, Any]] = []
+        for keep, entry in keep_vars:
+            if solver.Value(keep) == 0:
+                g = entry["group"]
+                results.append({
+                    "group_id": g["group_id"],
+                    "category": "unavailable_verified",
+                    "doctor_name": g.get("doctor_name"),
+                    "description_ja": f"{g['description_ja']}を解除",
+                    "is_admin_setting": False,
+                })
+
+        return results
+
     def _diagnose_phase2(
         self, conflict_groups: List[Dict[str, Any]], time_limit_seconds: float = 5.0
     ) -> List[str]:
-        """Phase 2: 不可日・ロック済みシフトの競合を報告する。
-
-        設定系（interval, cap, score）は _diagnose_try_settings が検証済み結果を返すため、
-        ここでは不可日とロックの競合のみを報告する。前月は変更不可なので除外。
-        """
+        """Phase 2: 未検証の不可日競合情報を報告する（最小解除セットが見つからなかった場合のフォールバック）。"""
         violations: List[str] = []
 
         categories = {}
