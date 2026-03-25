@@ -1,8 +1,8 @@
 // src/app/components/DoctorUnavailableDetail.tsx — 1医師の不可日詳細モーダル（モバイル用）
 "use client";
 
-import { useState } from "react";
-import { X, Copy, Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { X, Copy, Check, Share2, QrCode } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
@@ -22,6 +22,122 @@ import type {
   FixedUnavailableWeekdayEntry,
   TargetShift,
 } from "../types/dashboard";
+
+const copyText = async (value: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = value;
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+};
+
+const getDoctorUrl = (token: string) =>
+  typeof window !== "undefined" ? `${window.location.origin}/entry/${token}` : `/entry/${token}`;
+
+async function generateQrDataUrl(text: string): Promise<string> {
+  const QRCode = (await import("qrcode")).default;
+  return QRCode.toDataURL(text, { width: 256, margin: 2 });
+}
+
+// ── Share dropdown (LINE / email / QR) ──
+function ShareDropdown({ doctor }: { doctor: Doctor }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen]);
+
+  if (!doctor.access_token) return null;
+  const url = getDoctorUrl(doctor.access_token);
+  const msg = `${doctor.name}先生\n不可日の入力をお願いします。\n${url}`;
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-100 transition-colors"
+      >
+        <Share2 className="h-3 w-3" />
+        共有
+      </button>
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              try {
+                await copyText(url);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch { /* ignore */ }
+            }}
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? "コピー済み" : "URLをコピー"}
+          </button>
+          <a
+            href={`https://line.me/R/share?text=${encodeURIComponent(msg)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => setIsOpen(false)}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 5.81 2 10.5c0 2.9 1.93 5.45 4.83 6.91l-.58 3.43a.3.3 0 0 0 .42.34l4-2.08c.43.06.87.1 1.33.1 5.52 0 10-3.81 10-8.5S17.52 2 12 2z"/></svg>
+            LINEで送る
+          </a>
+          <a
+            href={`mailto:?subject=${encodeURIComponent(`不可日入力のお願い（${doctor.name}先生）`)}&body=${encodeURIComponent(msg)}`}
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={() => setIsOpen(false)}
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            メールで送る
+          </a>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              setIsOpen(false);
+              try {
+                const dataUrl = await generateQrDataUrl(url);
+                setQrDataUrl(dataUrl);
+              } catch { /* ignore */ }
+            }}
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            QRコードを表示
+          </button>
+        </div>
+      )}
+      {qrDataUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={() => setQrDataUrl(null)}>
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-xs w-full text-center" onClick={(e) => e.stopPropagation()}>
+            <p className="font-bold text-gray-800 mb-3">{doctor.name}先生</p>
+            <img src={qrDataUrl} alt="QR Code" className="mx-auto w-48 h-48" />
+            <p className="mt-3 text-[10px] text-gray-400 break-all">{url}</p>
+            <button onClick={() => setQrDataUrl(null)} className="mt-4 rounded-lg bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type DoctorUnavailableDetailProps = {
   doctor: Doctor | null;
@@ -47,7 +163,6 @@ export default function DoctorUnavailableDetail({
   onToggleFixedWeekday,
 }: DoctorUnavailableDetailProps) {
   const [month, setMonth] = useState(() => new Date(year, targetMonth - 1, 1));
-  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!doctor) return null;
 
@@ -62,27 +177,6 @@ export default function DoctorUnavailableDetail({
   const getFixedWeekdayTargetShift = (weekdayPy: number): TargetShift | null => {
     const entry = fixedEntries.find((e) => e.day_of_week === weekdayPy);
     return entry ? entry.target_shift : null;
-  };
-
-  const handleCopyLink = async () => {
-    if (!doctor.access_token) return;
-    const url = `${window.location.origin}/entry/${doctor.access_token}`;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-      } else {
-        const ta = document.createElement("textarea");
-        ta.value = url;
-        ta.style.position = "fixed";
-        ta.style.left = "-9999px";
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand("copy");
-        document.body.removeChild(ta);
-      }
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 1500);
-    } catch { /* ignore */ }
   };
 
   const monthPrefix = `${year}-${String(targetMonth).padStart(2, "0")}-`;
@@ -103,19 +197,7 @@ export default function DoctorUnavailableDetail({
               </span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {doctor.access_token && (
-                <button
-                  onClick={() => { void handleCopyLink(); }}
-                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors ${
-                    copiedLink
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                      : "border-gray-200 bg-white text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  {copiedLink ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {copiedLink ? "コピー済み" : "入力用URL"}
-                </button>
-              )}
+              {doctor.access_token && <ShareDropdown doctor={doctor} />}
               <button onClick={onClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 transition-colors">
                 <X className="h-5 w-5" />
               </button>

@@ -93,13 +93,13 @@ export default function DashboardToolbar({
   const hasLocks = lockedShiftCount > 0;
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 shadow-sm">
+    <div className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2 py-2 shadow-sm">
       {/* Year/Month selector */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 shrink-0">
         <select
           value={year}
           onChange={(e) => onYearChange(Number(e.target.value))}
-          className="rounded border border-gray-200 bg-white px-2 py-1 text-sm font-semibold text-gray-700"
+          className="rounded border border-gray-200 bg-white px-1.5 py-1 text-xs font-semibold text-gray-700 appearance-none pr-4 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%226%22%3E%3Cpath%20d%3D%22M0%200l5%206%205-6z%22%20fill%3D%22%236b7280%22%2F%3E%3C%2Fsvg%3E')] bg-[right_4px_center] bg-no-repeat"
         >
           {[currentYear - 1, currentYear, currentYear + 1].map((y) => (
             <option key={y} value={y}>{y}年</option>
@@ -108,7 +108,7 @@ export default function DashboardToolbar({
         <select
           value={month}
           onChange={(e) => onMonthChange(Number(e.target.value))}
-          className="rounded border border-gray-200 bg-white px-2 py-1 text-sm font-semibold text-gray-700"
+          className="rounded border border-gray-200 bg-white px-1.5 py-1 text-xs font-semibold text-gray-700 appearance-none pr-4 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%226%22%3E%3Cpath%20d%3D%22M0%200l5%206%205-6z%22%20fill%3D%22%236b7280%22%2F%3E%3C%2Fsvg%3E')] bg-[right_4px_center] bg-no-repeat"
         >
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
             <option key={m} value={m}>{m}月</option>

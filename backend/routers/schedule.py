@@ -3,6 +3,7 @@ from __future__ import annotations
 import calendar as _calendar
 import datetime
 import io
+import urllib.parse
 from typing import List, Optional
 from uuid import UUID
 
@@ -161,7 +162,7 @@ async def get_ical_feed(
         content=ics_content,
         media_type="text/calendar; charset=utf-8",
         headers={
-            "Content-Disposition": f'attachment; filename="{doctor.name}_shifts.ics"',
+            "Content-Disposition": "attachment; filename=\"shifts.ics\"; filename*=UTF-8''" + urllib.parse.quote(f"{doctor.name}_shifts.ics"),
             "Cache-Control": "no-cache, no-store, must-revalidate",
         },
     )
@@ -990,22 +991,28 @@ def _build_xlsx_simple(
     center = Alignment(horizontal="center", vertical="center")
     left_align = Alignment(horizontal="left", vertical="center")
 
-    ws.column_dimensions["A"].width = 10
-    ws.column_dimensions["B"].width = 14
+    # A列は余白、データはB列(2)から開始
+    ws.column_dimensions["A"].width = 3
+    ws.column_dimensions["B"].width = 10
     ws.column_dimensions["C"].width = 14
+    ws.column_dimensions["D"].width = 14
 
-    ws.merge_cells("A1:C1")
-    ws["A1"] = f"{hospital_name}　{year}年{month}月 当直表"
-    ws["A1"].font = title_font
-    ws["A1"].alignment = center
+    # タイトル: B2
+    ws.merge_cells("B2:D2")
+    ws["B2"] = f"{hospital_name}　{year}年{month}月 当直表"
+    ws["B2"].font = title_font
+    ws["B2"].alignment = center
 
-    s_row = 3
-    for col_idx, label in enumerate(["日付", "日直", "当直"], 1):
+    # ヘッダー: 4行目、B〜D列 (col 2〜4)
+    s_row = 4
+    col_start = 2  # B列
+    for col_offset, label in enumerate(["日付", "日直", "当直"]):
+        col_idx = col_start + col_offset
         cell = ws.cell(row=s_row, column=col_idx, value=label)
         cell.font = header_font
         cell.fill = header_fill
         cell.alignment = center
-        cell.border = Border(top=thick, bottom=thick, left=thick if col_idx == 1 else thin, right=thick if col_idx == 3 else thin)
+        cell.border = Border(top=thick, bottom=thick, left=thick if col_offset == 0 else thin, right=thick if col_offset == 2 else thin)
 
     for idx, r in enumerate(rows):
         excel_row = s_row + 1 + idx
@@ -1017,9 +1024,9 @@ def _build_xlsx_simple(
         is_holiday = is_sun or dt in holiday_dates
         show_day = is_holiday or is_sat
 
-        date_cell = ws.cell(row=excel_row, column=1, value=f"{d}({wd})")
-        day_cell = ws.cell(row=excel_row, column=2, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
-        night_cell = ws.cell(row=excel_row, column=3, value=_doctor_label(r["night_shift"], doctor_map))
+        date_cell = ws.cell(row=excel_row, column=col_start, value=f"{d}({wd})")
+        day_cell = ws.cell(row=excel_row, column=col_start + 1, value=_doctor_label(r["day_shift"], doctor_map) if show_day else "")
+        night_cell = ws.cell(row=excel_row, column=col_start + 2, value=_doctor_label(r["night_shift"], doctor_map))
 
         fill = sun_fill if is_holiday else sat_fill if is_sat else None
         font = sun_font if is_holiday else sat_font if is_sat else normal_font
@@ -1028,19 +1035,19 @@ def _build_xlsx_simple(
         for c in (day_cell, night_cell):
             c.alignment = center
 
-        for c in (date_cell, day_cell, night_cell):
+        for c_idx, c in enumerate((date_cell, day_cell, night_cell)):
             c.font = font
             if fill:
                 c.fill = fill
             c.border = Border(
                 top=thin, bottom=thin,
-                left=thick if c.column == 1 else thin,
-                right=thick if c.column == 3 else thin,
+                left=thick if c_idx == 0 else thin,
+                right=thick if c_idx == 2 else thin,
             )
 
     last_row = s_row + len(rows)
-    for col_idx in range(1, 4):
-        cell = ws.cell(row=last_row, column=col_idx)
+    for col_offset in range(3):
+        cell = ws.cell(row=last_row, column=col_start + col_offset)
         b = cell.border
         cell.border = Border(top=b.top, bottom=thick, left=b.left, right=b.right)
 

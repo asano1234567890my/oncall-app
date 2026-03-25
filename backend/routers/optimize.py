@@ -472,29 +472,25 @@ def _call_gemini_diagnosis(
     insights_text = "\n".join(f"- {h}" for h in human_insights) if human_insights else "特になし"
 
     prompt = f"""あなたは病院の当直表作成の専門家です。
-以下のスケジュール制約の競合を、当直表担当の医師にわかりやすく説明してください。
+スケジュールが生成できなかった原因と、解決策をピンポイントで伝えてください。
 
-【カレンダー情報】
-- {year}年{month}月（{num_days}日間）
-- 祝日: {len(holidays)}日
-- 土曜: {saturdays}日、日曜: {sundays}日
-- 医師数: {num_doctors}名
+【カレンダー】{year}年{month}月（{num_days}日間、祝日{len(holidays)}日、土曜{saturdays}日、日曜{sundays}日、医師{num_doctors}名）
 
-【競合している制約】
+【競合制約】
 {conflicts_text}
 
 【具体的な問題点】
 {violations_text}
 
-【人間的な観点からの気づき】
+【補足データ】
 {insights_text}
 
-上記を踏まえて、以下のルールで回答してください：
-1. 300文字以内で、なぜこの組み合わせで解が出ないかを簡潔に説明
-2. どの設定を変更すれば解決するか、具体的に1〜3個提案
-3. カレンダーの文脈（GW、年末年始、祝日の多さなど）があれば触れる
-4. 専門用語は使わず、当直表を作る医師が読んで理解できる言葉で書く
-5. 箇条書きは使わず、自然な文章で書く"""
+回答ルール：
+- 200文字以内
+- 「原因→具体的にどこを直せばいいか」の順で書く
+- 変更すべき設定を1〜2個、最も効果が高いものだけ提案
+- 「○○先生の△日の不可日を解除」「□曜の固定不可を○名分外す」など具体的に
+- 箇条書き禁止、自然な短い文章で"""
 
     client = genai.Client(api_key=gemini_api_key)
     response = client.models.generate_content(

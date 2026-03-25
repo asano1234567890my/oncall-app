@@ -9,14 +9,12 @@ import StepperNumberInput from "./inputs/StepperNumberInput";
 import WeightsConfig from "./settings/WeightsConfig";
 import RulesConfig from "./settings/RulesConfig";
 import ShiftScoresConfig from "./settings/ShiftScoresConfig";
+import UnavailableDaysInput from "./settings/UnavailableDaysInput";
 import {
   baseCalendarModifierClasses,
   dayPickerBaseClassName,
   dayPickerClassNames,
   hardConstraintNumberInputs,
-  fixedWeekdayLabels,
-  getFixedWeekdayButtonTone,
-  getFixedWeekdayButtonLabel,
 } from "./settings/shared";
 import type {
   Doctor,
@@ -204,24 +202,6 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
     onToggleHoliday(day);
   };
 
-  // ── Unavailable calendar helpers ──
-  const selectedDoctor = activeDoctors.find((d) => d.id === selectedDoctorId);
-  const unavailableEntries = selectedDoctorId ? (unavailableMap[selectedDoctorId] || []) : [];
-  const fixedEntries = selectedDoctorId ? (fixedUnavailableWeekdaysMap[selectedDoctorId] || []) : [];
-
-  const unavailableSelectedDates: Date[] = [];
-  for (const entry of unavailableEntries) {
-    const match = entry.date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!match) continue;
-    const [, y, m, d] = match;
-    unavailableSelectedDates.push(new Date(Number(y), Number(m) - 1, Number(d)));
-  }
-
-  const getFixedWeekdayTargetShift = (weekdayPy: number): TargetShift | null => {
-    const entry = fixedEntries.find((e) => e.day_of_week === weekdayPy);
-    return entry ? entry.target_shift : null;
-  };
-
   return (
     <div className="space-y-0">
       {/* Header info */}
@@ -376,76 +356,27 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
 
       {/* ━━ 4. 医師別不可日 ━━ */}
       <Section title="医師別 不可日">
-        <div className="space-y-2">
-          <select
-            value={selectedDoctorId}
-            onChange={(e) => onSelectedDoctorChange(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-700"
-          >
-            {activeDoctors.map((d) => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
-
-          {selectedDoctor && (
-            <>
-              {/* Fixed weekday toggles */}
-              <div>
-                <div className="mb-1 text-[10px] font-bold text-gray-500">固定不可曜日</div>
-                <div className="flex gap-1">
-                  {pyWeekdays.map((wd) => {
-                    const ts = getFixedWeekdayTargetShift(wd);
-                    return (
-                      <button
-                        key={wd}
-                        type="button"
-                        onClick={() => onToggleFixedWeekday(selectedDoctorId, wd)}
-                        className={`flex-1 rounded-lg border py-1.5 text-center text-xs font-bold transition ${getFixedWeekdayButtonTone(wd, ts)}`}
-                      >
-                        {fixedWeekdayLabels[wd]}{getFixedWeekdayButtonLabel(ts)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Unavailable date calendar */}
-              <DayPicker
-                mode="multiple"
-                month={doctorUnavailableMonth}
-                onMonthChange={onDoctorUnavailableMonthChange}
-                locale={ja}
-                selected={unavailableSelectedDates}
-                onDayClick={(date) => {
-                  const ymd = `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
-                  onToggleUnavailable(selectedDoctorId, ymd);
-                }}
-                showOutsideDays
-                className={dayPickerBaseClassName}
-                classNames={{
-                  ...dayPickerClassNames,
-                  nav: "flex items-center gap-1",
-                  button_previous: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
-                  button_next: "inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-100 transition-colors",
-                }}
-                modifiers={{
-                  saturday: (date: Date) => date.getDay() === 6,
-                  sunday: (date: Date) => date.getDay() === 0,
-                }}
-                modifiersClassNames={baseCalendarModifierClasses}
-              />
-            </>
-          )}
-
-          <button
-            type="button"
-            onClick={onSaveAllDoctorsSettings}
-            disabled={isBulkSavingDoctors}
-            className="w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
-          >
-            {isBulkSavingDoctors ? "保存中..." : "医師設定を一括保存"}
-          </button>
-        </div>
+        <UnavailableDaysInput
+          doctorUnavailableMonth={doctorUnavailableMonth}
+          activeDoctors={activeDoctors}
+          selectedDoctorId={selectedDoctorId}
+          unavailableMap={unavailableMap}
+          fixedUnavailableWeekdaysMap={fixedUnavailableWeekdaysMap}
+          pyWeekdays={pyWeekdays}
+          onSelectedDoctorChange={onSelectedDoctorChange}
+          onDoctorUnavailableMonthChange={onDoctorUnavailableMonthChange}
+          onToggleAllUnavailable={onToggleAllUnavailable}
+          onToggleUnavailable={onToggleUnavailable}
+          onToggleFixedWeekday={onToggleFixedWeekday}
+        />
+        <button
+          type="button"
+          onClick={onSaveAllDoctorsSettings}
+          disabled={isBulkSavingDoctors}
+          className="mt-2 w-full rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isBulkSavingDoctors ? "保存中..." : "医師設定を一括保存"}
+        </button>
       </Section>
 
       {/* ━━ 5. 医師別スコア ━━ */}

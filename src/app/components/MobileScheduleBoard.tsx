@@ -159,7 +159,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
           ))}
           {diagnoseResult.human_insights.length > 0 && (
             <div className="mt-2 border-t border-blue-200 pt-1.5">
-              <p className="font-semibold text-blue-700">気づき</p>
+              <p className="font-semibold text-blue-700">補足情報</p>
               {diagnoseResult.human_insights.map((h, i) => (
                 <p key={i} className="ml-3 mt-0.5 text-blue-800">・{h}</p>
               ))}

@@ -797,11 +797,10 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                       </div>
 
                       {/* 一括ソフト化（最終手段） */}
-                      <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5">
-                        <div className="text-xs font-bold text-amber-800 mb-1">解なし対策（最終手段）</div>
-                        <p className="text-[10px] text-amber-700 leading-relaxed mb-2">
-                          全医師の個別不可日をソフト制約に変換します。ソフト制約はなるべく尊重されますが、必要に応じて無視されます。
-                          固定不可曜日はハード制約のまま維持されます。
+                      <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/50 p-2.5">
+                        <div className="text-[10px] text-gray-400 mb-1.5">どうしても解が出ない場合の最終手段</div>
+                        <p className="text-[10px] text-gray-400 leading-relaxed mb-2">
+                          個別不可日をソフト制約に変換します。なるべく尊重されますが必要時は無視されます。固定不可曜日は変更されません。
                         </p>
                         <div className="flex flex-wrap gap-2">
                           <button
@@ -825,7 +824,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 toast.error(err instanceof Error ? err.message : "一括ソフト化に失敗しました");
                               }
                             }}
-                            className="rounded-lg border border-amber-300 bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-200 transition-colors"
+                            className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
                           >
                             全不可日をソフト化
                           </button>
@@ -847,7 +846,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 toast.error(err instanceof Error ? err.message : "復元に失敗しました");
                               }
                             }}
-                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50 transition-colors"
+                            className="rounded border border-gray-300 bg-white px-2.5 py-1 text-[11px] text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
                           >
                             ハード制約に戻す
                           </button>

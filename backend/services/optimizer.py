@@ -1714,18 +1714,25 @@ class OnCallOptimizer:
                     if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
                         day_unavail_doctors.setdefault(day, set()).add(name)
 
-        threshold = max(2, self.num_doctors * 0.4)
+        # Only show days where >60% of doctors are unavailable (truly critical), top 5
+        threshold = max(2, self.num_doctors * 0.6)
+        critical_days = []
         for day in sorted(day_unavail_doctors.keys()):
             names = sorted(day_unavail_doctors[day])
             if len(names) >= threshold:
                 date_obj = datetime.date(self.year, self.month, day)
                 weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
                 holiday_tag = "・祝" if self.is_holiday(day) else ""
-                insights.append(
+                critical_days.append((len(names), day,
                     f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可（{', '.join(names)}）"
-                )
+                ))
+        # Sort by severity (most unavailable first), take top 5
+        critical_days.sort(key=lambda x: -x[0])
+        for _, _, msg in critical_days[:5]:
+            insights.append(msg)
 
-        # 2) Doctors with too many unavailable days (deduplicate by actual date)
+        # 2) Doctors with very high unavailable ratio (>60%), top 3
+        high_unavail_doctors: List[Tuple[float, int, int]] = []
         for d in range(self.num_doctors):
             unavail_days: set = set()
             for item in self.unavailable.get(d, []):
@@ -1740,21 +1747,16 @@ class OnCallOptimizer:
                             unavail_days.add(day)
 
             hard_count = len(unavail_days)
-            # Count total shift slots: weekdays=1(night), sat=1(night), sun/hol=2(day+night)
-            total_slots = 0
-            for day in days:
-                if day in unavail_days:
-                    continue
-                if self.is_sunday_or_holiday(day):
-                    total_slots += 2
-                else:
-                    total_slots += 1
-            all_slots = sum(2 if self.is_sunday_or_holiday(d) else 1 for d in days)
             ratio = hard_count / self.num_days if self.num_days > 0 else 0
-            if ratio > 0.30:
-                insights.append(
-                    f"{self.doctor_names.get(d, f'医師{d+1}')}: 全{all_slots}枠中{hard_count}日が不可（勤務可能{total_slots}枠、不可率{ratio:.0%}）"
-                )
+            if ratio > 0.60:
+                high_unavail_doctors.append((ratio, d, hard_count))
+
+        # Sort by severity, show top 3
+        high_unavail_doctors.sort(key=lambda x: -x[0])
+        for ratio, d, hard_count in high_unavail_doctors[:3]:
+            insights.append(
+                f"{self.doctor_names.get(d, f'医師{d+1}')}: {self.num_days}日中{hard_count}日が不可（不可率{ratio:.0%}）"
+            )
 
         # 3) Many holidays
         if len(self.holidays) >= 4:
@@ -1793,7 +1795,7 @@ class OnCallOptimizer:
                     dow_doctors.setdefault(normalized["day_of_week"], set()).add(name)
         weekday_names = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]
         for dow, names in sorted(dow_doctors.items()):
-            if dow < 7 and len(names) >= max(2, self.num_doctors * 0.4):
+            if dow < 7 and len(names) > self.num_doctors * 0.5:
                 insights.append(
                     f"{weekday_names[dow]}の当直に{self.num_doctors}人中{len(names)}人が固定不可（外来日？）"
                 )
