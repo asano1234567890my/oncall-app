@@ -110,12 +110,13 @@
 **目的:** 不活化ウェイト・非公開設定のコード完全削除 + 新アルゴリズム実装
 
 **削除対象（コードごと消す）:**
-- 不活化ウェイト: `gap5`, `gap6`, `sat_consec`, `sunhol_3rd`, `weekend_hol_3rd`, `month_fairness`, `soft_unavailable`
+- 不活化ウェイト: `sat_consec`, `sunhol_3rd`, `weekend_hol_3rd`, `month_fairness`, `soft_unavailable`
 - 非公開ハード設定: `prevent_sunhol_consecutive`, `respect_unavailable_days`, `max_sunhol_days`, `max_sunhol_works`
+- ~~`gap5`, `gap6`~~ → ✅ `ideal_gap_weight` + `ideal_gap_extra`（グラデーション間隔ソフト制約）で置き換え済み
 
 **新規実装（docs/optimizer.md 参照）:**
 - 加重累積均等化（土日祝均等化の置き換え）
-- 理想間隔方式（gap5/gap6の置き換え）
+- ~~理想間隔方式（gap5/gap6の置き換え）~~ → ✅ 実装済み
 - 累積目標乖離（score_balance/month_fairnessの置き換え）
 - optimizer.py mixin分割（旧Task 2.6-5）も同時実施
 
@@ -275,6 +276,7 @@
 
 | 日付 | 内容 |
 |------|------|
+| 2026-03-25 | 理想間隔グラデーションソフト制約: gap5/gap6（固定2段階）を廃止→ideal_gap_weight+ideal_gap_extra（線形減衰グラデーション）に置き換え。上級設定に3つ目のグループ「勤務間隔のゆとり」追加（スライダー+ステッパー+?説明パネル付きグラデーション可視化）。案内メッセージを医師リスト上部に移動+折りたたみUI。「マジックリンク」→「各医師の専用ページ」に用語統一 |
 | 2026-03-25 | AI解なし診断の大幅改善: ①共通設定（土曜上限・日祝上限等）を種別ごとに1行集約（「8名が該当」形式）②Geminiプロンプトを「原因+対処案」フォーマット化・「相談してみてください」表現に統一③気づきの医師名羅列を削除（「10人が不可」のみ）④ソフト化案内メッセージ削除⑤soft_unavailable重みを設定UIから削除し内部固定1000に⑥ソフト不可日違反時のtoast通知追加（医師名・日付表示） |
 | 2026-03-25 | モバイル医師不可日モーダル修正: ①不可日モディファイア追加（[休]/[日]/[当]赤背景表示）②祝日表示③日曜・祝日のTargetShiftPopover（日直/当直別設定）④保存ボタン追加 |
 | 2026-03-25 | 細かい修正バッチ: ①AI解なし診断の冗長さ修正（閾値引き上げ・上位N件制限）②ソフト化ボタンをグレー控えめデザインに変更③PC不可日カレンダー修正（共通UnavailableDaysInputに置き換え）④ツールバー年月セレクタ小型化⑤トークン画面Excelオフセット修正（B2起点）⑥ICSダウンロード修正（Content-Disposition日本語ファイル名RFC5987エンコード）⑦モバイル医師詳細に共有ドロップダウン追加 |

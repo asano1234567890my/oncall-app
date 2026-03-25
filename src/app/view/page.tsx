@@ -393,7 +393,7 @@ export default function ViewSchedulePage() {
                     {isPublished ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                     {isPublished ? "公開中" : "非公開"}
                   </button>
-                  <HelpTooltip text="「公開」にすると、各医師がマジックリンクからこの月の当直表を閲覧できます。「非公開」の間は管理者のみ閲覧可能です。" />
+                  <HelpTooltip text="「公開」にすると、各医師の専用ページからこの月の当直表を閲覧できます。「非公開」の間は管理者のみ閲覧可能です。" />
                 </span>
               </>
             )}

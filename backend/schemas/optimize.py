@@ -8,8 +8,8 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 class ObjectiveWeights(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    gap5: int = Field(100)
-    gap6: int = Field(50)
+    ideal_gap_weight: int = Field(100)
+    ideal_gap_extra: int = Field(3)
     sat_consec: int = Field(80)
     score_balance: int = Field(30)
     target: int = Field(10)

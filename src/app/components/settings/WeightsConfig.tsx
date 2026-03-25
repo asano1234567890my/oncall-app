@@ -6,6 +6,7 @@ import StepperNumberInput from "../inputs/StepperNumberInput";
 import type { HardConstraints, ObjectiveWeights } from "../../types/dashboard";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getWeightMeta, weightInputs, weightGroups, expandWeightGroups } from "./shared";
+import { Info } from "lucide-react";
 import type { WeightGroup, WeightRatioOverrides, WeightChildMeta } from "./shared";
 
 type WeightsConfigProps = {
@@ -188,6 +189,91 @@ function GroupedSlider({
   );
 }
 
+// ── 勤務間隔のゆとり: +N日入力 + ?説明 ──
+function IdealGapExtraInput({
+  extra,
+  hardInterval,
+  onChange,
+}: {
+  extra: number;
+  hardInterval: number;
+  onChange: (value: number) => void;
+}) {
+  const [showExplain, setShowExplain] = useState(false);
+  const base = hardInterval > 0 ? hardInterval : 4;
+  const ideal = base + extra;
+
+  return (
+    <div className="mt-2 rounded-xl border border-gray-200 bg-white p-3 sm:p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs font-bold text-gray-700">理想の追加日数</span>
+        <button
+          type="button"
+          onClick={() => setShowExplain(!showExplain)}
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-gray-300 text-[10px] font-bold text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+        >
+          ?
+        </button>
+      </div>
+      <div className="flex items-center gap-3">
+        <StepperNumberInput
+          value={extra}
+          onCommit={onChange}
+          fallbackValue={3}
+          min={0}
+          max={7}
+          step={1}
+          inputMode="numeric"
+          inputClassName="text-sm font-bold w-12"
+          buttonClassName="h-8 w-8 text-sm"
+        />
+        <span className="text-xs text-gray-500">
+          +{extra}日（ハード{base}日 → 理想{ideal}日）
+        </span>
+      </div>
+      {showExplain && (
+        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-blue-500" />
+            <div className="text-[11px] text-gray-600 space-y-1.5">
+              <p>
+                ハード制約の勤務間隔（{base}日）は絶対に守られます。
+                この設定では、さらに<strong>+{extra}日</strong>までの間隔にグラデーションでペナルティをかけます。
+              </p>
+              <p>ハード制約に近いほどペナルティが重く、理想間隔に近づくほど軽くなります。</p>
+              {extra > 0 && (
+                <div className="rounded border border-blue-100 bg-white p-2">
+                  <div className="text-[10px] font-bold text-gray-500 mb-1">ペナルティのイメージ:</div>
+                  {Array.from({ length: extra }, (_, i) => {
+                    const gap = base + i + 1;
+                    const pct = Math.round(((extra - i) / extra) * 100);
+                    return (
+                      <div key={i} className="flex items-center gap-2 text-[10px]">
+                        <span className="w-16 text-gray-600">{gap}日間隔:</span>
+                        <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-blue-400"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="w-8 text-right tabular-nums text-gray-500">{pct}%</span>
+                      </div>
+                    );
+                  })}
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                    <span className="w-16">{ideal + 1}日以上:</span>
+                    <span>ペナルティなし</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WeightsConfig({
   isOpen,
   objectiveWeights,
@@ -272,17 +358,28 @@ export default function WeightsConfig({
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
             <div className="space-y-3">
               {grouped ? (
-                /* ── グループモード（4軸） ── */
-                weightGroups.map((group) => (
-                  <GroupedSlider
-                    key={group.id}
-                    group={group}
-                    value={objectiveWeights[group.primaryKey]}
-                    onChange={handleGroupChange}
-                    ratioOverrides={ratioOverrides}
-                    onRatioChange={handleRatioChange}
-                  />
-                ))
+                /* ── グループモード（3軸） ── */
+                <>
+                  {weightGroups.map((group) => (
+                    <div key={group.id}>
+                      <GroupedSlider
+                        group={group}
+                        value={objectiveWeights[group.primaryKey]}
+                        onChange={handleGroupChange}
+                        ratioOverrides={ratioOverrides}
+                        onRatioChange={handleRatioChange}
+                      />
+                      {/* 勤務間隔のゆとり: +N日ステッパー */}
+                      {group.id === "ideal_gap" && (
+                        <IdealGapExtraInput
+                          extra={objectiveWeights.ideal_gap_extra}
+                          hardInterval={hardConstraints.interval_days}
+                          onChange={(v) => onSetWeights?.({ ...objectiveWeights, ideal_gap_extra: v })}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </>
               ) : (
                 /* ── 個別モード（/app: 12個） ── */
                 <>
@@ -290,38 +387,47 @@ export default function WeightsConfig({
                     .map((weight) => ({ weight, meta: getWeightMeta(weight.key, weight, hardConstraints) }))
                     .filter(({ meta }) => !meta.inactive)
                     .map(({ weight, meta }) => (
-                      <div key={weight.key} className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
-                        <div className="mb-3 space-y-1">
-                          <div className="text-sm font-bold text-gray-800">{meta.label}</div>
-                          <div className="text-[11px] text-gray-500">{meta.hint}</div>
-                        </div>
-                        <div className="mb-3 flex justify-center">
-                          <StepperNumberInput
+                      <div key={weight.key}>
+                        <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                          <div className="mb-3 space-y-1">
+                            <div className="text-sm font-bold text-gray-800">{meta.label}</div>
+                            <div className="text-[11px] text-gray-500">{meta.hint}</div>
+                          </div>
+                          <div className="mb-3 flex justify-center">
+                            <StepperNumberInput
+                              value={objectiveWeights[weight.key]}
+                              onCommit={(value) => onWeightChange?.(weight.key, value)}
+                              fallbackValue={objectiveWeights[weight.key]}
+                              min={weight.min}
+                              max={weight.max}
+                              step={weight.step}
+                              inputMode="numeric"
+                              className="w-full max-w-xl"
+                              inputClassName="px-3 text-base font-bold"
+                              buttonClassName="h-10 w-10 text-base"
+                            />
+                          </div>
+                          <input
+                            type="range"
                             value={objectiveWeights[weight.key]}
-                            onCommit={(value) => onWeightChange?.(weight.key, value)}
-                            fallbackValue={objectiveWeights[weight.key]}
+                            onChange={(event) => onWeightChange?.(weight.key, Number(event.target.value))}
                             min={weight.min}
                             max={weight.max}
                             step={weight.step}
-                            inputMode="numeric"
-                            className="w-full max-w-xl"
-                            inputClassName="px-3 text-base font-bold"
-                            buttonClassName="h-10 w-10 text-base"
+                            className="w-full accent-blue-600"
                           />
+                          <div className="mt-1 flex justify-between text-[10px] text-gray-400">
+                            <span>{weight.min}</span>
+                            <span>{weight.max}</span>
+                          </div>
                         </div>
-                        <input
-                          type="range"
-                          value={objectiveWeights[weight.key]}
-                          onChange={(event) => onWeightChange?.(weight.key, Number(event.target.value))}
-                          min={weight.min}
-                          max={weight.max}
-                          step={weight.step}
-                          className="w-full accent-blue-600"
-                        />
-                        <div className="mt-1 flex justify-between text-[10px] text-gray-400">
-                          <span>{weight.min}</span>
-                          <span>{weight.max}</span>
-                        </div>
+                        {weight.key === "ideal_gap_weight" && (
+                          <IdealGapExtraInput
+                            extra={objectiveWeights.ideal_gap_extra}
+                            hardInterval={hardConstraints.interval_days}
+                            onChange={(v) => onWeightChange?.("ideal_gap_extra", v)}
+                          />
+                        )}
                       </div>
                     ))}
 

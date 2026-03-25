@@ -10,12 +10,11 @@ export type WeightChangeSummary = {
 
 /** 旧: 個別ウェイト一覧（/app 用に残す） */
 export const weightInputs = [
-  { key: "gap5", label: "間隔ルール+1日のペナルティ", min: 0, max: 200, step: 5, hint: "勤務間隔ルールの直上を抑制" },
+  { key: "ideal_gap_weight", label: "勤務間隔のゆとり", min: 0, max: 200, step: 5, hint: "ハード間隔を超えた理想間隔のペナルティ強度" },
   // soft_unavailable はUI非表示・バックエンド固定値(1000)
   { key: "sat_consec", label: "2か月連続土曜回避", min: 0, max: 200, step: 5, hint: "連続土曜抑制" },
   { key: "sat_month_fairness", label: "同月の土曜回数平準化", min: 0, max: 200, step: 5, hint: "土曜回数の均等化" },
   { key: "weekend_hol_3rd", label: "土日祝合算3回目ペナルティ", min: 0, max: 200, step: 5, hint: "土日祝回数抑制" },
-  { key: "gap6", label: "間隔ルール+2日のペナルティ", min: 0, max: 200, step: 5, hint: "より余裕のある間隔を促進" },
   { key: "month_fairness", label: "同月のスコア平準化", min: 0, max: 200, step: 5, hint: "同月の偏り抑制" },
   { key: "target", label: "目標スコアへの近似度", min: 0, max: 200, step: 5, hint: "個別目標寄せ" },
   { key: "score_balance", label: "過去数か月のスコア平準化", min: 0, max: 200, step: 5, hint: "負担バランス" },
@@ -78,6 +77,14 @@ export const weightGroups: WeightGroup[] = [
     ],
     min: 0, max: 200, step: 5,
   },
+  {
+    id: "ideal_gap",
+    label: "勤務間隔のゆとり",
+    hint: "ハード制約の間隔に加え、理想の間隔までグラデーションでペナルティをかけます。間隔が近いほど重く、離れるほど軽くなります。",
+    primaryKey: "ideal_gap_weight",
+    childMapping: { ideal_gap_weight: 1.0 },
+    min: 0, max: 200, step: 5,
+  },
 ];
 
 /** 子要素の比率オーバーライド（グループID → キー → 比率） */
@@ -114,22 +121,7 @@ export function getWeightMeta(
   base: { label: string; hint: string },
   hardConstraints: HardConstraints
 ): WeightMeta {
-  const intervalDays = hardConstraints.interval_days ?? 4;
-  const base_ = intervalDays > 0 ? intervalDays : 4;
-
   switch (key) {
-    case "gap5":
-      return {
-        label: `勤務間隔ルール+1日（${base_ + 1}日間隔）のペナルティ`,
-        hint: "ハード制約の間隔直上をソフト抑制",
-        inactive: false,
-      };
-    case "gap6":
-      return {
-        label: `勤務間隔ルール+2日（${base_ + 2}日間隔）のペナルティ`,
-        hint: "より余裕のある間隔を促進",
-        inactive: false,
-      };
     case "soft_unavailable":
       return { label: base.label, hint: base.hint, inactive: true };
     case "weekend_hol_3rd": {

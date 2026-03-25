@@ -20,10 +20,11 @@ class ObjectiveWeights:
     sat_month_fairness: int = 100
     past_sunhol_gap: int = 50
     past_sat_gap: int = 50
+    # 軸3: 勤務間隔のゆとり
+    ideal_gap_weight: int = 100
+    ideal_gap_extra: int = 3
     # Deactivated (to be redesigned: auto-follow hard constraints)
     month_fairness: int = 0
-    gap5: int = 0
-    gap6: int = 0
     sat_consec: int = 0
     sunhol_3rd: int = 0
     weekend_hol_3rd: int = 0
@@ -131,10 +132,11 @@ class OnCallOptimizer:
             sat_month_fairness=int(ow.get("sat_month_fairness", 100)),
             past_sunhol_gap=int(ow.get("past_sunhol_gap", 50)),
             past_sat_gap=int(ow.get("past_sat_gap", 50)),
+            # 軸3: 勤務間隔のゆとり
+            ideal_gap_weight=int(ow.get("ideal_gap_weight", 100)),
+            ideal_gap_extra=int(ow.get("ideal_gap_extra", 3)),
             # Deactivated
             month_fairness=int(ow.get("month_fairness", 0)),
-            gap5=int(ow.get("gap5", 0)),
-            gap6=int(ow.get("gap6", 0)),
             sat_consec=int(ow.get("sat_consec", 0)),
             sunhol_3rd=int(ow.get("sunhol_3rd", 0)),
             weekend_hol_3rd=int(ow.get("weekend_hol_3rd", 0)),
@@ -1084,30 +1086,33 @@ class OnCallOptimizer:
 
                 # --- soft constraints ---
 
-        # gap_near / gap_far: penalize shifts that are just above the hard spacing floor
-        # e.g. spacing_days=4 → penalize 5-day gap (just passing) and 6-day gap
-        # If spacing_days is None (disabled), fall back to 5/6
+        # Ideal gap gradient: penalize shifts within (hard_interval, hard_interval + extra]
+        # Closer to hard minimum = higher penalty, linearly decreasing to 0 at ideal gap
         _base = spacing_days if spacing_days is not None else 4
-        gap_near = _base + 1
-        gap_far  = _base + 2
+        ideal_extra = max(w.ideal_gap_extra, 0)
 
-        gap5_vars = []
-        gap6_vars = []
-        for d in doctors:
-            for day in days:
-                if day + gap_near <= self.num_days:
-                    gap5_bool = self.model.NewBoolVar(f"gap5_d{d}_day{day}")
-                    self.model.Add(self.work[(d, day)] + self.work[(d, day + gap_near)] - 1 <= gap5_bool)
-                    gap5_vars.append(gap5_bool)
-                if day + gap_far <= self.num_days:
-                    gap6_bool = self.model.NewBoolVar(f"gap6_d{d}_day{day}")
-                    self.model.Add(self.work[(d, day)] + self.work[(d, day + gap_far)] - 1 <= gap6_bool)
-                    gap6_vars.append(gap6_bool)
+        # Build weighted sum: each step k (1..extra) gets weight (extra - k + 1)
+        # e.g. extra=3: +1 day → weight 3, +2 → weight 2, +3 → weight 1
+        ideal_gap_penalties: list = []
+        if ideal_extra > 0 and w.ideal_gap_weight > 0:
+            for d in doctors:
+                for day in days:
+                    for k in range(1, ideal_extra + 1):
+                        target_day = day + _base + k
+                        if target_day > self.num_days:
+                            continue
+                        step_weight = ideal_extra - k + 1  # e.g. 3, 2, 1
+                        both_work = self.model.NewBoolVar(f"igap_d{d}_day{day}_k{k}")
+                        self.model.Add(
+                            self.work[(d, day)] + self.work[(d, target_day)] - 1 <= both_work
+                        )
+                        ideal_gap_penalties.append(both_work * step_weight)
 
-        gap5_sum = self.model.NewIntVar(0, 1000, "gap5_sum")
-        self.model.Add(gap5_sum == sum(gap5_vars))
-        gap6_sum = self.model.NewIntVar(0, 1000, "gap6_sum")
-        self.model.Add(gap6_sum == sum(gap6_vars))
+        ideal_gap_sum = self.model.NewIntVar(0, 100000, "ideal_gap_sum")
+        if ideal_gap_penalties:
+            self.model.Add(ideal_gap_sum == sum(ideal_gap_penalties))
+        else:
+            self.model.Add(ideal_gap_sum == 0)
 
         sat_consec_vars = []
         for d in doctors:
@@ -1260,8 +1265,7 @@ class OnCallOptimizer:
             + w.past_sat_gap * sat_gap
             + w.past_sunhol_gap * sunhol_gap
             + w.sunhol_fairness * sunhol_month_gap
-            + w.gap5 * gap5_sum
-            + w.gap6 * gap6_sum
+            + (w.ideal_gap_weight // max(ideal_extra, 1)) * ideal_gap_sum
             + w.sat_consec * (sat_consec_sum + sat_nth_sum)
             + w.score_balance * score_balance_gap
             + w.target * target_sum

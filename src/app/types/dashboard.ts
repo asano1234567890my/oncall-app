@@ -142,12 +142,12 @@ export type DiagnoseResponse = {
 };
 
 export type ObjectiveWeights = {
-  gap5: number;
+  ideal_gap_weight: number;
+  ideal_gap_extra: number;
   soft_unavailable: number;
   sat_consec: number;
   sat_month_fairness: number;
   weekend_hol_3rd: number;
-  gap6: number;
   month_fairness: number;
   target: number;
   score_balance: number;
@@ -190,10 +190,11 @@ export const DEFAULT_OBJECTIVE_WEIGHTS: ObjectiveWeights = {
   sat_month_fairness: 100,
   past_sunhol_gap: 50,
   past_sat_gap: 50,
+  // 軸3: 勤務間隔のゆとり
+  ideal_gap_weight: 100,
+  ideal_gap_extra: 3,
   // 不活化（将来バックエンド再設計時に廃止予定）
   month_fairness: 0,
-  gap5: 0,
-  gap6: 0,
   sat_consec: 0,
   weekend_hol_3rd: 0,
   soft_unavailable: 0,
