@@ -135,6 +135,7 @@ class SolvableRemoval(BaseModel):
     category: str
     doctor_name: Optional[str] = None
     description_ja: str
+    is_admin_setting: bool = False
 
 
 class DiagnoseResult(BaseModel):
