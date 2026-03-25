@@ -709,6 +709,15 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
               <p className="ml-3 mt-0.5 whitespace-pre-wrap text-blue-800">{core.diagnoseResult.ai_explanation}</p>
             </div>
           )}
+          <div className="mt-2 flex items-center gap-2 border-t border-blue-200 pt-2">
+            <p className="text-[11px] text-blue-700">不可日が多い場合は、医師ごとに上限を設定できます</p>
+            <button
+              onClick={() => { onOpenDoctorManage(); }}
+              className="shrink-0 rounded-lg border border-blue-300 bg-white px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:bg-blue-50 transition"
+            >
+              医師管理を開く
+            </button>
+          </div>
           {!hasVerifiedSolutions && (
             <button
               onClick={() => setShowGuideModal(true)}
