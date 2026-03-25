@@ -581,7 +581,10 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
               return (
                 <button
                   key={d.id}
-                  onClick={() => setDetailDoctorId(d.id)}
+                  onClick={() => {
+                    core.setDoctorUnavailableMonth(new Date(core.year, core.month - 1, 1));
+                    setDetailDoctorId(d.id);
+                  }}
                   className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
                     hasEntry
                       ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
