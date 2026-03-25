@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
+import { Pencil, Lock } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
@@ -67,6 +68,7 @@ export default function UnavailableDaysInput({
   const selectedDoctor = activeDoctors.find((doctor) => doctor.id === selectedDoctorId) ?? null;
   const [unavailablePopover, setUnavailablePopover] = useState<{ dateKey: string } | null>(null);
   const [fixedWeekdayPopover, setFixedWeekdayPopover] = useState<{ doctorId: string; weekday: number } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const { holidaySet: doctorUnavailableStandardHolidaySet } = useHolidays(doctorUnavailableYear);
   const {
     manualSet: doctorUnavailableManualSet,
@@ -144,6 +146,7 @@ export default function UnavailableDaysInput({
   const handleDoctorSelection = (doctorId: string) => {
     setUnavailablePopover(null);
     setFixedWeekdayPopover(null);
+    setIsEditing(false);
     onSelectedDoctorChange(doctorId);
   };
 
@@ -153,6 +156,7 @@ export default function UnavailableDaysInput({
   };
 
   const handleUnavailableDayClick = (date: Date, modifiers: Record<string, boolean>) => {
+    if (!isEditing) return;
     if (
       date.getFullYear() !== doctorUnavailableYear ||
       date.getMonth() !== doctorUnavailableMonthNumber - 1 ||
@@ -179,6 +183,7 @@ export default function UnavailableDaysInput({
     weekday: number,
     targetShift: TargetShift | null
   ) => {
+    if (!isEditing) return;
     if (weekday < 6) {
       onToggleFixedWeekday(doctorId, weekday, targetShift ? null : "all");
       setFixedWeekdayPopover(null);
@@ -211,12 +216,27 @@ export default function UnavailableDaysInput({
             )}
             <button
               type="button"
-              onClick={onToggleAllUnavailable}
+              onClick={() => setIsEditing(!isEditing)}
               disabled={!selectedDoctorId}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              className={`flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                isEditing
+                  ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+              } disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400`}
             >
-              全リセット/全選択
+              {isEditing ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+              {isEditing ? "編集中" : "編集"}
             </button>
+            {isEditing && (
+              <button
+                type="button"
+                onClick={onToggleAllUnavailable}
+                disabled={!selectedDoctorId}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+              >
+                全リセット/全選択
+              </button>
+            )}
           </div>
         </div>
 
@@ -235,7 +255,7 @@ export default function UnavailableDaysInput({
           ))}
         </div>
 
-        <div>
+        <div className={!isEditing ? "opacity-60" : ""}>
           <DayPicker
             mode="multiple"
             month={doctorUnavailableMonth}
@@ -285,18 +305,32 @@ export default function UnavailableDaysInput({
             <h3 className="text-sm font-bold text-gray-800">固定不可曜日</h3>
             <p className="mt-1 text-[11px] text-gray-500">月〜土は1タップで終日不可、日曜と祝日はポップアップでシフト別に設定できます。</p>
           </div>
-          {onSave && (
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onSave}
-              disabled={isSaving}
-              className={`rounded-lg px-3 py-2 text-xs font-bold text-white transition ${
-                isSaving ? "cursor-not-allowed bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => setIsEditing(!isEditing)}
+              className={`flex items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                isEditing
+                  ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                  : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
               }`}
             >
-              {isSaving ? "保存中..." : "固定曜日を保存"}
+              {isEditing ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+              {isEditing ? "編集中" : "編集"}
             </button>
-          )}
+            {onSave && (
+              <button
+                type="button"
+                onClick={onSave}
+                disabled={isSaving}
+                className={`rounded-lg px-3 py-2 text-xs font-bold text-white transition ${
+                  isSaving ? "cursor-not-allowed bg-gray-400" : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {isSaving ? "保存中..." : "固定曜日を保存"}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
@@ -305,7 +339,7 @@ export default function UnavailableDaysInput({
           <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">[当] = 当直のみ</span>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto ${!isEditing ? "opacity-60" : ""}`}>
           <div className="min-w-[320px]">
             <div className="mb-2 grid grid-cols-[88px_repeat(8,1fr)] items-center gap-1">
               <div className="text-[11px] font-bold text-gray-600">医師</div>

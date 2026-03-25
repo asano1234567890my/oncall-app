@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Copy, Check, Share2, QrCode } from "lucide-react";
+import { X, Copy, Check, Share2, QrCode, Pencil, Lock } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
@@ -176,6 +176,7 @@ export default function DoctorUnavailableDetail({
 }: DoctorUnavailableDetailProps) {
   const [month, setMonth] = useState(() => new Date(year, targetMonth - 1, 1));
   const [unavailablePopover, setUnavailablePopover] = useState<{ dateKey: string } | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const displayedYear = month.getFullYear();
   const displayedMonthNumber = month.getMonth() + 1;
@@ -208,6 +209,7 @@ export default function DoctorUnavailableDetail({
   const hasAny = entriesInMonth.length > 0;
 
   const handleDayClick = (date: Date) => {
+    if (!isEditing) return;
     if (date.getFullYear() !== displayedYear || date.getMonth() !== displayedMonthNumber - 1) return;
     const dateKey = toDateKey(date);
     const isSundayOrHoliday = date.getDay() === 0 || holidaySet.has(dateKey);
@@ -234,6 +236,18 @@ export default function DoctorUnavailableDetail({
               </span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsEditing(!isEditing)}
+                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition ${
+                  isEditing
+                    ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                {isEditing ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                {isEditing ? "編集中" : "編集"}
+              </button>
               {doctor.access_token && <ShareDropdown doctor={doctor} />}
               {onSave && (
                 <button
@@ -256,7 +270,7 @@ export default function DoctorUnavailableDetail({
           {/* コンテンツ */}
           <div className="overflow-y-auto p-4 space-y-4">
             {/* 固定不可曜日 */}
-            <div>
+            <div className={!isEditing ? "opacity-60" : ""}>
               <div className="mb-2 text-xs font-bold text-gray-600">固定不可曜日</div>
               <div className="flex gap-1">
                 {pyWeekdays.map((wd) => {
@@ -265,7 +279,7 @@ export default function DoctorUnavailableDetail({
                     <button
                       key={wd}
                       type="button"
-                      onClick={() => onToggleFixedWeekday(doctor.id, wd)}
+                      onClick={() => { if (isEditing) onToggleFixedWeekday(doctor.id, wd); }}
                       className={`flex-1 rounded-lg border py-2 text-center text-xs font-bold transition ${getFixedWeekdayButtonTone(wd, ts)}`}
                     >
                       {fixedWeekdayLabels[wd]}{getFixedWeekdayButtonLabel(ts)}
@@ -273,11 +287,11 @@ export default function DoctorUnavailableDetail({
                   );
                 })}
               </div>
-              <div className="mt-1 text-[10px] text-gray-400">タップで終日不可 → 日直のみ → 当直のみ → 解除</div>
+              <div className="mt-1 text-[10px] text-gray-400">{isEditing ? "タップで終日不可 → 日直のみ → 当直のみ → 解除" : "「編集」を押すと変更できます"}</div>
             </div>
 
             {/* 不可日カレンダー */}
-            <div>
+            <div className={!isEditing ? "opacity-60" : ""}>
               <div className="mb-2 text-xs font-bold text-gray-600">不可日カレンダー</div>
               <DayPicker
                 mode="multiple"

@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { Calendar, CalendarCheck } from "lucide-react";
+import { Calendar, CalendarCheck, Pencil, Lock } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { useParams, useRouter } from "next/navigation";
@@ -125,6 +125,7 @@ export default function EntryPage() {
   const [error, setError] = useState<string>("");
   const [popover, setPopover] = useState<{ dateKey: string } | null>(null);
   const [confirmedShifts, setConfirmedShifts] = useState<{ date: string; shift_type: string }[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
 
   const locked = Boolean(doctor?.is_locked);
   const displayedYear = month.getFullYear();
@@ -249,7 +250,7 @@ export default function EntryPage() {
   const isAtLimit = unavailDayLimit !== null && unavailableCounts.total >= unavailDayLimit;
 
   const handleDayClick = (day: Date) => {
-    if (locked) return;
+    if (locked || !isEditing) return;
 
     const dateKey = ymd(day);
     if (!isUnavailableDateInMonth(dateKey, displayedYear, displayedMonthNumber)) return;
@@ -359,6 +360,20 @@ export default function EntryPage() {
               <div className="truncate text-lg font-bold text-gray-800">{title}</div>
               <div className="mt-1 text-xs text-gray-500">先生の休み希望のみ入力できます。</div>
             </div>
+            {!locked && !isLoading && (
+              <button
+                type="button"
+                onClick={() => setIsEditing(!isEditing)}
+                className={`flex shrink-0 items-center gap-1 rounded-lg border px-3 py-2 text-xs font-bold transition ${
+                  isEditing
+                    ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                }`}
+              >
+                {isEditing ? <Pencil className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                {isEditing ? "編集中" : "編集"}
+              </button>
+            )}
           </div>
 
           {locked && !isLoading && (
@@ -384,7 +399,7 @@ export default function EntryPage() {
                 <div className="mt-1 text-xs text-gray-500">
                   毎週決まった曜日に当直できない場合はここで設定してください。
                 </div>
-                <div className={`mt-2 flex gap-1 ${locked ? "opacity-75 pointer-events-none" : ""}`}>
+                <div className={`mt-2 flex gap-1 ${locked || !isEditing ? "opacity-60 pointer-events-none" : ""}`}>
                   {([0, 1, 2, 3, 4, 5, 6] as const).map((pyWd) => {
                     const labels = ["月", "火", "水", "木", "金", "土", "日"];
                     const entry = fixedWeekdayEntries.find((e) => e.day_of_week === pyWd);
@@ -431,7 +446,7 @@ export default function EntryPage() {
                   ) : null}
                 </div>
 
-                <div className={`mt-4 ${locked ? "opacity-75" : ""}`}>
+                <div className={`mt-4 ${locked || !isEditing ? "opacity-60" : ""}`}>
                   <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm sm:p-4">
                     <div className="mb-3 flex flex-wrap gap-2 text-[10px] font-bold">
                       <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">[休] = 終日</span>
@@ -500,7 +515,7 @@ export default function EntryPage() {
                       title={popover ? `${month.getMonth() + 1}月${Number(popover.dateKey.slice(-2))}日の不可設定` : "不可設定"}
                       currentValue={popover ? getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, popover.dateKey) : null}
                       onSelect={(value) => {
-                        if (!popover) return;
+                        if (!popover || !isEditing) return;
                         // 新規追加で上限に達している場合はブロック（解除・変更は許可）
                         const existing = getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, popover.dateKey);
                         if (!existing && value && isAtLimit) return;
@@ -592,10 +607,10 @@ export default function EntryPage() {
           <button
             type="button"
             onClick={handleSave}
-            disabled={isLoading || isSaving || locked}
+            disabled={isLoading || isSaving || locked || !isEditing}
             className="w-full rounded-xl bg-emerald-600 py-4 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {locked ? "ロック中（保存不可）" : isSaving ? "保存中..." : "保存する"}
+            {locked ? "ロック中（保存不可）" : !isEditing ? "「編集」を押して入力してください" : isSaving ? "保存中..." : "保存する"}
           </button>
         </div>
       </div>
