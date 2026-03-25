@@ -129,10 +129,19 @@ class ConflictGroup(BaseModel):
     description_ja: str  # "田中先生の4/15（火）不可日"
 
 
+class SolvableRemoval(BaseModel):
+    """この制約を1つ外せば解ける"""
+    group_id: str
+    category: str
+    doctor_name: Optional[str] = None
+    description_ja: str
+
+
 class DiagnoseResult(BaseModel):
     """制約診断の結果"""
     conflict_groups: List[ConflictGroup] = Field(default_factory=list)
     specific_violations: List[str] = Field(default_factory=list)
+    solvable_removals: List[SolvableRemoval] = Field(default_factory=list)
     human_insights: List[str] = Field(default_factory=list)
     ai_explanation: Optional[str] = None
 

@@ -442,6 +442,7 @@ async def diagnose_constraints(
             result=DiagnoseResult(
                 conflict_groups=[ConflictGroup(**g) for g in diag_result["conflict_groups"]],
                 specific_violations=diag_result["specific_violations"],
+                solvable_removals=diag_result.get("solvable_removals", []),
                 human_insights=diag_result["human_insights"],
                 ai_explanation=ai_explanation,
             ),

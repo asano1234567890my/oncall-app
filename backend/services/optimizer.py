@@ -1353,20 +1353,19 @@ class OnCallOptimizer:
         self.doctor_names = doctor_names or {i: f"医師{i+1}" for i in range(self.num_doctors)}
 
         # Phase 1: Build diagnosis model with assumptions → find conflicting groups
-        conflict_groups, assumption_map = self._diagnose_phase1(time_limit_seconds)
+        conflict_groups, assumption_map, diag_model = self._diagnose_phase1(time_limit_seconds)
         if not conflict_groups:
-            # Phase 1 で特定できなかった場合、日別の可用人数を計算してボトルネックを探す
+            # Phase 1 で特定できなかった場合でも、管理者設定の探索は実行
+            solvable_removals = self._diagnose_try_settings(time_limit_per_try=2.0)
             staffing_violations = self._diagnose_staffing_shortage()
-            if staffing_violations:
-                return {
-                    "conflict_groups": [],
-                    "specific_violations": staffing_violations,
-                    "human_insights": self._build_human_insights(),
-                    "phase_completed": 1,
-                }
+
+            specific = staffing_violations or (
+                [] if solvable_removals else ["制約の競合を特定できませんでした。"]
+            )
             return {
                 "conflict_groups": [],
-                "specific_violations": ["制約の競合を特定できませんでした。"],
+                "specific_violations": specific,
+                "solvable_removals": solvable_removals,
                 "human_insights": self._build_human_insights(),
                 "phase_completed": 1,
             }
@@ -1374,9 +1373,15 @@ class OnCallOptimizer:
         # Phase 2: Soften conflicting groups → find specific violations
         specific_violations = self._diagnose_phase2(conflict_groups, time_limit_seconds)
 
+        # Phase 2b: 管理者設定を変えて解けるか試行 → 最小変更値を探索
+        solvable_removals = self._diagnose_try_settings(
+            time_limit_per_try=min(time_limit_seconds, 2.0),
+        )
+
         return {
             "conflict_groups": conflict_groups,
             "specific_violations": specific_violations,
+            "solvable_removals": solvable_removals,
             "human_insights": self._build_human_insights(),
             "phase_completed": 2,
         }
@@ -1473,7 +1478,7 @@ class OnCallOptimizer:
 
     def _diagnose_phase1(
         self, time_limit_seconds: float = 5.0
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any], cp_model.CpModel]:
         """Phase 1: Build model with assumption literals, find MUS (minimal unsatisfiable subset)."""
         model = cp_model.CpModel()
         doctors = range(self.num_doctors)
@@ -1744,11 +1749,133 @@ class OnCallOptimizer:
                         "description_ja": info["description_ja"],
                     })
             if conflict_groups:
-                return conflict_groups, assumption_map
+                return conflict_groups, assumption_map, model
             # INFEASIBLEだがsufficient_setが空 → フォールバックへ
 
         # 解けた（人手不足ではない）orタイムアウトor原因不明 → 人手不足チェックへ
-        return [], assumption_map
+        return [], assumption_map, model
+
+    def _diagnose_try_settings(
+        self,
+        time_limit_per_try: float = 2.0,
+    ) -> List[Dict[str, Any]]:
+        """管理者設定を1つずつ外して再ソルブし、解ける設定の最小変更値を探す。
+
+        流れ:
+        1. 各設定（interval, wh_max, sat_max）を外してモデル再構築→ソルブ
+        2. 解ければ、元の値から段階的に変えて「どの値で解けるか」を探索
+        3. 「土日祝上限を2→3にすれば解けます」のように具体的に返す
+        """
+        results: List[Dict[str, Any]] = []
+
+        # 現在の設定値を取得
+        current_interval = self._get_hard_constraint_value(
+            4, "interval_days", "min_interval_days", "spacing_days", "min_gap_days", "work_interval_days"
+        )
+        current_wh_max = self._get_hard_constraint_value(
+            None, "max_weekend_holiday_works", "weekend_holiday_work_max", "weekend_hol_work_max",
+            "max_weekend_holiday_count", "weekend_holiday_total_max", "weekend_hol_total_max", "max_shifts",
+            flag_keys=("strict_weekend_hol_max",),
+        )
+        current_sat_max = self._get_hard_constraint_value(
+            1, "max_saturday_nights", "max_sat_nights", "sat_night_max", "saturday_night_max"
+        )
+
+        # 試す設定: (名前, キー, 現在値, 外した値, 探索方向, ラベル)
+        settings_to_try = []
+        if current_interval is not None and current_interval > 0:
+            settings_to_try.append({
+                "name": "interval_days",
+                "current": current_interval,
+                "removed_value": 0,  # 外す = 間隔なし
+                "search_range": list(range(current_interval - 1, -1, -1)),  # 現在値-1 → 0
+                "label": "勤務間隔",
+                "unit": "日",
+                "direction": "decrease",
+            })
+        if current_wh_max is not None:
+            num_wh_days = sum(1 for day in range(1, self.num_days + 1) if self.is_sunday_or_holiday(day) or self.is_saturday(day))
+            settings_to_try.append({
+                "name": "max_weekend_holiday_works",
+                "current": current_wh_max,
+                "removed_value": None,  # 外す = 上限なし
+                "search_range": list(range(current_wh_max + 1, min(current_wh_max + 6, num_wh_days + 1))),
+                "label": "土日祝合算上限",
+                "unit": "回",
+                "direction": "increase",
+            })
+        if current_sat_max is not None:
+            num_sats = sum(1 for day in range(1, self.num_days + 1) if self.is_saturday(day))
+            settings_to_try.append({
+                "name": "max_saturday_nights",
+                "current": current_sat_max,
+                "removed_value": None,  # 外す = 上限なし
+                "search_range": list(range(current_sat_max + 1, min(current_sat_max + 4, num_sats + 1))),
+                "label": "土曜当直上限",
+                "unit": "回",
+                "direction": "increase",
+            })
+
+        def try_solve_with(overrides: Dict[str, Any]) -> bool:
+            """設定を変えてモデル再構築→ソルブ。"""
+            hc = dict(self.hard_constraints)
+            hc.update(overrides)
+            trial = OnCallOptimizer(
+                num_doctors=self.num_doctors,
+                year=self.year,
+                month=self.month,
+                holidays=self.holidays,
+                unavailable=self.unavailable,
+                fixed_unavailable_weekdays=self.fixed_unavailable_weekdays,
+                prev_month_worked_days=self.prev_month_worked_days,
+                prev_month_last_day=self.prev_month_last_day,
+                previous_month_shifts=self.previous_month_shifts,
+                hard_constraints=hc,
+                locked_shifts=self.locked_shifts,
+            )
+            trial.build_model()
+            solver = cp_model.CpSolver()
+            solver.parameters.max_time_in_seconds = time_limit_per_try
+            status = solver.Solve(trial.model)
+            return status in (cp_model.FEASIBLE, cp_model.OPTIMAL)
+
+        for setting in settings_to_try:
+            name = setting["name"]
+            current = setting["current"]
+
+            # Step 1: 設定を外して解けるか
+            override_removed = {name: setting["removed_value"]}
+            if not try_solve_with(override_removed):
+                continue  # この設定を外しても解けない → スキップ
+
+            # Step 2: 最小変更値を探索
+            found_value = setting["removed_value"]
+            for try_value in setting["search_range"]:
+                if try_solve_with({name: try_value}):
+                    found_value = try_value
+                    break
+
+            # 結果を追加
+            if found_value is not None:
+                if setting["direction"] == "decrease":
+                    desc = f"{setting['label']}を{current}{setting['unit']}→{found_value}{setting['unit']}に下げれば解けます"
+                else:
+                    desc = f"{setting['label']}を{current}{setting['unit']}→{found_value}{setting['unit']}に上げれば解けます"
+            else:
+                desc = f"{setting['label']}の制限を外せば解けます"
+
+            results.append({
+                "group_id": f"setting_{name}",
+                "category": "admin_setting",
+                "doctor_name": None,
+                "description_ja": desc,
+                "is_admin_setting": True,
+                "setting_name": name,
+                "current_value": current,
+                "suggested_value": found_value,
+            })
+
+        return results
 
     def _diagnose_phase2(
         self, conflict_groups: List[Dict[str, Any]], time_limit_seconds: float = 5.0

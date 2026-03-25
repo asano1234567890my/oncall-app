@@ -157,6 +157,18 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onShowGuide 
           {diagnoseResult.specific_violations.map((v, i) => (
             <p key={i} className="ml-3 mt-0.5">・{v}</p>
           ))}
+          {diagnoseResult.solvable_removals?.length > 0 && (
+            <div className="mt-2 border-t border-green-200 pt-1.5">
+              <p className="font-semibold text-green-700">
+                {diagnoseResult.solvable_removals[0]?.is_admin_setting
+                  ? "以下の設定のいずれかを変更すれば解けます"
+                  : "以下のいずれか1つを外せば解けます"}
+              </p>
+              {diagnoseResult.solvable_removals.map((r, i) => (
+                <p key={i} className="ml-3 mt-0.5 text-green-800">・{r.description_ja}</p>
+              ))}
+            </div>
+          )}
           {diagnoseResult.human_insights.length > 0 && (
             <div className="mt-2 border-t border-blue-200 pt-1.5">
               <p className="font-semibold text-blue-700">補足情報</p>

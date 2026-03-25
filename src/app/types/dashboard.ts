@@ -118,9 +118,18 @@ export type ConflictGroup = {
   description_ja: string;
 };
 
+export type SolvableRemoval = {
+  group_id: string;
+  category: string;
+  doctor_name?: string | null;
+  description_ja: string;
+  is_admin_setting?: boolean;
+};
+
 export type DiagnoseResult = {
   conflict_groups: ConflictGroup[];
   specific_violations: string[];
+  solvable_removals: SolvableRemoval[];
   human_insights: string[];
   ai_explanation?: string | null;
 };
