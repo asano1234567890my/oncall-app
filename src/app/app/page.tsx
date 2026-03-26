@@ -1024,7 +1024,7 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${popover.dateStr.slice(5)} の外部医師設定` : ""}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部医師設定` : ""}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;
@@ -1038,7 +1038,7 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
             <div className="mt-2 flex flex-wrap gap-1">
               {dates.map((e) => (
                 <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                  {e.date.slice(5)}{shiftLabel(e.target_shift)}
+                  {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
                   <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
                     <X className="h-3 w-3" />
                   </button>

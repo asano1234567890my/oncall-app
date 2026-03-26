@@ -71,7 +71,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
         <div className="mt-1 flex flex-wrap gap-1">
           {dates.map((e) => (
             <span key={e.date} className="inline-flex items-center gap-0.5 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">
-              {e.date.slice(5)}{shiftLabel(e.target_shift)}
+              {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
               <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -104,7 +104,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${popover.dateStr.slice(5)} の外部医師設定` : "外部医師設定"}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部医師設定` : "外部医師設定"}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;

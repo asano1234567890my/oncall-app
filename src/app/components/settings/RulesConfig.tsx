@@ -283,7 +283,7 @@ export default function RulesConfig({
                     />
                     <TargetShiftPopover
                       open={Boolean(extPopover)}
-                      title={extPopover ? `${extPopover.dateStr.slice(5)} の外部医師設定` : "外部医師設定"}
+                      title={extPopover ? `${Number(extPopover.dateStr.slice(5,7))}/${Number(extPopover.dateStr.slice(8))} の外部医師設定` : "外部医師設定"}
                       currentValue={extPopover ? (getExtEntry(extPopover.dateStr)?.target_shift ?? null) : null}
                       onSelect={handleExtPopoverSelect}
                       onClose={() => setExtPopover(null)}
@@ -292,7 +292,7 @@ export default function RulesConfig({
                       <div className="mt-2 flex flex-wrap gap-1">
                         {externalDates.map((e) => (
                           <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                            {e.date.slice(5)}{getExtShiftLabel(e.target_shift)}
+                            {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{getExtShiftLabel(e.target_shift)}
                             <button type="button" onClick={() => removeExtDate(e.date)} className="text-orange-400 hover:text-orange-700">
                               <X className="h-3 w-3" />
                             </button>

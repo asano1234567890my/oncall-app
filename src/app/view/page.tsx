@@ -331,7 +331,7 @@ export default function ViewSchedulePage() {
               inputMode="numeric"
               value={year}
               onChange={(e) => setYear(Number(e.target.value))}
-              className="h-8 w-[4.5rem] rounded-md border border-gray-300 px-2 text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="h-8 w-[4.5rem] rounded-md border border-gray-400 px-2 text-center text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="年"
             />
             <span className="text-gray-500">年</span>
@@ -339,7 +339,7 @@ export default function ViewSchedulePage() {
               <button
                 type="button"
                 onClick={() => setMonthDropdownOpen((v) => !v)}
-                className="flex items-center gap-1.5 h-8 rounded-md border border-gray-300 bg-white px-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex items-center gap-1.5 h-8 rounded-md border border-gray-400 bg-white px-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 aria-label="月"
               >
                 <span className={`inline-block w-2 h-2 rounded-full ${publishedMonths.has(`${year}-${pad2(month)}`) ? "bg-green-400" : "bg-amber-400"}`} />

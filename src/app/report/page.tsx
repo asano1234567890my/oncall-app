@@ -403,9 +403,9 @@ export default function ReportPage() {
         {/* Row 1: base month + tabs + help + filter */}
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
-            <button onClick={() => moveBase(-1)} className="rounded p-0.5 hover:bg-gray-200"><ChevronLeft className="h-3.5 w-3.5" /></button>
+            <button onClick={() => moveBase(-1)} className="rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronLeft className="h-3.5 w-3.5" /></button>
             <span className="text-xs sm:text-sm font-bold text-gray-800 whitespace-nowrap">〜{baseYear}/{baseMonth}</span>
-            <button onClick={() => moveBase(1)} className="rounded p-0.5 hover:bg-gray-200"><ChevronRight className="h-3.5 w-3.5" /></button>
+            <button onClick={() => moveBase(1)} className="rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronRight className="h-3.5 w-3.5" /></button>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
@@ -622,9 +622,9 @@ function OverviewTab({
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <div className="flex items-center gap-1 text-gray-600">
           <span className="font-bold">目標:</span>
-          <button onClick={() => setCustomTarget(Math.max(0.5, +(customTarget - 0.5).toFixed(1)))} className="rounded p-0.5 hover:bg-gray-200"><ChevronLeft className="h-3 w-3" /></button>
+          <button onClick={() => setCustomTarget(Math.max(0.5, +(customTarget - 0.5).toFixed(1)))} className="rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronLeft className="h-3 w-3" /></button>
           <span className="font-bold text-gray-800 min-w-[2.5rem] text-center">{customTarget.toFixed(1)}</span>
-          <button onClick={() => setCustomTarget(+(customTarget + 0.5).toFixed(1))} className="rounded p-0.5 hover:bg-gray-200"><ChevronRight className="h-3 w-3" /></button>
+          <button onClick={() => setCustomTarget(+(customTarget + 0.5).toFixed(1))} className="rounded p-0.5 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronRight className="h-3 w-3" /></button>
           <span className="text-gray-400">/月</span>
         </div>
       </div>
@@ -977,24 +977,24 @@ function DoctorTab({
         <select
           value={selectedDoctorId}
           onChange={e => setSelectedDoctorId(e.target.value)}
-          className="h-8 max-w-[10rem] truncate rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="h-8 max-w-[10rem] truncate rounded-md border border-gray-400 px-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {data.doctors.map(d => (
             <option key={d.id} value={d.id}>{d.name}</option>
           ))}
         </select>
         <div className="flex items-center gap-1">
-          <button onClick={() => setSelectedSlot(Math.max(0, selectedSlot - 1))} className="rounded p-1 hover:bg-gray-200"><ChevronLeft className="h-4 w-4" /></button>
+          <button onClick={() => setSelectedSlot(Math.max(0, selectedSlot - 1))} className="rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronLeft className="h-4 w-4" /></button>
           <select
             value={selectedSlot}
             onChange={e => setSelectedSlot(Number(e.target.value))}
-            className="h-8 rounded-md border border-gray-300 px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="h-8 rounded-md border border-gray-400 px-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             {slotLabels.map((lbl, i) => (
               <option key={i} value={i}>{lbl}</option>
             ))}
           </select>
-          <button onClick={() => setSelectedSlot(Math.min(11, selectedSlot + 1))} className="rounded p-1 hover:bg-gray-200"><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={() => setSelectedSlot(Math.min(11, selectedSlot + 1))} className="rounded p-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900"><ChevronRight className="h-4 w-4" /></button>
         </div>
       </div>
 
