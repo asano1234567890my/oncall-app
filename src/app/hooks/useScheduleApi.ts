@@ -358,7 +358,9 @@ export function useScheduleApi({
           past_sat_counts: new Array(activeCount).fill(0),
           past_sunhol_counts: new Array(activeCount).fill(0),
           past_total_scores: {},
-          objective_weights: objectiveWeights,
+          objective_weights: Object.fromEntries(
+            Object.entries(objectiveWeights).filter(([, v]) => v != null)
+          ),
           hard_constraints: formattedHardConstraints,
           locked_shifts: lockedShifts,
         }),
@@ -468,7 +470,9 @@ export function useScheduleApi({
           past_sat_counts: new Array(activeCount).fill(0),
           past_sunhol_counts: new Array(activeCount).fill(0),
           past_total_scores: {},
-          objective_weights: objectiveWeights,
+          objective_weights: Object.fromEntries(
+            Object.entries(objectiveWeights).filter(([, v]) => v != null)
+          ),
           hard_constraints: formattedHardConstraints,
           locked_shifts: lockedShifts,
         }),
