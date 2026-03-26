@@ -2,7 +2,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X, Upload } from "lucide-react";
+import { Lock, Unlock, Loader2, Copy, Check, Share2, Printer, QrCode, X, Upload, Users, HelpCircle, Link2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { getAuthHeaders } from "../../hooks/useAuth";
@@ -146,6 +146,9 @@ function DoctorShareDropdown({ doctor, onError }: { doctor: Doctor; onError: (ms
 function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (msg: string) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sharedCopied, setSharedCopied] = useState(false);
+  const [sharedQrDataUrl, setSharedQrDataUrl] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -160,6 +163,23 @@ function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (
   const docsWithToken = doctors.filter((d) => d.access_token);
   if (docsWithToken.length === 0) return null;
 
+  const fetchSharedToken = async (): Promise<string | null> => {
+    try {
+      const res = await fetch(`${apiBase()}/api/shared-entry/token`, {
+        headers: { ...getAuthHeaders() },
+      });
+      if (!res.ok) throw new Error("共通ページの取得に失敗しました");
+      const data = await res.json();
+      return data.token as string;
+    } catch (e) {
+      onError(e instanceof Error ? e.message : "共通ページの取得に失敗しました");
+      return null;
+    }
+  };
+
+  const getSharedUrl = (token: string) =>
+    typeof window !== "undefined" ? `${window.location.origin}/entry/shared/${token}` : `/entry/shared/${token}`;
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -170,7 +190,31 @@ function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (
         まとめて共有
       </button>
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-56 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+        <div className="absolute left-0 top-full mt-1 z-50 w-72 rounded-lg border border-gray-200 bg-white shadow-lg py-1">
+          {/* [?] 説明ボタン */}
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-blue-600 hover:bg-blue-50"
+            onClick={() => setShowHelp(!showHelp)}
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+            共有方法の違いについて
+          </button>
+          {showHelp && (
+            <div className="mx-3 mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] leading-relaxed text-blue-800">
+              <p className="font-bold">個別リンク（医師ごとに専用URL）</p>
+              <p>各医師に1つずつ専用URLを送ります。URLを知っている人だけがその医師の不可日を編集できます。</p>
+              <p className="mt-1.5 font-bold">共通入力ページ（1つのURLで全員）</p>
+              <p>1つのURLを全員に配ります。開くとドロップダウンで名前を選んで入力できます。URLの管理が簡単です。</p>
+              <p className="mt-1.5 text-[9px] text-blue-600">※ どちらの方法でも、同じ不可日入力ができます。入力内容は同じ場所に保存されます。</p>
+            </div>
+          )}
+
+          <div className="mx-3 my-1 border-t border-gray-100" />
+
+          {/* 個別リンク */}
+          <div className="px-3 py-1">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">個別リンク</div>
+          </div>
           <button
             className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
             onClick={async () => {
@@ -186,21 +230,73 @@ function BulkShareDropdown({ doctors, onError }: { doctors: Doctor[]; onError: (
             }}
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? "コピー済み" : "全員のURLを一括コピー"}
+            {copied ? "コピー済み" : "全員の個別URLを一括コピー"}
           </button>
           <button
             className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
             onClick={() => {
               setIsOpen(false);
-              // Open QR print page in new tab
               const params = docsWithToken.map((d) => `n=${encodeURIComponent(d.name)}&t=${encodeURIComponent(d.access_token!)}`).join("&");
-              const printUrl = `/report/qr-print?${params}`;
-              window.open(printUrl, "_blank");
+              window.open(`/report/qr-print?${params}`, "_blank");
             }}
           >
             <Printer className="h-3.5 w-3.5" />
-            QRカードを印刷
+            個別QRカードを印刷
           </button>
+
+          <div className="mx-3 my-1 border-t border-gray-100" />
+
+          {/* 共通入力ページ */}
+          <div className="px-3 py-1">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">共通入力ページ</div>
+          </div>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              const token = await fetchSharedToken();
+              if (!token) return;
+              try {
+                await copyText(getSharedUrl(token));
+                setSharedCopied(true);
+                setTimeout(() => { setSharedCopied(false); setIsOpen(false); }, 1500);
+              } catch { onError("コピーに失敗しました"); }
+            }}
+          >
+            {sharedCopied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Link2 className="h-3.5 w-3.5" />}
+            {sharedCopied ? "コピー済み" : "共通ページのURLをコピー"}
+          </button>
+          <button
+            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"
+            onClick={async () => {
+              const token = await fetchSharedToken();
+              if (!token) return;
+              try {
+                const dataUrl = await generateQrDataUrl(getSharedUrl(token));
+                setSharedQrDataUrl(dataUrl);
+                setIsOpen(false);
+              } catch { onError("QRコード生成に失敗しました"); }
+            }}
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            共通ページのQRコードを表示
+          </button>
+        </div>
+      )}
+
+      {/* 共通ページQRコードモーダル */}
+      {sharedQrDataUrl && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40" onClick={() => setSharedQrDataUrl(null)}>
+          <div className="bg-white rounded-2xl p-6 shadow-xl max-w-xs w-full text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <Users className="h-4 w-4 text-indigo-600" />
+              <p className="font-bold text-gray-800">共通入力ページ</p>
+            </div>
+            <img src={sharedQrDataUrl} alt="QR Code" className="mx-auto w-48 h-48" />
+            <p className="mt-3 text-[10px] text-gray-400">このQRコードを読み取ると、全員が同じページから不可日を入力できます。</p>
+            <button onClick={() => setSharedQrDataUrl(null)} className="mt-4 rounded-lg bg-gray-100 px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-200">
+              閉じる
+            </button>
+          </div>
         </div>
       )}
     </div>
