@@ -55,6 +55,7 @@ class DemoOptimizeRequest(BaseModel):
     target_score_by_doctor: Optional[Dict[str, float]] = None
     min_score_by_doctor: Optional[Dict[str, float]] = None
     max_score_by_doctor: Optional[Dict[str, float]] = None
+    shift_scores: Optional[Dict[str, float]] = None
 
 
 @router.post("/optimize")
@@ -108,6 +109,7 @@ async def demo_optimize(req: DemoOptimizeRequest, request: Request):
             objective_weights=req.objective_weights or {},
             hard_constraints=hard_constraints,
             locked_shifts=[],
+            shift_scores=req.shift_scores,
         )
 
         # Pre-validation

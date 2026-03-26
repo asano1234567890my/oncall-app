@@ -3,7 +3,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Loader2, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, CheckCircle, Lightbulb } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, AlertTriangle, RefreshCw, CheckCircle, Lightbulb, HelpCircle } from "lucide-react";
 
 type ScheduleRow = {
   day: number;
@@ -16,17 +16,26 @@ export default function InlineDemo() {
   // ── 基本設定 ──
   const [numDoctors, setNumDoctors] = useState(12);
   const [intervalDays, setIntervalDays] = useState(4);
-  const [shiftsPerMonth, setShiftsPerMonth] = useState(3);
+
+  // ── 配分方法（基本設定として表示） ──
+  const [distributionMode, setDistributionMode] = useState<"fair" | "seniority">("fair");
+  const fairness = distributionMode === "fair";
+  const seniorityMode = distributionMode === "seniority";
 
   // ── ハード制約 ──
   const [maxSaturdayNights, setMaxSaturdayNights] = useState(1);
   const [maxSunholWorks, setMaxSunholWorks] = useState<number | null>(3);
   const [holidayShiftMode, setHolidayShiftMode] = useState<"split" | "combined">("split");
 
-  // ── ソフト制約 ──
-  const [distributionMode, setDistributionMode] = useState<"fair" | "seniority">("fair");
-  const fairness = distributionMode === "fair";
-  const seniorityMode = distributionMode === "seniority";
+  // ── シフトスコア（詳細設定で編集可能） ──
+  const [scoreWeekdayNight, setScoreWeekdayNight] = useState(1.0);
+  const [scoreSaturdayNight, setScoreSaturdayNight] = useState(1.5);
+  const [scoreHolidayDay, setScoreHolidayDay] = useState(0.5);
+  const [scoreHolidayNight, setScoreHolidayNight] = useState(1.0);
+  const [showScoreHelp, setShowScoreHelp] = useState(false);
+
+  // shiftsPerMonth is derived from numDoctors (hidden from user)
+  const shiftsPerMonth = Math.max(1, Math.round(30 / numDoctors));
 
   // ── UI状態 ──
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -149,6 +158,12 @@ export default function InlineDemo() {
           target_score_by_doctor: seniorityMode ? seniority.target : undefined,
           min_score_by_doctor: seniorityMode ? seniority.min : undefined,
           max_score_by_doctor: seniorityMode ? seniority.max : undefined,
+          shift_scores: {
+            weekday_night: scoreWeekdayNight,
+            saturday_night: scoreSaturdayNight,
+            holiday_day: scoreHolidayDay,
+            holiday_night: scoreHolidayNight,
+          },
         }),
       });
       const data: unknown = await res.json().catch(() => ({}));
@@ -208,12 +223,11 @@ export default function InlineDemo() {
     const totals: Record<string, number> = {};
     for (const row of sched) {
       if (row.day_shift) {
-        // 日直は日祝のみ → 0.5
-        totals[row.day_shift] = (totals[row.day_shift] || 0) + 0.5;
+        totals[row.day_shift] = (totals[row.day_shift] || 0) + scoreHolidayDay;
       }
       if (row.night_shift) {
         const sat = isSaturday(row.day);
-        const w = sat ? 1.5 : 1.0;
+        const w = row.is_sunhol ? scoreHolidayNight : sat ? scoreSaturdayNight : scoreWeekdayNight;
         totals[row.night_shift] = (totals[row.night_shift] || 0) + w;
       }
     }
@@ -725,27 +739,22 @@ export default function InlineDemo() {
         </div>
       </div>
 
-      {/* 1人あたりの当直回数 */}
+      {/* 当直の配分方法 */}
       <div>
-        <label className="block text-sm font-bold text-gray-700 mb-2">
-          1人あたりの当直回数（目安）
-          <span className="ml-2 text-sm font-normal text-blue-600">月{shiftsPerMonth}回</span>
-        </label>
-        <div className="flex items-center gap-3">
-          <input
-            type="range"
-            min={1}
-            max={6}
-            value={shiftsPerMonth}
-            onChange={(e) => setShiftsPerMonth(Number(e.target.value))}
-            className="flex-1"
-          />
-          <span className="w-14 text-right text-lg font-bold text-gray-800">{shiftsPerMonth}回</span>
+        <label className="block text-sm font-bold text-gray-700 mb-2">当直の配分方法</label>
+        <div className="flex gap-2">
+          <ChoiceBtn selected={distributionMode === "fair"} onClick={() => setDistributionMode("fair")}>
+            公平に配分
+          </ChoiceBtn>
+          <ChoiceBtn selected={distributionMode === "seniority"} onClick={() => setDistributionMode("seniority")}>
+            年次で傾斜
+          </ChoiceBtn>
         </div>
-        <div className="flex justify-between text-[10px] text-gray-400 mt-0.5 px-0.5">
-          <span>少なめ</span>
-          <span>多め</span>
-        </div>
+        <p className="text-[11px] text-gray-400 mt-1.5">
+          {distributionMode === "fair"
+            ? "全員の負担スコアが均等になるよう配分します。土曜当直など負担の重いシフトも偏りなく割り振られます。"
+            : `医師1＝1年目 … 医師${numDoctors}＝${numDoctors}年目として、ベテランほど少なく配分します。`}
+        </p>
       </div>
 
       {/* 詳細ルール トグル */}
@@ -808,28 +817,38 @@ export default function InlineDemo() {
             </div>
           </div>
 
-          {/* ── できれば守りたいルール ── */}
+          {/* ── 負担スコアの設定 ── */}
           <div>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">できれば守りたいルール（ソフト制約）</p>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm text-gray-700 mb-1.5">当直の配分方法</label>
-                <div className="flex gap-2">
-                  <ChoiceBtn selected={distributionMode === "fair"} onClick={() => setDistributionMode("fair")}>
-                    公平に配分
-                  </ChoiceBtn>
-                  <ChoiceBtn selected={distributionMode === "seniority"} onClick={() => setDistributionMode("seniority")}>
-                    年次で傾斜
-                  </ChoiceBtn>
-                </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  {distributionMode === "fair"
-                    ? "全員のスコアが均等になるよう配分します"
-                    : `医師1＝1年目 … 医師${numDoctors}＝${numDoctors}年目として、ベテランほど少なく配分`}
-                </p>
-              </div>
-
+            <div className="flex items-center gap-1.5 mb-3">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">負担スコア（公平配分の基準）</p>
+              <button
+                type="button"
+                onClick={() => setShowScoreHelp(!showScoreHelp)}
+                className="text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
             </div>
+
+            {showScoreHelp && (
+              <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 space-y-1.5">
+                <p className="font-bold">スコアとは？</p>
+                <p>シフトの種類ごとに「負担の重さ」を数値化したものです。</p>
+                <p>例えば土曜当直（1.5）は平日当直（1.0）の1.5倍の負担としてカウントされます。このスコアの合計が全員均等になるようにAIが配分します。</p>
+                <p className="font-bold mt-2">なぜ日数ではなくスコア？</p>
+                <p>単純に回数で均等にすると「土曜当直ばかりの人」と「平日当直ばかりの人」で不公平が生まれます。スコアで重み付けすることで、<span className="font-bold">体感的な公平さ</span>を実現します。</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <ScoreInput label="平日の当直" sublabel="月〜金の夜間" value={scoreWeekdayNight} onChange={setScoreWeekdayNight} />
+              <ScoreInput label="土曜の当直" sublabel="土曜の夜間（翌日が休日）" value={scoreSaturdayNight} onChange={setScoreSaturdayNight} />
+              <ScoreInput label="日祝の日直" sublabel="日曜・祝日の午前" value={scoreHolidayDay} onChange={setScoreHolidayDay} />
+              <ScoreInput label="日祝の当直" sublabel="日曜・祝日の夜間" value={scoreHolidayNight} onChange={setScoreHolidayNight} />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-2">
+              数値が大きいほど「負担が重い」シフトとして扱われ、割り当て人数が均等化されます。
+            </p>
           </div>
         </div>
       )}
@@ -937,5 +956,38 @@ function ToggleRow({ label, sublabel, checked, onChange }: {
         />
       </div>
     </label>
+  );
+}
+
+function ScoreInput({ label, sublabel, value, onChange }: {
+  label: string;
+  sublabel: string;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2">
+      <div className="min-w-0">
+        <span className="text-sm text-gray-700">{label}</span>
+        <p className="text-[10px] text-gray-400">{sublabel}</p>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(0, Math.round((value - 0.5) * 10) / 10))}
+          className="h-7 w-7 rounded border border-gray-200 bg-gray-50 text-sm font-bold text-gray-600 hover:bg-gray-100 transition"
+        >
+          −
+        </button>
+        <span className="w-10 text-center text-sm font-bold text-gray-800">{value.toFixed(1)}</span>
+        <button
+          type="button"
+          onClick={() => onChange(Math.round((value + 0.5) * 10) / 10)}
+          className="h-7 w-7 rounded border border-gray-200 bg-gray-50 text-sm font-bold text-gray-600 hover:bg-gray-100 transition"
+        >
+          +
+        </button>
+      </div>
+    </div>
   );
 }
