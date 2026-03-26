@@ -14,7 +14,7 @@ import type {
   TargetShift,
   UnavailableDateMap,
 } from "../../types/dashboard";
-import { getFixedWeekdayTargetShift, getUnavailableDateTargetShift } from "../../utils/unavailableSettings";
+import { getFixedWeekdayTargetShift, getFixedWeekdayTargetShiftForDate, getUnavailableDateTargetShift } from "../../utils/unavailableSettings";
 import {
   baseCalendarModifierClasses,
   dayPickerBaseClassName,
@@ -28,6 +28,9 @@ import {
   unavailableAllModifierClass,
   unavailableDayModifierClass,
   unavailableNightModifierClass,
+  fixedWeekdayAllModifierClass,
+  fixedWeekdayDayModifierClass,
+  fixedWeekdayNightModifierClass,
   getTargetShiftSummaryLabel,
 } from "./shared";
 
@@ -139,8 +142,11 @@ export default function UnavailableDaysInput({
       allUnavailable: (date: Date) => getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "all",
       dayUnavailable: (date: Date) => getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "day",
       nightUnavailable: (date: Date) => getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) === "night",
+      fixedWeekdayAll: (date: Date) => !getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(selectedFixedWeekdays, date) === "all",
+      fixedWeekdayDay: (date: Date) => !getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(selectedFixedWeekdays, date) === "day",
+      fixedWeekdayNight: (date: Date) => !getUnavailableDateTargetShift(selectedUnavailableInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(selectedFixedWeekdays, date) === "night",
     }),
-    [doctorUnavailableHolidaySet, doctorUnavailableMonthNumber, doctorUnavailableYear, selectedUnavailableInMonth]
+    [doctorUnavailableHolidaySet, doctorUnavailableMonthNumber, doctorUnavailableYear, selectedFixedWeekdays, selectedUnavailableInMonth]
   );
 
   const handleDoctorSelection = (doctorId: string) => {
@@ -165,6 +171,9 @@ export default function UnavailableDaysInput({
     ) {
       return;
     }
+
+    // 固定不可曜日に該当する日はスキップ
+    if (getFixedWeekdayTargetShiftForDate(selectedFixedWeekdays, date)) return;
 
     const dateKey = toDateKey(date);
     const isSundayOrHoliday = date.getDay() === 0 || doctorUnavailableHolidaySet.has(dateKey);
@@ -274,6 +283,9 @@ export default function UnavailableDaysInput({
               allUnavailable: unavailableAllModifierClass,
               dayUnavailable: unavailableDayModifierClass,
               nightUnavailable: unavailableNightModifierClass,
+              fixedWeekdayAll: fixedWeekdayAllModifierClass,
+              fixedWeekdayDay: fixedWeekdayDayModifierClass,
+              fixedWeekdayNight: fixedWeekdayNightModifierClass,
             }}
           />
           <TargetShiftPopover

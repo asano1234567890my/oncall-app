@@ -16,6 +16,7 @@ import type {
 } from "../../types/dashboard";
 import {
   filterUnavailableDateEntriesByMonth,
+  getFixedWeekdayTargetShiftForDate,
   getUnavailableDateTargetShift,
   isUnavailableDateInMonth,
   normalizeFixedUnavailableWeekdayEntries,
@@ -82,6 +83,15 @@ const unavailableDayModifierClass =
 
 const unavailableNightModifierClass =
   "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,transparent_0%,transparent_50%,#fecaca_50%,#fecaca_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[当]']";
+
+const fixedWeekdayAllModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-300 [&>button]:!bg-orange-100 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-700 [&>button]:after:content-['[固]']";
+
+const fixedWeekdayDayModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-200 [&>button]:!bg-orange-50 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-600 [&>button]:after:content-['[固日]']";
+
+const fixedWeekdayNightModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-200 [&>button]:!bg-orange-50 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-600 [&>button]:after:content-['[固当]']";
 
 // ── Data converters ──
 
@@ -183,8 +193,12 @@ export default function DoctorEntryForm({
       allUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "all",
       dayUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "day",
       nightUnavailable: (day: Date) => getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) === "night",
+      // 固定不可曜日（個別不可日がない日のみ）
+      fixedWeekdayAll: (day: Date) => !getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) && getFixedWeekdayTargetShiftForDate(fixedWeekdayEntries, day) === "all",
+      fixedWeekdayDay: (day: Date) => !getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) && getFixedWeekdayTargetShiftForDate(fixedWeekdayEntries, day) === "day",
+      fixedWeekdayNight: (day: Date) => !getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, ymd(day)) && getFixedWeekdayTargetShiftForDate(fixedWeekdayEntries, day) === "night",
     }),
-    [mergedHolidaySet, selectedEntriesInDisplayedMonth]
+    [fixedWeekdayEntries, mergedHolidaySet, selectedEntriesInDisplayedMonth]
   );
 
   const title = useMemo(() => {
@@ -254,6 +268,8 @@ export default function DoctorEntryForm({
     if (locked) return;
     const dateKey = ymd(day);
     if (!isUnavailableDateInMonth(dateKey, displayedYear, displayedMonthNumber)) return;
+    // 固定不可曜日に該当する日はスキップ
+    if (getFixedWeekdayTargetShiftForDate(fixedWeekdayEntries, day)) return;
     const currentValue = getUnavailableDateTargetShift(selectedEntriesInDisplayedMonth, dateKey);
     if (isHolidayLikeDate(day)) {
       setPopover({ dateKey });
@@ -405,6 +421,7 @@ export default function DoctorEntryForm({
                     <span className="rounded-full border border-slate-200 bg-white px-2 py-1 text-slate-700">[休] = 終日</span>
                     <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-amber-800">[日] = 日直のみ</span>
                     <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">[当] = 当直のみ</span>
+                    <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-orange-700">[固] = 固定不可曜日</span>
                   </div>
                   <DayPicker
                     month={month}
@@ -450,6 +467,9 @@ export default function DoctorEntryForm({
                       allUnavailable: unavailableAllModifierClass,
                       dayUnavailable: unavailableDayModifierClass,
                       nightUnavailable: unavailableNightModifierClass,
+                      fixedWeekdayAll: fixedWeekdayAllModifierClass,
+                      fixedWeekdayDay: fixedWeekdayDayModifierClass,
+                      fixedWeekdayNight: fixedWeekdayNightModifierClass,
                       today: "[&>button]:ring-1 [&>button]:ring-indigo-200 [&>button]:font-semibold [&>button]:text-indigo-700",
                       outside: "[&>button]:bg-transparent [&>button]:text-slate-300",
                       disabled: "[&>button]:!bg-transparent [&>button]:!text-slate-300 [&>button]:opacity-45 [&>button]:hover:bg-transparent [&>button]:hover:shadow-none",

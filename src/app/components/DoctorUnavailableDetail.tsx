@@ -22,8 +22,11 @@ import {
   unavailableAllModifierClass,
   unavailableDayModifierClass,
   unavailableNightModifierClass,
+  fixedWeekdayAllModifierClass,
+  fixedWeekdayDayModifierClass,
+  fixedWeekdayNightModifierClass,
 } from "./settings/shared";
-import { getUnavailableDateTargetShift } from "../utils/unavailableSettings";
+import { getFixedWeekdayTargetShiftForDate, getUnavailableDateTargetShift } from "../utils/unavailableSettings";
 import type {
   Doctor,
   UnavailableDateEntry,
@@ -211,6 +214,8 @@ export default function DoctorUnavailableDetail({
   const handleDayClick = (date: Date) => {
     if (!isEditing) return;
     if (date.getFullYear() !== displayedYear || date.getMonth() !== displayedMonthNumber - 1) return;
+    // 固定不可曜日に該当する日はスキップ
+    if (getFixedWeekdayTargetShiftForDate(fixedEntries, date)) return;
     const dateKey = toDateKey(date);
     const isSundayOrHoliday = date.getDay() === 0 || holidaySet.has(dateKey);
     if (!isSundayOrHoliday) {
@@ -313,6 +318,9 @@ export default function DoctorUnavailableDetail({
                   allUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "all",
                   dayUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "day",
                   nightUnavailable: (date: Date) => getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) === "night",
+                  fixedWeekdayAll: (date: Date) => !getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(fixedEntries, date) === "all",
+                  fixedWeekdayDay: (date: Date) => !getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(fixedEntries, date) === "day",
+                  fixedWeekdayNight: (date: Date) => !getUnavailableDateTargetShift(entriesInMonth, toDateKey(date)) && getFixedWeekdayTargetShiftForDate(fixedEntries, date) === "night",
                 }}
                 modifiersClassNames={{
                   ...baseCalendarModifierClasses,
@@ -320,6 +328,9 @@ export default function DoctorUnavailableDetail({
                   allUnavailable: unavailableAllModifierClass,
                   dayUnavailable: unavailableDayModifierClass,
                   nightUnavailable: unavailableNightModifierClass,
+                  fixedWeekdayAll: fixedWeekdayAllModifierClass,
+                  fixedWeekdayDay: fixedWeekdayDayModifierClass,
+                  fixedWeekdayNight: fixedWeekdayNightModifierClass,
                 }}
               />
               <TargetShiftPopover

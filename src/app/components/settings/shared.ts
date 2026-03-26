@@ -281,6 +281,16 @@ export const unavailableDayModifierClass =
 export const unavailableNightModifierClass =
   "[&>button]:relative [&>button]:border-red-300 [&>button]:text-transparent [&>button]:bg-[linear-gradient(135deg,transparent_0%,transparent_50%,#fecaca_50%,#fecaca_100%)] [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[11px] [&>button]:after:font-bold [&>button]:after:text-red-800 [&>button]:after:content-['[当]']";
 
+// 固定不可曜日: カレンダー上の表示（個別不可日がない日のみ適用）
+export const fixedWeekdayAllModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-300 [&>button]:!bg-orange-100 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-700 [&>button]:after:content-['[固]']";
+
+export const fixedWeekdayDayModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-200 [&>button]:!bg-orange-50 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-600 [&>button]:after:content-['[固日]']";
+
+export const fixedWeekdayNightModifierClass =
+  "[&>button]:relative [&>button]:!border-orange-200 [&>button]:!bg-orange-50 [&>button]:!text-transparent [&>button]:after:absolute [&>button]:after:inset-0 [&>button]:after:flex [&>button]:after:items-center [&>button]:after:justify-center [&>button]:after:text-[10px] [&>button]:after:font-bold [&>button]:after:text-orange-600 [&>button]:after:content-['[固当]']";
+
 export const getTargetShiftSummaryLabel = (targetShift: TargetShift | null) => {
   if (targetShift === "all") return "終日休み";
   if (targetShift === "day") return "日直のみ休み";

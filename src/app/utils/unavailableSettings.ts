@@ -96,6 +96,19 @@ export const setUnavailableDateTargetShift = (
   return normalizeUnavailableDateEntries([...filtered, { date, target_shift: targetShift }]);
 };
 
+/**
+ * 日付が固定不可曜日に該当するかを判定し、該当すればtarget_shiftを返す。
+ * day_of_week は Python曜日（0=月〜6=日）、Date.getDay() は JS曜日（0=日〜6=土）なので変換が必要。
+ */
+export const getFixedWeekdayTargetShiftForDate = (
+  entries: FixedUnavailableWeekdayEntry[],
+  date: Date
+): TargetShift | null => {
+  const jsDay = date.getDay(); // 0=日, 1=月, ..., 6=土
+  const pyDay = jsDay === 0 ? 6 : jsDay - 1; // 0=月, 1=火, ..., 6=日
+  return getFixedWeekdayTargetShift(entries, pyDay);
+};
+
 export const getFixedWeekdayTargetShift = (
   entries: FixedUnavailableWeekdayEntry[],
   dayOfWeek: number
