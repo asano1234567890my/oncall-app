@@ -22,6 +22,14 @@ class ObjectiveWeights(BaseModel):
     past_sat_gap: int = Field(10)
     past_sunhol_gap: int = Field(5)
 
+    @field_validator("*", mode="before")
+    @classmethod
+    def coerce_none_to_default(cls, v: Any, info: Any) -> Any:
+        """DB保存済み設定にフィールドがない場合、フロントがnullを送ることがある"""
+        if v is None:
+            return cls.model_fields[info.field_name].default
+        return v
+
 
 class LockedShift(BaseModel):
     date: Union[date, str]
