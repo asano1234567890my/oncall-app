@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, CalendarCheck } from "lucide-react";
+import { Calendar, CalendarCheck, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { DayPicker } from "react-day-picker";
@@ -456,12 +456,32 @@ export default function DoctorEntryForm({
                     <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-sky-800">[当] = 当直のみ</span>
                     <span className="rounded-full border border-orange-200 bg-orange-50 px-2 py-1 text-orange-700">[固] = 固定不可曜日</span>
                   </div>
+                  {/* 月ナビゲーション */}
+                  <div className="mb-3 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <span className="text-base font-bold text-slate-900">
+                      {month.getFullYear()}年{month.getMonth() + 1}月
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-100"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
                   <DayPicker
                     month={month}
                     onMonthChange={setMonth}
                     locale={ja}
                     onDayClick={handleDayClick}
-                    navLayout="after"
+                    hideNavigation
                     modifiers={calendarModifiers}
                     className={[
                       "w-full",
