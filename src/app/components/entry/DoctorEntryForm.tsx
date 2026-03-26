@@ -497,8 +497,8 @@ export default function DoctorEntryForm({
                       root: "w-full",
                       months: "block w-full max-w-none",
                       month: "w-full space-y-3 sm:space-y-4",
-                      month_caption: "flex min-w-0 items-center justify-center text-center",
-                      caption_label: "truncate px-3 text-base font-bold tracking-tight text-slate-900 sm:text-lg",
+                      month_caption: "hidden",
+                      caption_label: "hidden",
                       nav: "flex items-center justify-end gap-2",
                       button_previous:
                         "inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:pointer-events-none disabled:opacity-40 sm:h-11 sm:w-11",
