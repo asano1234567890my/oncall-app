@@ -153,7 +153,7 @@ export default function SharedEntryPage() {
           <DoctorEntryForm
             key={selectedDoctor.access_token}
             accessToken={selectedDoctor.access_token}
-            showConfirmedShifts={false}
+            showConfirmedShifts={true}
             externalDoctorMessage={doctorMessage}
             externalUnavailDayLimit={unavailDayLimit}
           />
