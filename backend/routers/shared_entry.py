@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import cast, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.db import get_db
@@ -62,42 +62,44 @@ async def get_doctors_by_shared_token(
     db: AsyncSession = Depends(get_db),
 ):
     """共有トークンから病院を特定し、医師リスト（名前・ロック状態・個別トークン）を返す"""
+    import traceback
     from models.system_setting import SystemSetting
 
-    # トークンから hospital_id を逆引き
-    result = await db.execute(
-        select(SystemSetting).where(
-            SystemSetting.key == SHARED_ENTRY_TOKEN_KEY,
-            SystemSetting.value == shared_token,
+    try:
+        # トークンから hospital_id を逆引き（valueはJSONB型なのでtextにキャストして比較）
+        result = await db.execute(
+            select(SystemSetting).where(
+                SystemSetting.key == SHARED_ENTRY_TOKEN_KEY,
+                cast(SystemSetting.value, String) == f'"{shared_token}"',
+            )
         )
-    )
-    setting = result.scalar_one_or_none()
-    if setting is None:
-        raise HTTPException(status_code=404, detail="無効なURLです")
+        setting = result.scalar_one_or_none()
+        if setting is None:
+            raise HTTPException(status_code=404, detail="無効なURLです")
 
-    hospital_id = setting.hospital_id
+        hospital_id = setting.hospital_id
 
-    # 医師リスト取得
-    result = await db.execute(
-        select(Doctor)
-        .where(Doctor.hospital_id == hospital_id, Doctor.is_active == True)
-        .order_by(Doctor.name)
-    )
-    doctors = result.scalars().all()
+        # 医師リスト取得
+        result = await db.execute(
+            select(Doctor)
+            .where(Doctor.hospital_id == hospital_id, Doctor.is_active == True)
+            .order_by(Doctor.name)
+        )
+        doctors = result.scalars().all()
 
-    # 管理者メッセージ・不可日上限も返す
-    doctor_message = await get_system_setting(db, hospital_id, "doctor_message")
-    unavail_day_limit_raw = await get_system_setting(db, hospital_id, "unavail_day_limit")
-    unavail_day_limit = None
-    if unavail_day_limit_raw is not None:
-        try:
-            unavail_day_limit = int(unavail_day_limit_raw)
-        except (TypeError, ValueError):
-            pass
+        # 管理者メッセージ・不可日上限も返す
+        doctor_message = await get_system_setting(db, hospital_id, "doctor_message")
+        unavail_day_limit_raw = await get_system_setting(db, hospital_id, "unavail_day_limit")
+        unavail_day_limit = None
+        if unavail_day_limit_raw is not None:
+            try:
+                unavail_day_limit = int(unavail_day_limit_raw)
+            except (TypeError, ValueError):
+                pass
 
-    return {
-        "doctors": [
-            {
+        return {
+            "doctors": [
+                {
                 "id": str(d.id),
                 "name": d.name,
                 "is_locked": d.is_locked,
@@ -108,3 +110,9 @@ async def get_doctors_by_shared_token(
         "doctor_message": doctor_message if isinstance(doctor_message, str) else None,
         "unavail_day_limit": unavail_day_limit,
     }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR shared-entry: {repr(e)}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
