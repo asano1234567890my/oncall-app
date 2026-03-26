@@ -241,6 +241,8 @@ export function useScheduleApi({
     prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
     respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
     holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
+    external_slot_count: hardConstraints.external_slot_count ?? 0,
+    external_fixed_dates: (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift })),
   });
 
   const formatPreviousMonthShiftsForOptimize = () => {

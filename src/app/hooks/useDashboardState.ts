@@ -215,8 +215,12 @@ export default function useDashboardState() {
     });
   };
 
-  const handleHardConstraintChange = (key: keyof HardConstraints, value: number | boolean | string) => {
+  const handleHardConstraintChange = (key: keyof HardConstraints, value: number | boolean | string | unknown[]) => {
     setHardConstraints((prev) => {
+      // 配列型（external_fixed_dates等）
+      if (Array.isArray(value)) {
+        return { ...prev, [key]: value };
+      }
       const currentValue = prev[key];
       if (typeof currentValue === "boolean") {
         return { ...prev, [key]: Boolean(value) };

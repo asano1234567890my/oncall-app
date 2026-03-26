@@ -71,6 +71,8 @@ class HardConstraints(BaseModel):
     strict_weekend_hol_max: bool = Field(default=False)
     max_weekend_holiday_works: Optional[int] = Field(default=None, alias="weekend_hol_max_count")
     holiday_shift_mode: str = Field(default="split")  # "split" or "combined"
+    external_slot_count: int = Field(default=0)  # 外部医師の枠数（0=全枠を常勤で埋める）
+    external_fixed_dates: List[Dict[str, str]] = Field(default_factory=list)  # 外部医師が入る確定日（{date, target_shift}）
 
 
 class OptimizeRequest(BaseModel):

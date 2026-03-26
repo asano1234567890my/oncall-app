@@ -70,6 +70,8 @@ class OnCallOptimizer:
         respect_unavailable_days: Optional[Any] = None,
         locked_shifts: Optional[List[Dict[str, Any]]] = None,
         shift_scores: Optional[Dict[str, float]] = None,
+        external_slot_count: int = 0,
+        external_fixed_dates: Optional[List[str]] = None,
     ):
         self.num_doctors = num_doctors
         self.year = year
@@ -109,6 +111,25 @@ class OnCallOptimizer:
 
         # locked_shifts are normalized to doctor_idx at the router boundary.
         self.locked_shifts = locked_shifts or []
+
+        # 外部枠（外部医師スロット）
+        self.external_slot_count = external_slot_count
+        # {day: target_shift} のマッピング（"all"/"day"/"night"）
+        self.external_fixed_dates: dict[int, str] = {}
+        for item in (external_fixed_dates or []):
+            try:
+                from datetime import date as _date
+                if isinstance(item, dict):
+                    d_str = item.get("date", "")
+                    target = item.get("target_shift", "all")
+                else:
+                    d_str = str(item)
+                    target = "all"
+                parsed = _date.fromisoformat(str(d_str))
+                if parsed.year == year and parsed.month == month:
+                    self.external_fixed_dates[parsed.day] = target
+            except (ValueError, TypeError):
+                pass
 
         # Apply configurable shift scores (override class defaults)
         ss = shift_scores or {}
@@ -901,13 +922,52 @@ class OnCallOptimizer:
                 self.model.Add(self.work[(d, day)] == self.night_shifts[(d, day)] + self.day_shifts[(d, day)])
 
         # 2) slot fulfillment
+        allow_external = self.external_slot_count > 0 or len(self.external_fixed_dates) > 0
         for day in days:
-            self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
-            if self.is_sunday_or_holiday(day) and not combined_mode:
-                self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
+            ext_target = self.external_fixed_dates.get(day)
+            if ext_target:
+                # 外部医師確定日: target_shiftに応じて制約
+                if ext_target == "all":
+                    for d in doctors:
+                        self.model.Add(self.night_shifts[(d, day)] == 0)
+                        self.model.Add(self.day_shifts[(d, day)] == 0)
+                elif ext_target == "day":
+                    # 日直のみ外部 → 日直=0、当直は通常通り1人配置
+                    for d in doctors:
+                        self.model.Add(self.day_shifts[(d, day)] == 0)
+                    self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
+                elif ext_target == "night":
+                    # 当直のみ外部 → 当直=0、日直は通常通り1人配置（日祝のみ）
+                    for d in doctors:
+                        self.model.Add(self.night_shifts[(d, day)] == 0)
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
+                    else:
+                        for d in doctors:
+                            self.model.Add(self.day_shifts[(d, day)] == 0)
+            elif allow_external:
+                # 外部枠あり: 0人 or 1人（空き枠を許容）
+                self.model.AddAtMostOne(self.night_shifts[(d, day)] for d in doctors)
+                if self.is_sunday_or_holiday(day) and not combined_mode:
+                    self.model.AddAtMostOne(self.day_shifts[(d, day)] for d in doctors)
+                else:
+                    for d in doctors:
+                        self.model.Add(self.day_shifts[(d, day)] == 0)
             else:
-                for d in doctors:
-                    self.model.Add(self.day_shifts[(d, day)] == 0)
+                # デフォルト: 必ず1人配置
+                self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
+                if self.is_sunday_or_holiday(day) and not combined_mode:
+                    self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
+                else:
+                    for d in doctors:
+                        self.model.Add(self.day_shifts[(d, day)] == 0)
+
+        # 2b) 外部枠数の制約: 空き枠数の上限を設定
+        if self.external_slot_count > 0 and not self.external_fixed_dates:
+            # 全スロットのうち「誰も配置されていない枠」の数 <= external_slot_count
+            total_night_assigned = sum(self.night_shifts[(d, day)] for d in doctors for day in days)
+            night_slot_count = len(days) - len(self.external_fixed_dates)
+            self.model.Add(total_night_assigned >= night_slot_count - self.external_slot_count)
 
         # 3) hard: prevent same-day day/night double assignment
         if prevent_sunhol_consecutive:
@@ -1526,13 +1586,40 @@ class OnCallOptimizer:
                 model.Add(work[(d, day)] == night_shifts[(d, day)] + day_shifts[(d, day)])
 
         # --- Slot fulfillment (NOT wrapped — always enforced) ---
+        allow_external_diag = self.external_slot_count > 0 or len(self.external_fixed_dates) > 0
         for day in days:
-            model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
-            if self.is_sunday_or_holiday(day) and not combined_mode:
-                model.AddExactlyOne(day_shifts[(d, day)] for d in doctors)
+            ext_target = self.external_fixed_dates.get(day)
+            if ext_target:
+                if ext_target == "all":
+                    for d in doctors:
+                        model.Add(night_shifts[(d, day)] == 0)
+                        model.Add(day_shifts[(d, day)] == 0)
+                elif ext_target == "day":
+                    for d in doctors:
+                        model.Add(day_shifts[(d, day)] == 0)
+                    model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
+                elif ext_target == "night":
+                    for d in doctors:
+                        model.Add(night_shifts[(d, day)] == 0)
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        model.AddExactlyOne(day_shifts[(d, day)] for d in doctors)
+                    else:
+                        for d in doctors:
+                            model.Add(day_shifts[(d, day)] == 0)
+            elif allow_external_diag:
+                model.AddAtMostOne(night_shifts[(d, day)] for d in doctors)
+                if self.is_sunday_or_holiday(day) and not combined_mode:
+                    model.AddAtMostOne(day_shifts[(d, day)] for d in doctors)
+                else:
+                    for d in doctors:
+                        model.Add(day_shifts[(d, day)] == 0)
             else:
-                for d in doctors:
-                    model.Add(day_shifts[(d, day)] == 0)
+                model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
+                if self.is_sunday_or_holiday(day) and not combined_mode:
+                    model.AddExactlyOne(day_shifts[(d, day)] for d in doctors)
+                else:
+                    for d in doctors:
+                        model.Add(day_shifts[(d, day)] == 0)
 
         # --- Prevent same-day double (NOT wrapped — structural) ---
         if prevent_sunhol_consecutive:

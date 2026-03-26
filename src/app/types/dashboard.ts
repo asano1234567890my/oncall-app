@@ -71,6 +71,13 @@ export type HardConstraints = {
   prevent_sunhol_consecutive: boolean;
   respect_unavailable_days: boolean;
   holiday_shift_mode: "combined" | "split";
+  external_slot_count: number;
+  external_fixed_dates: ExternalFixedDate[];
+};
+
+export type ExternalFixedDate = {
+  date: string;
+  target_shift: "all" | "day" | "night";
 };
 
 export type SwapSource = {
@@ -167,6 +174,8 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   prevent_sunhol_consecutive: true,
   respect_unavailable_days: true,
   holiday_shift_mode: "split",
+  external_slot_count: 0,
+  external_fixed_dates: [],
 };
 
 export type ShiftScores = {

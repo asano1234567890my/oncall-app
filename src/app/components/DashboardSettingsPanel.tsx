@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Save } from "lucide-react";
+import { ChevronDown, Save, X } from "lucide-react";
+import { format } from "date-fns";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import "react-day-picker/dist/style.css";
@@ -26,8 +27,98 @@ import type {
   ShiftScores,
   TargetShift,
   UnavailableDateMap,
+  ExternalFixedDate,
 } from "../types/dashboard";
+import TargetShiftPopover from "./TargetShiftPopover";
 import type { WeightChangeSummary } from "./settings/shared";
+
+// ── External fixed dates editor ──
+function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDate[]; onChange: (dates: ExternalFixedDate[]) => void }) {
+  const [calMonth, setCalMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  });
+  const [isOpen, setIsOpen] = useState(false);
+  const [popover, setPopover] = useState<{ dateStr: string } | null>(null);
+
+  const getEntry = (dateStr: string) => dates.find((e) => e.date === dateStr);
+  const isSundayOrHoliday = (day: Date) => day.getDay() === 0;
+  const shiftLabel = (ts: string) => ts === "all" ? "[外]" : ts === "day" ? "[外日]" : "[外当]";
+
+  const handleDayClick = (day: Date) => {
+    const dateStr = format(day, "yyyy-MM-dd");
+    if (isSundayOrHoliday(day)) {
+      setPopover({ dateStr });
+      return;
+    }
+    const existing = getEntry(dateStr);
+    const next = existing
+      ? dates.filter((e) => e.date !== dateStr)
+      : [...dates, { date: dateStr, target_shift: "all" as const }];
+    onChange(next.sort((a, b) => a.date.localeCompare(b.date)));
+  };
+
+  return (
+    <div className="pl-3 border-l-2 border-blue-200">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="text-[10px] text-blue-600 font-bold hover:underline"
+      >
+        {isOpen ? "▼ 確定日カレンダーを閉じる" : "▶ 外部医師が入る日を指定"}
+      </button>
+      {dates.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {dates.map((e) => (
+            <span key={e.date} className="inline-flex items-center gap-0.5 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">
+              {e.date.slice(5)}{shiftLabel(e.target_shift)}
+              <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {isOpen && (
+        <div className="mt-2">
+          <div className="text-[9px] text-gray-500 mb-1">日曜・祝日は日直/当直を選択できます</div>
+          <DayPicker
+            month={calMonth}
+            onMonthChange={setCalMonth}
+            locale={ja}
+            navLayout="after"
+            onDayClick={handleDayClick}
+            modifiers={{
+              externalFixed: (day: Date) => !!getEntry(format(day, "yyyy-MM-dd")),
+              saturday: (day: Date) => day.getDay() === 6,
+              sunday: (day: Date) => day.getDay() === 0,
+            }}
+            className={dayPickerBaseClassName}
+            classNames={dayPickerClassNames}
+            modifiersClassNames={{
+              externalFixed: "[&>button]:!bg-orange-200 [&>button]:!text-orange-900 [&>button]:!border-orange-400 [&>button]:font-bold",
+              saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
+              sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
+              today: "[&>button]:ring-1 [&>button]:ring-indigo-200",
+            }}
+          />
+          <TargetShiftPopover
+            open={Boolean(popover)}
+            title={popover ? `${popover.dateStr.slice(5)} の外部医師設定` : "外部医師設定"}
+            currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
+            onSelect={(value) => {
+              if (!popover) return;
+              const filtered = dates.filter((e) => e.date !== popover.dateStr);
+              const next = value ? [...filtered, { date: popover.dateStr, target_shift: value }] : filtered;
+              onChange(next.sort((a, b) => a.date.localeCompare(b.date)));
+            }}
+            onClose={() => setPopover(null)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Accordion section ──
 function Section({
@@ -77,7 +168,7 @@ type DashboardSettingsPanelProps = {
   onScoreMaxChange: (value: number) => void;
   // Hard constraints
   hardConstraints: HardConstraints;
-  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
+  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string | unknown[]) => void;
   // Optimizer save
   isSavingOptimizerConfig: boolean;
   optimizerSaveMessage: string;
@@ -261,6 +352,66 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
               </button>
             </div>
           </div>
+
+          {/* 外部医師の枠 */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-gray-700">外部医師の枠</span>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onHardConstraintChange("external_slot_count", 0);
+                }}
+                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${
+                  (hardConstraints.external_slot_count ?? 0) === 0 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                なし
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if ((hardConstraints.external_slot_count ?? 0) === 0) {
+                    onHardConstraintChange("external_slot_count", 4);
+                  }
+                }}
+                className={`rounded-full px-2.5 py-1 text-xs font-bold transition ${
+                  (hardConstraints.external_slot_count ?? 0) > 0 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                あり
+              </button>
+            </div>
+          </div>
+          {(hardConstraints.external_slot_count ?? 0) > 0 && (() => {
+            const hasFixed = (hardConstraints.external_fixed_dates?.length ?? 0) > 0;
+            const fixedCount = hardConstraints.external_fixed_dates?.length ?? 0;
+            return (
+            <>
+              <div className={`flex items-center justify-between gap-2 pl-3 border-l-2 border-blue-200 ${hasFixed ? "opacity-50" : ""}`}>
+                <span className="text-xs text-gray-600">枠数{hasFixed ? "（カレンダー連動）" : "（月あたり）"}</span>
+                <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
+                  <StepperNumberInput
+                    value={hasFixed ? fixedCount : (hardConstraints.external_slot_count ?? 0)}
+                    onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                    fallbackValue={0}
+                    min={0} max={20} step={1}
+                    inputMode="numeric"
+                    inputClassName="text-xs font-bold w-12 text-center"
+                  />
+                  <span className="text-[10px] text-gray-400 w-4">回</span>
+                </div>
+              </div>
+              <ExternalFixedDatesEditor
+                dates={hardConstraints.external_fixed_dates ?? []}
+                onChange={(next) => {
+                  onHardConstraintChange("external_fixed_dates", next);
+                  if (next.length > 0) onHardConstraintChange("external_slot_count", next.length);
+                }}
+              />
+            </>
+            );
+          })()}
 
           {/* シフトスコア */}
           <button

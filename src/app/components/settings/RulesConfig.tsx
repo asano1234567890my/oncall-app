@@ -1,10 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { X } from "lucide-react";
+import { DayPicker } from "react-day-picker";
+import { ja } from "react-day-picker/locale";
+import { format } from "date-fns";
+import "react-day-picker/dist/style.css";
 import StepperNumberInput from "../inputs/StepperNumberInput";
-import type { HardConstraints } from "../../types/dashboard";
+import TargetShiftPopover from "../TargetShiftPopover";
+import type { HardConstraints, ExternalFixedDate } from "../../types/dashboard";
 import SettingsModalPortal from "./SettingsModalPortal";
-import { hardConstraintNumberInputs, hardConstraintToggleInputs } from "./shared";
+import { hardConstraintNumberInputs, hardConstraintToggleInputs, dayPickerBaseClassName, dayPickerWithNavClassNames } from "./shared";
 
 type RulesConfigProps = {
   isOpen: boolean;
@@ -15,7 +21,7 @@ type RulesConfigProps = {
   onReset: () => void;
   onSave?: () => void;
   onShowGuide?: () => void;
-  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string) => void;
+  onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string | unknown[]) => void;
 };
 
 export default function RulesConfig({
@@ -29,6 +35,45 @@ export default function RulesConfig({
   onShowGuide,
   onHardConstraintChange,
 }: RulesConfigProps) {
+  const [calMonth, setCalMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  });
+  const [extPopover, setExtPopover] = useState<{ dateStr: string } | null>(null);
+
+  const externalDates: ExternalFixedDate[] = hardConstraints.external_fixed_dates ?? [];
+  const getExtEntry = (dateStr: string) => externalDates.find((e) => e.date === dateStr);
+
+  const isSundayOrHoliday = (day: Date) => day.getDay() === 0;
+
+  const handleExternalDayClick = (day: Date) => {
+    const dateStr = format(day, "yyyy-MM-dd");
+    if (isSundayOrHoliday(day)) {
+      setExtPopover({ dateStr });
+      return;
+    }
+    // 平日・土曜: トグル
+    const existing = getExtEntry(dateStr);
+    const next = existing
+      ? externalDates.filter((e) => e.date !== dateStr)
+      : [...externalDates, { date: dateStr, target_shift: "all" as const }];
+    onHardConstraintChange("external_fixed_dates", next.sort((a, b) => a.date.localeCompare(b.date)));
+  };
+
+  const handleExtPopoverSelect = (value: "all" | "day" | "night" | null) => {
+    if (!extPopover) return;
+    const dateStr = extPopover.dateStr;
+    const filtered = externalDates.filter((e) => e.date !== dateStr);
+    const next = value ? [...filtered, { date: dateStr, target_shift: value }] : filtered;
+    onHardConstraintChange("external_fixed_dates", next.sort((a, b) => a.date.localeCompare(b.date)));
+  };
+
+  const removeExtDate = (dateStr: string) => {
+    onHardConstraintChange("external_fixed_dates", externalDates.filter((e) => e.date !== dateStr));
+  };
+
+  const getExtShiftLabel = (ts: string) => ts === "all" ? "[外]" : ts === "day" ? "[外日]" : "[外当]";
+
   return (
     <SettingsModalPortal isOpen={isOpen}>
       <div className="fixed inset-0 z-[120] flex items-start justify-center bg-slate-950/45 px-3 py-3 backdrop-blur-sm sm:items-center sm:py-6">
@@ -155,6 +200,109 @@ export default function RulesConfig({
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* 外部医師の枠 */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="text-sm font-bold text-gray-800">外部医師の枠</div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                非常勤医師が入る枠がある場合、その分の枠を空けてスケジュールを生成します。
+                常勤医師だけで全枠を埋める場合は「なし」のままでOKです。
+              </div>
+              <div className="mt-3 flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onHardConstraintChange("external_slot_count", 0);
+                    onHardConstraintChange("external_fixed_dates", [] as unknown as string);
+                  }}
+                  className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
+                    (hardConstraints.external_slot_count ?? 0) === 0 && (hardConstraints.external_fixed_dates?.length ?? 0) === 0
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-gray-200 bg-gray-50 text-gray-500"
+                  }`}
+                >
+                  なし
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if ((hardConstraints.external_slot_count ?? 0) === 0) {
+                      onHardConstraintChange("external_slot_count", 4);
+                    }
+                  }}
+                  className={`inline-flex h-10 items-center justify-center rounded-full border px-4 text-xs font-bold transition ${
+                    (hardConstraints.external_slot_count ?? 0) > 0 || (hardConstraints.external_fixed_dates?.length ?? 0) > 0
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-gray-200 bg-gray-50 text-gray-500"
+                  }`}
+                >
+                  あり
+                </button>
+              </div>
+              {((hardConstraints.external_slot_count ?? 0) > 0 || (hardConstraints.external_fixed_dates?.length ?? 0) > 0) && (
+                <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <label className="block">
+                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部医師の枠数（月あたり）</div>
+                    <div className="mb-1 text-[10px] text-gray-500">この回数分の枠を空けて、残りを常勤医師で生成します</div>
+                    <StepperNumberInput
+                      value={hardConstraints.external_slot_count ?? 0}
+                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                      fallbackValue={0}
+                      min={0}
+                      max={20}
+                      step={1}
+                      inputMode="numeric"
+                      inputClassName="text-sm font-bold"
+                    />
+                  </label>
+
+                  {/* 確定日カレンダー */}
+                  <div>
+                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部医師が入る日（任意）</div>
+                    <div className="mb-2 text-[10px] text-gray-500">日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。</div>
+                    <DayPicker
+                      month={calMonth}
+                      onMonthChange={setCalMonth}
+                      locale={ja}
+                      navLayout="after"
+                      onDayClick={handleExternalDayClick}
+                      modifiers={{
+                        externalFixed: (day: Date) => !!getExtEntry(format(day, "yyyy-MM-dd")),
+                        saturday: (day: Date) => day.getDay() === 6,
+                        sunday: (day: Date) => day.getDay() === 0,
+                      }}
+                      className={dayPickerBaseClassName}
+                      classNames={dayPickerWithNavClassNames}
+                      modifiersClassNames={{
+                        externalFixed: "[&>button]:!bg-orange-200 [&>button]:!text-orange-900 [&>button]:!border-orange-400 [&>button]:font-bold",
+                        saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
+                        sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
+                        today: "[&>button]:ring-1 [&>button]:ring-indigo-200",
+                      }}
+                    />
+                    <TargetShiftPopover
+                      open={Boolean(extPopover)}
+                      title={extPopover ? `${extPopover.dateStr.slice(5)} の外部医師設定` : "外部医師設定"}
+                      currentValue={extPopover ? (getExtEntry(extPopover.dateStr)?.target_shift ?? null) : null}
+                      onSelect={handleExtPopoverSelect}
+                      onClose={() => setExtPopover(null)}
+                    />
+                    {externalDates.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {externalDates.map((e) => (
+                          <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
+                            {e.date.slice(5)}{getExtShiftLabel(e.target_shift)}
+                            <button type="button" onClick={() => removeExtDate(e.date)} className="text-orange-400 hover:text-orange-700">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

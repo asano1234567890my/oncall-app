@@ -185,6 +185,11 @@ async def generate_schedule(
             else req.objective_weights.dict()
         )
 
+        # 外部枠パラメータをhard_constraintsから取り出す
+        hc = req.hard_constraints if isinstance(req.hard_constraints, dict) else {}
+        external_slot_count = int(hc.get("external_slot_count", 0) or 0)
+        external_fixed_dates = list(hc.get("external_fixed_dates", []) or [])
+
         optimizer = OnCallOptimizer(
             num_doctors=req.num_doctors,
             year=req.year,
@@ -208,6 +213,8 @@ async def generate_schedule(
             hard_constraints=req.hard_constraints,
             locked_shifts=locked_shifts_idx,
             shift_scores=shift_scores,
+            external_slot_count=external_slot_count,
+            external_fixed_dates=external_fixed_dates,
         )
 
         # Pre-validation: fast arithmetic checks before solving
@@ -389,6 +396,11 @@ async def diagnose_constraints(
             else req.objective_weights.dict()
         )
 
+        # 外部枠パラメータ
+        hc_diag = req.hard_constraints if isinstance(req.hard_constraints, dict) else {}
+        external_slot_count_diag = int(hc_diag.get("external_slot_count", 0) or 0)
+        external_fixed_dates_diag = list(hc_diag.get("external_fixed_dates", []) or [])
+
         optimizer = OnCallOptimizer(
             num_doctors=req.num_doctors,
             year=req.year, month=req.month,
@@ -410,6 +422,8 @@ async def diagnose_constraints(
             hard_constraints=req.hard_constraints,
             locked_shifts=locked_shifts_idx,
             shift_scores=shift_scores,
+            external_slot_count=external_slot_count_diag,
+            external_fixed_dates=external_fixed_dates_diag,
         )
 
         # Run Phase 1 + 2 diagnosis
