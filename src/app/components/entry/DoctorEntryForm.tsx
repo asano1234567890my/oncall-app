@@ -142,6 +142,7 @@ export default function DoctorEntryForm({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string>("");
   const [popover, setPopover] = useState<{ dateKey: string } | null>(null);
+  const [fixedWeekdayPopover, setFixedWeekdayPopover] = useState<{ weekday: number } | null>(null);
   const [confirmedShifts, setConfirmedShifts] = useState<{ date: string; shift_type: string }[]>([]);
 
   const locked = Boolean(doctor?.is_locked);
@@ -373,18 +374,30 @@ export default function DoctorEntryForm({
               <div className="text-sm font-bold text-gray-700">固定不可曜日</div>
               <div className="mt-1 text-xs text-gray-500">
                 毎週決まった曜日に当直できない場合はここで設定してください。
+                日曜・祝日は日直/当直を分けて設定できます。
               </div>
               <div className={`mt-2 flex gap-1 ${locked ? "opacity-60 pointer-events-none" : ""}`}>
-                {([0, 1, 2, 3, 4, 5, 6] as const).map((pyWd) => {
-                  const labels = ["月", "火", "水", "木", "金", "土", "日"];
+                {([0, 1, 2, 3, 4, 5, 6, 7] as const).map((pyWd) => {
+                  const labels = ["月", "火", "水", "木", "金", "土", "日", "祝"];
                   const entry = fixedWeekdayEntries.find((e) => e.day_of_week === pyWd);
                   const isActive = !!entry;
+                  const targetShift = entry?.target_shift ?? null;
+                  const isHolidayLike = pyWd === 6 || pyWd === 7;
+                  // ボタンラベル: アクティブなら[休]/[日]/[当]を付ける
+                  const shiftLabel = targetShift === "all" ? "[休]" : targetShift === "day" ? "[日]" : targetShift === "night" ? "[当]" : "";
                   return (
                     <button
                       key={pyWd}
                       type="button"
                       disabled={locked}
                       onClick={() => {
+                        if (locked) return;
+                        // 日祝はポップオーバーで日直/当直を選択
+                        if (isHolidayLike) {
+                          setFixedWeekdayPopover({ weekday: pyWd });
+                          return;
+                        }
+                        // 平日・土曜はトグル
                         setFixedWeekdayEntries((prev) => {
                           if (isActive) return prev.filter((e) => e.day_of_week !== pyWd);
                           return [...prev, { day_of_week: pyWd, target_shift: "all" as const }];
@@ -392,20 +405,39 @@ export default function DoctorEntryForm({
                       }}
                       className={`flex-1 rounded-lg border py-2 text-center text-xs font-bold transition ${
                         isActive
-                          ? pyWd === 6
+                          ? pyWd === 6 || pyWd === 7
                             ? "border-red-300 bg-red-100 text-red-700"
                             : pyWd === 5
                               ? "border-blue-300 bg-blue-100 text-blue-700"
                               : "border-red-300 bg-red-100 text-red-700"
-                          : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
+                          : pyWd === 6 || pyWd === 7
+                            ? "border-red-200 bg-red-50 text-red-400 hover:bg-red-100"
+                            : pyWd === 5
+                              ? "border-blue-200 bg-blue-50 text-blue-500 hover:bg-blue-100"
+                              : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
                       }`}
                     >
-                      {labels[pyWd]}
+                      {labels[pyWd]}{shiftLabel}
                     </button>
                   );
                 })}
               </div>
-              <div className="mt-1 text-[10px] text-gray-400">タップで不可 ↔ 解除</div>
+              <TargetShiftPopover
+                open={Boolean(fixedWeekdayPopover)}
+                title={fixedWeekdayPopover ? `${["月","火","水","木","金","土","日","祝"][fixedWeekdayPopover.weekday]}曜日の不可設定` : "不可設定"}
+                currentValue={fixedWeekdayPopover ? (fixedWeekdayEntries.find((e) => e.day_of_week === fixedWeekdayPopover.weekday)?.target_shift ?? null) : null}
+                onSelect={(value) => {
+                  if (!fixedWeekdayPopover || locked) return;
+                  const wd = fixedWeekdayPopover.weekday;
+                  setFixedWeekdayEntries((prev) => {
+                    const filtered = prev.filter((e) => e.day_of_week !== wd);
+                    if (!value) return filtered;
+                    return [...filtered, { day_of_week: wd, target_shift: value }];
+                  });
+                }}
+                onClose={() => setFixedWeekdayPopover(null)}
+              />
+              <div className="mt-1 text-[10px] text-gray-400">タップで不可 ↔ 解除（日曜・祝日は日直/当直を選択）</div>
             </section>
 
             <section className="mt-5">
