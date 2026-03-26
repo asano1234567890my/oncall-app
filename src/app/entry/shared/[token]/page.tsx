@@ -106,6 +106,13 @@ export default function SharedEntryPage() {
             </div>
           )}
 
+          {/* 管理者からのメッセージ */}
+          {doctorMessage && !isLoading && (
+            <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs leading-relaxed text-blue-800 whitespace-pre-wrap">
+              {doctorMessage}
+            </div>
+          )}
+
           {/* 医師選択ドロップダウン */}
           {isLoading ? (
             <div className="mt-4 text-sm text-gray-500">読み込み中...</div>

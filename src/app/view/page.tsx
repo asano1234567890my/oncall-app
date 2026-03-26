@@ -440,6 +440,7 @@ export default function ViewSchedulePage() {
           {/* 公開コメント */}
           {isPublished && (
             <div className="mt-2">
+              <div className="mb-1 text-[10px] text-gray-500">ここに入力した内容は、各医師の当直表ページに表示されます</div>
               <textarea
                 value={publishComment}
                 onChange={(e) => setPublishComment(e.target.value)}
