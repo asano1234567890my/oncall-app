@@ -367,7 +367,13 @@ export function useScheduleApi({
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.detail || "自動生成に失敗しました");
+        const detail = data.detail;
+        const msg = typeof detail === "string"
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join("; ")
+            : "自動生成に失敗しました";
+        throw new Error(msg);
       }
 
       // Handle success=false (diagnostics / solver failure)
