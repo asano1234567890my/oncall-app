@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ObjectiveWeights(BaseModel):
@@ -22,13 +22,16 @@ class ObjectiveWeights(BaseModel):
     past_sat_gap: int = Field(10)
     past_sunhol_gap: int = Field(5)
 
-    @field_validator("*", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def coerce_none_to_default(cls, v: Any, info: Any) -> Any:
-        """DB保存済み設定にフィールドがない場合、フロントがnullを送ることがある"""
-        if v is None:
-            return cls.model_fields[info.field_name].default
-        return v
+    def coerce_none_to_defaults(cls, values: Any) -> Any:
+        """DB保存済み設定にフィールドがnullの場合、デフォルト値にフォールバック"""
+        if not isinstance(values, dict):
+            return values
+        for field_name, field_info in cls.model_fields.items():
+            if values.get(field_name) is None and field_info.default is not None:
+                values[field_name] = field_info.default
+        return values
 
 
 class LockedShift(BaseModel):
@@ -60,9 +63,9 @@ class HardConstraints(BaseModel):
 
     interval_days: Optional[int] = None
     max_shifts: Optional[int] = None
-    max_saturday_nights: int = Field(default=1)
-    max_sunhol_days: int = Field(default=2)
-    max_sunhol_works: int = Field(default=3)
+    max_saturday_nights: Optional[int] = Field(default=1)
+    max_sunhol_days: Optional[int] = Field(default=None)
+    max_sunhol_works: Optional[int] = Field(default=None)
     prevent_sunhol_consecutive: bool = Field(default=True)
     respect_unavailable_days: bool = Field(default=True)
     strict_weekend_hol_max: bool = Field(default=False)
