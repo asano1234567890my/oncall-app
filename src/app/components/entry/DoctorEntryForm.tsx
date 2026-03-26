@@ -585,10 +585,10 @@ export default function DoctorEntryForm({
                               href={gcalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700 hover:bg-green-100 transition"
+                              className="inline-flex items-center justify-center rounded-md border border-green-200 bg-green-50 p-1 text-green-700 hover:bg-green-100 transition"
                               title="Googleカレンダーに追加"
                             >
-                              +Cal
+                              <Calendar className="h-3.5 w-3.5" />
                             </a>
                           </div>
                         </div>
