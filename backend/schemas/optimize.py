@@ -126,6 +126,10 @@ class OptimizeRequest(BaseModel):
         if isinstance(value, dict) and not value:
             return {}
 
+        # フロントがnullを送る場合があるので除外してからバリデーション
+        if isinstance(value, dict):
+            value = {k: v for k, v in value.items() if v is not None}
+
         constraints = HardConstraints.model_validate(value)
         return constraints.model_dump(exclude_unset=True)
 
