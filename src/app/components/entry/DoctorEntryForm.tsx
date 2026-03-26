@@ -557,6 +557,12 @@ export default function DoctorEntryForm({
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       const isHol = mergedHolidaySet.has(s.date);
                       const label = s.shift_type === "day" ? "日直" : "当直";
+                      // Googleカレンダー action=TEMPLATE URL（終日イベント）
+                      const dateCompact = s.date.replace(/-/g, "");
+                      const nextDay = new Date(d);
+                      nextDay.setDate(nextDay.getDate() + 1);
+                      const nextDayCompact = `${nextDay.getFullYear()}${String(nextDay.getMonth()+1).padStart(2,"0")}${String(nextDay.getDate()).padStart(2,"0")}`;
+                      const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(label)}&dates=${dateCompact}/${nextDayCompact}&ctz=Asia/Tokyo`;
                       return (
                         <div key={`${s.date}-${s.shift_type}`}
                           className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
@@ -569,22 +575,31 @@ export default function DoctorEntryForm({
                           <span className={`font-medium ${isHol || d.getDay() === 0 ? "text-red-700" : isWeekend ? "text-blue-700" : "text-gray-800"}`}>
                             {d.getMonth() + 1}/{d.getDate()}({weekday})
                           </span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                            s.shift_type === "day"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-indigo-100 text-indigo-800"
-                          }`}>{label}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                              s.shift_type === "day"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-indigo-100 text-indigo-800"
+                            }`}>{label}</span>
+                            <a
+                              href={gcalUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-md border border-green-200 bg-green-50 px-1.5 py-0.5 text-[10px] font-bold text-green-700 hover:bg-green-100 transition"
+                              title="Googleカレンダーに追加"
+                            >
+                              +Cal
+                            </a>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                   <a
-                    href={`https://www.google.com/calendar/r?cid=${encodeURIComponent(`${getApiBase()}/api/schedule/ical/${accessToken}?year=${displayedYear}&month=${displayedMonthNumber}`)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={`${getApiBase()}/api/schedule/ical/${accessToken}?year=${displayedYear}&month=${displayedMonthNumber}`}
                     className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800 transition hover:bg-green-100"
                   >
-                    <Calendar className="h-4 w-4" />{displayedMonthNumber}月のシフトをGoogleカレンダーに登録
+                    <Calendar className="h-4 w-4" />{displayedMonthNumber}月の全シフトをまとめてカレンダーに登録
                   </a>
                   <Link
                     href={`/view/${accessToken}`}
