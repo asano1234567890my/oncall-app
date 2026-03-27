@@ -202,15 +202,9 @@ export default function RulesConfig({
               </div>
             </div>
 
-            {/* 外部枠（常勤以外） */}
+            {/* 当直枠の範囲 */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-sm font-bold text-gray-800">外部枠（常勤以外）</div>
-              <div className="mt-1 text-[11px] text-gray-500">
-                非常勤が入る日や担当外の日がある場合に使います。常勤だけで全枠を埋める場合は「なし」のままでOKです。
-              </div>
-              <div className="mt-1 text-[10px] text-gray-400 leading-relaxed">
-                💡 外部枠数と勤務日数は表裏の関係です。例えば4月（30日）なら「外部枠8回」と「勤務日数22日」は同じ結果になります。お好みの方でどうぞ。
-              </div>
+              <div className="text-sm font-bold text-gray-800">当直枠の範囲</div>
               <div className="mt-3 flex shrink-0 gap-1">
                 <button
                   type="button"
@@ -224,7 +218,7 @@ export default function RulesConfig({
                       : "border-gray-200 bg-gray-50 text-gray-500"
                   }`}
                 >
-                  なし
+                  全日程を担当
                 </button>
                 <button
                   type="button"
@@ -239,11 +233,14 @@ export default function RulesConfig({
                       : "border-gray-200 bg-gray-50 text-gray-500"
                   }`}
                 >
-                  あり
+                  一部の日程のみ
                 </button>
               </div>
               {((hardConstraints.external_slot_count ?? 0) > 0 || (hardConstraints.external_fixed_dates?.length ?? 0) > 0) && (
                 <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] text-gray-400 leading-relaxed">
+                    💡 外部枠数と勤務日数は表裏の関係です。例えば{targetDaysInMonth}日の月なら「外部枠8回」=「勤務{targetDaysInMonth - 8}日」。使いやすい方でどうぞ。
+                  </div>
                   {/* 指定方法の切り替え */}
                   <div className="flex gap-1.5 mb-2">
                     <button type="button" onClick={() => setExtInputMode("external")}

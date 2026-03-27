@@ -371,9 +371,9 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             </div>
           </div>
 
-          {/* 外部枠（常勤以外） */}
+          {/* 当直枠の範囲 */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-700">外部枠（常勤以外）</span>
+            <span className="text-xs text-gray-700">当直枠の範囲</span>
             <div className="flex gap-1">
               <button
                 type="button"
@@ -385,7 +385,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                   (hardConstraints.external_slot_count ?? 0) === 0 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
                 }`}
               >
-                なし
+                全日程
               </button>
               <button
                 type="button"
@@ -398,7 +398,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                   (hardConstraints.external_slot_count ?? 0) > 0 ? "bg-blue-100 text-blue-700" : "bg-gray-100 text-gray-500"
                 }`}
               >
-                あり
+                一部
               </button>
             </div>
           </div>

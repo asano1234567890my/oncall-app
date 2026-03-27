@@ -914,11 +914,9 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
           </div>
         </div>
 
-        {/* 外部枠 */}
+        {/* 当直枠の範囲 */}
         <div>
-          <div className="text-xs font-bold text-gray-700 mb-2">外部枠（常勤以外）</div>
-          <div className="text-[10px] text-gray-500 mb-1">非常勤が入る日や担当外の日がある場合に使います</div>
-          <div className="text-[9px] text-gray-400 mb-2">💡 外部枠数と勤務日数は表裏の関係です（例: {daysInMonth}日の月なら「外部枠8」=「勤務{daysInMonth - 8}日」）</div>
+          <div className="text-xs font-bold text-gray-700 mb-2">当直枠の範囲</div>
           <div className="flex gap-2 mb-2">
             {([0, 4] as const).map((val) => (
               <button
@@ -937,7 +935,7 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
                       : "border-gray-200 text-gray-500 hover:border-blue-200"
                 }`}
               >
-                {val === 0 ? "なし" : "あり"}
+                {val === 0 ? "全日程" : "一部の日程"}
               </button>
             ))}
           </div>
@@ -945,6 +943,9 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
             const extCount = hc.external_slot_count ?? 0;
             return (
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
+              <div className="text-[9px] text-gray-400 leading-relaxed">
+                💡 外部枠数と勤務日数は表裏の関係です（例: {daysInMonth}日の月なら「外部枠8」=「勤務{daysInMonth - 8}日」）
+              </div>
               <div className="space-y-1.5">
                 <div className="flex gap-1.5 mb-1">
                   <button type="button" onClick={() => onHardConstraintChange("external_input_mode", "external")}
