@@ -155,7 +155,33 @@ export function useOnCallCore() {
     buildLockedShiftsPayload, lockedShiftKeys, markScheduleClean,
   });
 
-  const { getUnsavedDoctorNames, handleGenerate, handleSaveToDB } = apiState;
+  const { getUnsavedDoctorNames, handleGenerate, handleSaveToDB, refetchDoctors } = apiState;
+
+  // ── 外部医師の自動確保 ──
+  // external_slot_count > 0 なのに外部医師がDB上に不足している場合、自動作成して再取得
+  useEffect(() => {
+    const needed = hardConstraints.external_slot_count ?? 0;
+    if (needed <= 0) return;
+    const existing = externalDoctors.length;
+    if (existing >= needed) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    let cancelled = false;
+    (async () => {
+      try {
+        const toCreate = needed - existing;
+        for (let i = 0; i < toCreate; i++) {
+          if (cancelled) return;
+          await fetch(`${apiUrl}/api/doctors/external`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+          });
+        }
+        if (!cancelled) await refetchDoctors();
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hardConstraints.external_slot_count, externalDoctors.length]);
 
   // ── ナビゲーションガード ──
   useNavigationGuard({
