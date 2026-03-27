@@ -15,6 +15,7 @@ import {
   baseCalendarModifierClasses,
   dayPickerBaseClassName,
   dayPickerClassNames,
+  dayPickerWithNavClassNames,
   hardConstraintNumberInputs,
 } from "./settings/shared";
 import type {
@@ -94,7 +95,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
               sunday: (day: Date) => day.getDay() === 0,
             }}
             className={dayPickerBaseClassName}
-            classNames={dayPickerClassNames}
+            classNames={dayPickerWithNavClassNames}
             modifiersClassNames={{
               externalFixed: "[&>button]:!bg-orange-200 [&>button]:!text-orange-900 [&>button]:!border-orange-400 [&>button]:font-bold",
               saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
