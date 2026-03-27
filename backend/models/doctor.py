@@ -37,6 +37,9 @@ class Doctor(Base):
     # ★追加：休み希望入力ロック（締め切り）
     is_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # 外部医師（ダミー医師）フラグ
+    is_external: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # スコア
     min_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     max_score: Mapped[float | None] = mapped_column(Float, nullable=True)

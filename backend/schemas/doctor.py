@@ -110,5 +110,6 @@ class DoctorRead(DoctorBase):
     id: UUID
     access_token: str
     is_locked: bool
+    is_external: bool = False
     unavailable_days: List[UnavailableDayRead] = Field(default_factory=list)
     model_config = ConfigDict(from_attributes=True)
