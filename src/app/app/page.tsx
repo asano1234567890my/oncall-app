@@ -1005,6 +1005,23 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
       {isOpen && (
         <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3">
           <div className="text-[10px] text-gray-500 mb-2">日付が決まっていればタップ。日曜は日直/当直を選べます。</div>
+          <div className="mb-2 flex gap-1.5">
+            <button type="button" onClick={() => {
+              const y = calMonth.getFullYear(); const m = calMonth.getMonth();
+              const daysInMonth = new Date(y, m + 1, 0).getDate();
+              const all = Array.from({ length: daysInMonth }, (_, i) => {
+                const d = new Date(y, m, i + 1);
+                return { date: format(d, "yyyy-MM-dd"), target_shift: "all" as const };
+              });
+              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+              onChange([...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+            }} className="rounded border border-teal-300 bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
+            <button type="button" onClick={() => {
+              const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+              onChange(other);
+            }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
+          </div>
           <DayPicker
             month={calMonth}
             onMonthChange={setCalMonth}

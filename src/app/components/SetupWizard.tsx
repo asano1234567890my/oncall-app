@@ -10,11 +10,13 @@ type WizardProps = {
   isRedo?: boolean;
 };
 
-type StepNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+type StepNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
 
 type WizardState = {
   step: StepNumber;
   holidayShiftMode: "combined" | "split" | "";
+  scheduleType: "full" | "partial" | "";
+  externalSlotCount: number;
   doctorCount: number;
   doctorNames: string[];
   minShifts: number;
@@ -23,9 +25,9 @@ type WizardState = {
   maxSaturdayNights: number;
 };
 
-const TOTAL_VISIBLE_STEPS = 7; // progress bar steps (excluding confirm)
+const TOTAL_VISIBLE_STEPS = 8; // progress bar steps (excluding confirm)
 
-// Step order: 人数→名前→形式→回数→間隔→土曜→不可日→確認
+// Step order: 人数→名前→形式→タイプ→回数→間隔→土曜→不可日→確認
 
 const doctorLabel = (index: number, total: number) =>
   `医師${total >= 10 ? String(index + 1).padStart(2, "0") : String(index + 1)}`;
@@ -34,6 +36,8 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
   const [state, setState] = useState<WizardState>({
     step: 1,
     holidayShiftMode: "",
+    scheduleType: "",
+    externalSlotCount: 4,
     doctorCount: 8,
     doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
     minShifts: 1,
@@ -159,6 +163,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           interval_days: state.intervalDays,
           max_saturday_nights: state.maxSaturdayNights,
           holiday_shift_mode: state.holidayShiftMode || "combined",
+          external_slot_count: state.scheduleType === "partial" ? state.externalSlotCount : 0,
         },
       };
       await fetch(`${apiUrl}/api/settings/optimizer_config`, {
@@ -326,8 +331,58 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
         </StepContainer>
       )}
 
-      {/* Step 4: 回数 */}
+      {/* Step 4: 当直表のタイプ */}
       {state.step === 4 && (
+        <StepContainer
+          title="作成する当直表について"
+          subtitle="入力した医師で全日程を埋めますか？"
+        >
+          <div className="space-y-3">
+            <ChoiceButton
+              label="全日程を担当"
+              description="入力した医師で毎日の当直を割り当てます"
+              selected={state.scheduleType === "full"}
+              onClick={() => setState((s) => ({ ...s, scheduleType: "full", externalSlotCount: 0 }))}
+            />
+            <ChoiceButton
+              label="一部の日程のみ担当"
+              description="非常勤が入る日がある、または特定の日だけ担当する場合"
+              selected={state.scheduleType === "partial"}
+              onClick={() => setState((s) => ({ ...s, scheduleType: "partial", externalSlotCount: s.externalSlotCount || 4 }))}
+            />
+          </div>
+          {state.scheduleType === "partial" && (
+            <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4">
+              <div className="text-sm font-bold text-teal-800 mb-2">月あたりの外部枠</div>
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => setState((s) => ({ ...s, externalSlotCount: Math.max(1, s.externalSlotCount - 1) }))}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-300 text-lg font-bold text-teal-600 hover:bg-teal-100"
+                >−</button>
+                <span className="text-3xl font-bold text-teal-800 w-12 text-center">{state.externalSlotCount}</span>
+                <button
+                  onClick={() => setState((s) => ({ ...s, externalSlotCount: Math.min(28, s.externalSlotCount + 1) }))}
+                  className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-300 text-lg font-bold text-teal-600 hover:bg-teal-100"
+                >+</button>
+              </div>
+              <p className="text-[11px] text-teal-600 text-center mt-2">詳細な日程は設定画面のカレンダーで指定できます</p>
+            </div>
+          )}
+          <button
+            onClick={() => setStep(5)}
+            className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            disabled={!state.scheduleType}
+          >
+            次へ
+          </button>
+          <button onClick={() => setStep(3)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-1">
+            戻る
+          </button>
+        </StepContainer>
+      )}
+
+      {/* Step 5: 回数 (旧Step4) */}
+      {state.step === 5 && (
         <StepContainer
           title="1ヶ月に1人あたり何回くらい当直しますか？"
           subtitle="最低回数と最大回数を設定してください"
@@ -370,12 +425,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               </div>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(3)} onNext={() => setStep(5)} />
+          <NavButtons onBack={() => setStep(4)} onNext={() => setStep(6)} />
         </StepContainer>
       )}
 
-      {/* Step 5: 間隔 */}
-      {state.step === 5 && (
+      {/* Step 6: 間隔 (旧Step5) */}
+      {state.step === 6 && (
         <StepContainer
           title="当直明けは何日空けたいですか？"
           subtitle="連続を避けるために最低限空ける日数です"
@@ -399,12 +454,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               <span>7日</span>
             </div>
           </div>
-          <NavButtons onBack={() => setStep(4)} onNext={() => setStep(6)} />
+          <NavButtons onBack={() => setStep(5)} onNext={() => setStep(7)} />
         </StepContainer>
       )}
 
-      {/* Step 6: 土曜上限 */}
-      {state.step === 6 && (
+      {/* Step 7: 土曜上限 (旧Step6) */}
+      {state.step === 7 && (
         <StepContainer
           title="土曜の夜間当直は月何回まで？"
           subtitle="土曜の当直を制限できます"
@@ -423,12 +478,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               />
             ))}
           </div>
-          <NavButtons onBack={() => setStep(5)} onNext={() => setStep(7)} />
+          <NavButtons onBack={() => setStep(6)} onNext={() => setStep(8)} />
         </StepContainer>
       )}
 
-      {/* Step 7: 不可日設定 */}
-      {state.step === 7 && (
+      {/* Step 8: 不可日設定 (旧Step7) */}
+      {state.step === 8 && (
         <StepContainer
           title="休み希望はありますか？"
           subtitle="医師ごとに当直に入れない日を設定できます"
@@ -447,12 +502,12 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               onClick={() => setWantUnavailable(true)}
             />
           </div>
-          <NavButtons onBack={() => setStep(6)} onNext={() => setStep(8)} />
+          <NavButtons onBack={() => setStep(7)} onNext={() => setStep(9)} />
         </StepContainer>
       )}
 
-      {/* Step 8: 確認 */}
-      {state.step === 8 && (
+      {/* Step 9: 確認 (旧Step8) */}
+      {state.step === 9 && (
         <StepContainer
           title="設定完了！"
           subtitle="この設定はあとからいつでも変更できます"
@@ -460,6 +515,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           <div className="my-6 rounded-xl bg-blue-50 p-4 text-sm text-gray-700 space-y-1 text-left">
             <p>医師：{state.doctorNames.join("、")}</p>
             <p>当直形式：{state.holidayShiftMode === "combined" ? "日直・当直 同一" : "日直・当直 別"}</p>
+            <p>担当範囲：{state.scheduleType === "full" ? "全日程" : `一部（外部枠 ${state.externalSlotCount}回/月）`}</p>
             <p>月あたり：{state.minShifts}〜{state.maxShifts}回</p>
             <p>当直間隔：{state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}</p>
             <p>土曜上限：{state.maxSaturdayNights >= 99 ? "制限なし" : `${state.maxSaturdayNights}回`}</p>
@@ -488,7 +544,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               "この設定で始める"
             )}
           </button>
-          <button onClick={() => setStep(7)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-2">
+          <button onClick={() => setStep(8)} className="w-full text-sm text-gray-500 hover:text-gray-700 py-2 mt-2">
             戻る
           </button>
         </StepContainer>
