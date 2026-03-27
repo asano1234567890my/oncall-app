@@ -590,6 +590,12 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
             <span className="text-gray-400 shrink-0">土曜</span>
             <span className="font-medium shrink-0">{hc.max_saturday_nights}回/月</span>
           </div>
+          {(hc.external_slot_count ?? 0) > 0 && (
+            <div className="flex justify-between min-w-0 col-span-2 pt-1 border-t border-gray-100 mt-1">
+              <span className="text-teal-600 shrink-0">外部枠</span>
+              <span className="font-medium text-teal-700 shrink-0">{hc.external_slot_count}回 / 勤務{core.daysInMonth - (hc.external_slot_count ?? 0)}日</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1113,23 +1119,6 @@ function MobileExternalCalendarToggle({ dates, onChange, inputMode = "external" 
             }}
             onClose={() => setPopover(null)}
           />
-          {(() => {
-            const calY = calMonth.getFullYear();
-            const calM = calMonth.getMonth() + 1;
-            const filtered = dates.filter((e) => Number(e.date.slice(0, 4)) === calY && Number(e.date.slice(5, 7)) === calM);
-            return filtered.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {filtered.map((e) => (
-                  <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                    {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
-                    <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            );
-          })()}
         </div>
       )}
     </div>

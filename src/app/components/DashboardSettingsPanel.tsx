@@ -68,23 +68,6 @@ function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: Exter
       >
         {isOpen ? "▼ カレンダーを閉じる" : inputMode === "internal" ? "▶ 勤務する日を指定" : "▶ 外部枠にする日を指定"}
       </button>
-      {(() => {
-        const calY = calMonth.getFullYear();
-        const calM = calMonth.getMonth() + 1;
-        const filtered = dates.filter((e) => Number(e.date.slice(0, 4)) === calY && Number(e.date.slice(5, 7)) === calM);
-        return filtered.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {filtered.map((e) => (
-              <span key={e.date} className="inline-flex items-center gap-0.5 rounded-full border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[9px] font-bold text-orange-700">
-                {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
-                <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </span>
-            ))}
-          </div>
-        );
-      })()}
       {isOpen && (
         <div className="mt-2">
           <div className="text-[9px] text-gray-500 mb-1">
