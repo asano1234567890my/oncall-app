@@ -119,15 +119,21 @@ export default function DoctorPalette({
           {/* 外部医師エントリ — 枠数>0 または外部医師がDB上に存在する場合に表示 */}
           {((externalSlotCount ?? 0) > 0 || (externalDoctors && externalDoctors.length > 0)) && (() => {
             const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
-            // D&D用に外部医師IDを取得（まだ生成前ならnull）
-            const firstExternalId = externalDoctors?.[0]?.id ?? null;
-            // スケジュール内の外部医師割当数を自動集計
-            const assignedCount = schedule?.reduce((count, row) => {
-              let n = count;
-              if (row.day_shift && externalDoctorIds?.has(row.day_shift)) n++;
-              if (row.night_shift && externalDoctorIds?.has(row.night_shift)) n++;
-              return n;
-            }, 0) ?? 0;
+            // スケジュール内で使用中の外部医師IDを集計
+            const usedExternalIds = new Set<string>();
+            schedule?.forEach((row) => {
+              if (row.day_shift && externalDoctorIds?.has(row.day_shift)) usedExternalIds.add(row.day_shift);
+              if (row.night_shift && externalDoctorIds?.has(row.night_shift)) usedExternalIds.add(row.night_shift);
+            });
+            // シフト割当回数（日当直の日直側はnight_shiftと同一IDなので重複カウントしない）
+            let assignedCount = 0;
+            schedule?.forEach((row) => {
+              if (row.night_shift && externalDoctorIds?.has(row.night_shift)) assignedCount++;
+              else if (row.day_shift && externalDoctorIds?.has(row.day_shift)) assignedCount++;
+            });
+            // D&D用に未使用の外部医師IDを取得（全員使用済みなら最初のIDをフォールバック）
+            const availableExternalId = externalDoctors?.find((d) => !usedExternalIds.has(d.id))?.id
+              ?? externalDoctors?.[0]?.id ?? null;
             return (
               <div
                 className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition ${
@@ -139,11 +145,15 @@ export default function DoctorPalette({
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
-                    draggable={Boolean(firstExternalId)}
-                    onDragStart={(event) => firstExternalId && onDoctorListDragStart(event, firstExternalId)}
+                    draggable={Boolean(availableExternalId)}
+                    onDragStart={(event) => availableExternalId && onDoctorListDragStart(event, availableExternalId)}
                     onDragEnd={onClearDragState}
-                    onClick={() => firstExternalId && onToggleHighlightedDoctor(firstExternalId)}
-                    className={`flex items-center gap-1.5 ${firstExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+                    onClick={() => {
+                      // ハイライト: 使用中の外部医師のいずれか（なければ最初のID）
+                      const hlId = usedExternalIds.size > 0 ? [...usedExternalIds][0] : externalDoctors?.[0]?.id;
+                      if (hlId) onToggleHighlightedDoctor(hlId);
+                    }}
+                    className={`flex items-center gap-1.5 ${availableExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
                     title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
                   >
                     <Users className="h-4 w-4 text-orange-600" />
