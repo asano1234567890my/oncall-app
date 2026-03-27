@@ -117,20 +117,72 @@ pytest
 
 ---
 
-## DBマイグレーション
+## DBマイグレーション（Alembic）
+
+### ディレクトリ構成
+
+```
+oncall-app/               ← alembic コマンドはここで実行
+├── alembic.ini           ← Alembic設定（sqlalchemy.urlはenv.pyで上書き）
+├── migrations/
+│   ├── env.py            ← DB接続設定（backend/.envからDATABASE_URLを読む）
+│   ├── script.py.mako    ← マイグレーションテンプレート
+│   └── versions/         ← マイグレーションファイル（線形チェーン）
+└── backend/
+    ├── .env              ← DATABASE_URL（Neon接続文字列）
+    ├── models/           ← SQLAlchemyモデル（env.pyでimportされる）
+    └── .venv/            ← Python仮想環境（alembic実行に使用）
+```
+
+> **重要**: `alembic.ini` はプロジェクトルート（`oncall-app/`）にあるが、`models/` や `.env` は `backend/` 配下。`migrations/env.py` が `sys.path` に `backend/` を追加して橋渡ししている。
+
+### ローカル実行コマンド
 
 ```powershell
 cd oncall-app
 
-# 現在のバージョン確認
-alembic current
+# 仮想環境のalembicを使う（PATHに入っていない場合）
+backend\.venv\Scripts\python -m alembic current      # 現在のバージョン確認
+backend\.venv\Scripts\python -m alembic upgrade head  # マイグレーション適用
+backend\.venv\Scripts\python -m alembic downgrade -1  # 1つ戻す
+backend\.venv\Scripts\python -m alembic history       # 全履歴表示
 
-# 新しいマイグレーション作成
-alembic revision --autogenerate -m "説明"
-
-# マイグレーション適用
-alembic upgrade head
+# マイグレーション作成（modelsを変更した後）
+backend\.venv\Scripts\python -m alembic revision --autogenerate -m "説明"
 ```
+
+### 本番DB（Neon）へのマイグレーション
+
+ローカルの `backend/.env` の `DATABASE_URL` は**本番Neon DBを直接指している**（開発・本番でDB共有）。そのため `alembic upgrade head` を実行すると**本番DBに直接適用される**。
+
+```powershell
+# 本番適用前の確認手順
+backend\.venv\Scripts\python -m alembic current    # 現在のリビジョン確認
+backend\.venv\Scripts\python -m alembic heads       # 最新リビジョン確認
+backend\.venv\Scripts\python -m alembic upgrade head # 適用
+```
+
+> **Renderデプロイとの関係**: Renderはマイグレーションを自動実行**しない**。コードをデプロイする前に、ローカルから `alembic upgrade head` で本番DBを更新すること。コードが新カラムを参照しているのにマイグレーション未実行だとAttributeErrorが発生する。
+
+### マイグレーション作成時のルール
+
+1. **NOT NULL + 既存データ対応**: 既存レコードがあるテーブルに `nullable=False` カラムを追加する場合、`server_default` を付けてから削除する:
+   ```python
+   op.add_column('doctors', sa.Column('new_col', sa.Boolean(), nullable=False, server_default=sa.false()))
+   op.alter_column('doctors', 'new_col', server_default=None)
+   ```
+2. **autogenerate後は必ず中身を確認**。不要な差分（`server_default` の検出差異等）が含まれることがある
+3. **本番適用前にローカルで `alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head` をテスト**
+
+### トラブルシューティング
+
+| 症状 | 原因 | 対処 |
+|------|------|------|
+| `Target database is not up to date` | headとcurrentが不一致 | `alembic upgrade head` |
+| `Can't locate revision` | リビジョンチェーンが切れている | `alembic history` で確認、`alembic stamp head` で強制同期（最終手段） |
+| `NotNullViolationError` | 既存データに対してNOT NULLカラム追加 | `server_default` を付ける |
+| `Multiple head revisions` | ブランチ分岐 | `alembic merge -m "merge"` で統合 |
+| `ModuleNotFoundError: models` | sys.pathが通っていない | `oncall-app/` ディレクトリから実行すること |
 
 ---
 
