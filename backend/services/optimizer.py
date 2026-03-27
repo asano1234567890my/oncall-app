@@ -635,6 +635,15 @@ class OnCallOptimizer:
             else:
                 total_score_in_month += self.W_WEEKDAY_NIGHT
 
+        # Check 3a: 勤務枠数 < 常勤人数 → スコア下限違反が確定
+        if num_internal > 0 and self.score_min_float > 0 and effective_slots < num_internal:
+            errors.append({
+                "id": "score_min_insufficient_slots",
+                "name_ja": "スコア下限を満たせない医師が発生します",
+                "current_value": f"常勤{num_internal}名に対し勤務枠{effective_slots}枠（外部枠{num_external}回）",
+                "suggestion_ja": f"→ スコア下限を0にするか、外部枠を{num_internal - effective_slots}回以上減らしてください",
+            })
+
         # 外部医師のスコア分を差し引く（各外部医師は平均1回勤務）
         avg_score_per_shift = total_score_in_month / max(self.num_days, 1)
         internal_total_score = total_score_in_month - int(num_external * avg_score_per_shift)
