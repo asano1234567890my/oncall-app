@@ -37,7 +37,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     step: 1,
     holidayShiftMode: "",
     scheduleType: "",
-    externalSlotCount: 4,
+    externalSlotCount: 26,
     doctorCount: 8,
     doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
     minShifts: 1,
@@ -348,7 +348,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               label="一部の日程のみ担当"
               description="非常勤が入る日がある、または特定の日だけ担当する場合"
               selected={state.scheduleType === "partial"}
-              onClick={() => setState((s) => ({ ...s, scheduleType: "partial", externalSlotCount: s.externalSlotCount || 4 }))}
+              onClick={() => setState((s) => ({ ...s, scheduleType: "partial", externalSlotCount: s.externalSlotCount || 26 }))}
             />
           </div>
           {state.scheduleType === "partial" && (() => {
