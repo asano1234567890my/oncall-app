@@ -1,8 +1,8 @@
 "use client";
 
-import { Trash2, Settings2 } from "lucide-react";
+import { Trash2, Settings2, Plus, Minus, Users } from "lucide-react";
 import type { DragEvent } from "react";
-import type { DoctorScoreEntry, ShiftType } from "../types/dashboard";
+import type { Doctor, DoctorScoreEntry, ShiftType } from "../types/dashboard";
 
 type DoctorPaletteProps = {
   scoreEntries: DoctorScoreEntry[];
@@ -17,6 +17,11 @@ type DoctorPaletteProps = {
   onTrashDragOver: (event: DragEvent<HTMLDivElement>) => void;
   onTrashDrop: (event: DragEvent<HTMLDivElement>) => void;
   onOpenDoctorManage?: () => void;
+  externalDoctors?: Doctor[];
+  externalDoctorIds?: Set<string>;
+  externalScoreTotal?: number;
+  externalSlotCount?: number;
+  onExternalSlotCountChange?: (delta: number) => void;
 };
 
 const formatScore = (score: number | null) => (score === null ? "-" : score.toFixed(1));
@@ -34,6 +39,11 @@ export default function DoctorPalette({
   onTrashDragOver,
   onTrashDrop,
   onOpenDoctorManage,
+  externalDoctors,
+  externalDoctorIds,
+  externalScoreTotal,
+  externalSlotCount,
+  onExternalSlotCountChange,
 }: DoctorPaletteProps) {
   const getBarPercent = (score: number) => {
     if (scoreMax <= scoreMin) return 50;
@@ -105,6 +115,64 @@ export default function DoctorPalette({
               </button>
             );
           })}
+
+          {/* 外部医師エントリ */}
+          {externalDoctors && externalDoctors.length > 0 && (() => {
+            const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
+            // D&D用に未割当の外部医師IDを取得
+            const firstExternalId = externalDoctors[0]?.id ?? null;
+            return (
+              <div
+                className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition ${
+                  isAnyExternalHighlighted
+                    ? "border-orange-500 bg-orange-100 ring-2 ring-orange-400 shadow-md"
+                    : "border-orange-200 bg-orange-50 hover:border-orange-300"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => onDoctorListDragStart(event, firstExternalId)}
+                    onDragEnd={onClearDragState}
+                    onClick={() => onToggleHighlightedDoctor(firstExternalId)}
+                    className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing"
+                    title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
+                  >
+                    <Users className="h-4 w-4 text-orange-600" />
+                    <span className="text-sm font-bold text-orange-800">外部医師</span>
+                  </button>
+                  <span className="text-sm font-bold tabular-nums text-orange-700">
+                    {(externalScoreTotal ?? 0).toFixed(1)}
+                  </span>
+                </div>
+                {onExternalSlotCountChange && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-orange-600">枠数</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => onExternalSlotCountChange(-1)}
+                        disabled={(externalSlotCount ?? 0) <= 0}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-orange-300 bg-white text-orange-600 hover:bg-orange-50 disabled:opacity-30 transition"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </button>
+                      <span className="w-6 text-center text-sm font-bold text-orange-800">{externalSlotCount ?? 0}</span>
+                      <button
+                        type="button"
+                        onClick={() => onExternalSlotCountChange(1)}
+                        disabled={(externalSlotCount ?? 0) >= 31}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-orange-300 bg-white text-orange-600 hover:bg-orange-50 disabled:opacity-30 transition"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

@@ -16,6 +16,7 @@ type UseRealtimeScoresParams = {
   minScoreMap: Record<string, number>;
   maxScoreMap: Record<string, number>;
   targetScoreMap: Record<string, number | null>;
+  externalDoctorIds?: Set<string>;
 };
 
 const formatDayKey = (year: number, month: number, day: number) =>
@@ -36,6 +37,7 @@ export function useRealtimeScores({
   minScoreMap,
   maxScoreMap,
   targetScoreMap,
+  externalDoctorIds,
 }: UseRealtimeScoresParams) {
   const liveScores = useMemo(() => {
     const ss = shiftScores ?? DEFAULT_SHIFT_SCORES;
@@ -102,8 +104,18 @@ export function useRealtimeScores({
     });
   }, [activeDoctors, liveScores, minScoreMap, maxScoreMap, targetScoreMap, scoreMin, scoreMax]);
 
+  const externalScoreTotal = useMemo(() => {
+    if (!externalDoctorIds || externalDoctorIds.size === 0) return 0;
+    let total = 0;
+    for (const [id, score] of Object.entries(liveScores)) {
+      if (externalDoctorIds.has(id)) total += score;
+    }
+    return Number(total.toFixed(1));
+  }, [liveScores, externalDoctorIds]);
+
   return {
     liveScores,
     scoreEntries,
+    externalScoreTotal,
   };
 }

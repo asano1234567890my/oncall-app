@@ -114,10 +114,11 @@ export function useOnCallCore() {
   };
 
   // ── リアルタイムスコア ──
-  const { scoreEntries } = useRealtimeScores({
+  const { scoreEntries, externalScoreTotal } = useRealtimeScores({
     activeDoctors, schedule, year, month,
     holidaySet, manualHolidaySetInMonth, holidayWorkdayOverrides,
     scoreMin, scoreMax, shiftScores, minScoreMap, maxScoreMap, targetScoreMap,
+    externalDoctorIds,
   });
 
   // ── ドラッグ&ドロップ ──
@@ -516,7 +517,7 @@ export function useOnCallCore() {
     auth, isAuthLoading, logout,
 
     // スケジュール
-    schedule, scheduleColumns, scoreEntries,
+    schedule, scheduleColumns, scoreEntries, externalScoreTotal,
     undo, redo, canUndo, canRedo, changedShiftKeys,
 
     // ダッシュボード状態
