@@ -208,6 +208,57 @@ export function useScheduleDnd({
       return { nextSchedule: null, errorMessage: null };
     }
 
+    const isCombinedMode = hardConstraints.holiday_shift_mode === "combined";
+    const fromHoliday = isHolidayLikeDay(fromDay).isHolidayLike;
+    const toHoliday = isHolidayLikeDay(toDay).isHolidayLike;
+
+    // 日当直モードの祝日 → 通常モードではペア移動（強制モードでは個別）
+    const pairSwap = isCombinedMode && !isOverrideMode && (fromHoliday || toHoliday);
+
+    if (pairSwap) {
+      // ペア移動: night_shiftを基準にswap、day_shiftはnight_shiftに再同期
+      if (isShiftLocked(fromDay, "night") || isShiftLocked(toDay, "night")) {
+        return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
+      }
+      if (fromHoliday && (isShiftLocked(fromDay, "day"))) {
+        return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
+      }
+      if (toHoliday && (isShiftLocked(toDay, "day"))) {
+        return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
+      }
+
+      const next = cloneSchedule(schedule);
+      const fromRow = next.find((row) => row.day === fromDay);
+      const toRow = next.find((row) => row.day === toDay);
+      if (!fromRow || !toRow) {
+        return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+      }
+
+      const fromDoctorId = fromRow.night_shift ?? null;
+      const toDoctorId = toRow.night_shift ?? null;
+      if (!fromDoctorId) {
+        return { nextSchedule: null, errorMessage: "入れ替え元に医師が入っていません" };
+      }
+
+      // night_shift側で制約チェック
+      const moveTargetConflict = getSwapConstraintMessage(fromDoctorId, fromDay, "night", toDay, "night", {
+        scheduleRows: next,
+      });
+      if (moveTargetConflict) {
+        return { nextSchedule: null, errorMessage: moveTargetConflict };
+      }
+
+      // night_shiftを交換
+      fromRow.night_shift = toDoctorId;
+      toRow.night_shift = fromDoctorId;
+      // day_shiftをnight_shiftに再同期（祝日のみ）
+      if (fromHoliday) fromRow.day_shift = fromRow.night_shift;
+      if (toHoliday) toRow.day_shift = toRow.night_shift;
+
+      return { nextSchedule: next, errorMessage: null };
+    }
+
+    // --- 通常swap（個別セル単位） ---
     if (isShiftLocked(fromDay, fromType) || isShiftLocked(toDay, toType)) {
       return { nextSchedule: null, errorMessage: "ロック済みの枠は移動できません" };
     }
