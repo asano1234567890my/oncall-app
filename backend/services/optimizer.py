@@ -481,25 +481,30 @@ class OnCallOptimizer:
         day_slots = 0 if combined_mode else len(sunhol_days)
         total_slots = night_slots + day_slots
 
+        # 外部医師は1回勤務なのでその分を差し引く
+        num_external = len(self.external_doctor_indices)
+        num_internal = self.num_doctors - num_external
+        effective_slots = total_slots - num_external  # 外部医師が埋める分
+
         if spacing_days is not None and spacing_days > 0:
             import math
             max_per_doctor = math.ceil(self.num_days / (spacing_days + 1))
-            total_capacity = max_per_doctor * self.num_doctors
-            if total_capacity < total_slots:
+            total_capacity = max_per_doctor * num_internal
+            if total_capacity < effective_slots:
                 # Recommended interval: find max that works, then subtract 1 for margin
                 recommended_interval = 0
                 for try_interval in range(spacing_days - 1, -1, -1):
-                    cap = math.ceil(self.num_days / (try_interval + 1)) * self.num_doctors
-                    if cap >= total_slots:
+                    cap = math.ceil(self.num_days / (try_interval + 1)) * num_internal
+                    if cap >= effective_slots:
                         recommended_interval = max(0, try_interval - 1)
                         break
                 # Minimum doctors: add 1 for margin
-                min_doctors = math.ceil(total_slots / max_per_doctor) + 1
+                min_doctors = math.ceil(effective_slots / max_per_doctor) + 1
 
                 errors.append({
                     "id": "insufficient_capacity",
                     "name_ja": "医師数と勤務間隔",
-                    "current_value": f"現在: 医師{self.num_doctors}名・間隔{spacing_days}日",
+                    "current_value": f"現在: 常勤{num_internal}名{f'・外部枠{num_external}回' if num_external > 0 else ''}・間隔{spacing_days}日",
                     "suggestion_ja": f"→ 間隔を{recommended_interval}日以下にするか、勤務可能な医師を{min_doctors}名以上にしてください",
                 })
 
