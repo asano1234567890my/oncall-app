@@ -544,7 +544,7 @@ async def get_schedule_stats(
                 holiday_dates.add(dt.isoformat())
 
     return {
-        "doctors": [{"id": str(d.id), "name": d.name} for d in doctors],
+        "doctors": [{"id": str(d.id), "name": d.name, "is_external": d.is_external} for d in doctors],
         "shifts": [
             {
                 "date": s.date.isoformat(),
@@ -577,7 +577,7 @@ async def _fetch_export_data(
     doctors_result = await db.execute(
         select(Doctor).where(Doctor.hospital_id == hospital_id)
     )
-    doctor_map = {d.id: d.name for d in doctors_result.scalars().all()}
+    doctor_map = {d.id: ("外部" if d.is_external else d.name) for d in doctors_result.scalars().all()}
 
     start_date, end_date = _month_bounds(year, month)
     hospital_doctor_ids = list(doctor_map.keys())

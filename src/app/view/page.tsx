@@ -24,6 +24,7 @@ type Doctor = {
   id: string;
   name: string;
   is_active?: boolean;
+  is_external?: boolean;
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -105,6 +106,12 @@ export default function ViewSchedulePage() {
     [doctors],
   );
 
+  const externalDoctorIds = useMemo(
+    () => new Set(doctors.filter((d) => d.is_external === true).map((d) => d.id)),
+    [doctors],
+  );
+  const isExternal = (id: string | null) => Boolean(id && externalDoctorIds.has(id));
+
   const mergedHolidaySet = useMemo(() => {
     const next = new Set<string>(standardHolidaySet);
     const prefix = `${year}-`;
@@ -120,6 +127,7 @@ export default function ViewSchedulePage() {
 
   const getDoctorLabel = (value: string | null) => {
     if (!value) return "-";
+    if (isExternal(value)) return "外部";
     if (doctorNameById[value]) return doctorNameById[value];
     if (isUuidLike(value)) return "未設定";
     return value;
@@ -288,10 +296,10 @@ export default function ViewSchedulePage() {
               <td className={`px-1.5 py-1 font-medium whitespace-nowrap ${isHolidayLike ? "text-red-600" : isSat ? "text-blue-600" : "text-gray-800"}`}>
                 {row.day}({weekday})
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
+              <td className={`px-1.5 py-1 text-center truncate max-w-[5rem] border-l border-gray-400 ${isExternal(row.day_shift) ? "text-teal-700 font-semibold bg-teal-50" : "text-gray-700"}`}>
                 {showDayShift ? getDoctorLabel(row.day_shift) : ""}
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
+              <td className={`px-1.5 py-1 text-center truncate max-w-[5rem] border-l border-gray-400 ${isExternal(row.night_shift) ? "text-teal-700 font-semibold bg-teal-50" : "text-gray-700"}`}>
                 {getDoctorLabel(row.night_shift)}
               </td>
             </tr>

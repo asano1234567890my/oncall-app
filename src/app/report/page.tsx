@@ -10,7 +10,7 @@ import { useCustomHolidays } from "../hooks/useCustomHolidays";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const WEEKDAY_LABELS = ["日","月","火","水","木","金","土"] as const;
 
-type DoctorInfo = { id: string; name: string };
+type DoctorInfo = { id: string; name: string; is_external?: boolean };
 type ShiftEntry = { date: string; doctor_id: string; shift_type: string };
 type StatsData = { doctors: DoctorInfo[]; shifts: ShiftEntry[]; holidays: string[] };
 type MonthlyCounts = { weekdayNight: number[]; satNight: number[]; sunholDay: number[]; sunholNight: number[] };
@@ -226,9 +226,15 @@ export default function ReportPage() {
           allShifts.push(...d.shifts);
           for (const h of d.holidays) allHolidays.add(h);
         }
+        // 外部医師をレポート対象から除外
+        const externalIds = new Set(
+          [...allDoctors.values()].filter((d) => d.is_external === true).map((d) => d.id),
+        );
         const merged: StatsData = {
-          doctors: [...allDoctors.values()].sort((a, b) => naturalCompare(a.name, b.name)),
-          shifts: allShifts,
+          doctors: [...allDoctors.values()]
+            .filter((d) => d.is_external !== true)
+            .sort((a, b) => naturalCompare(a.name, b.name)),
+          shifts: allShifts.filter((s) => !externalIds.has(s.doctor_id)),
           holidays: [...allHolidays].sort(),
         };
         if (configRes.ok) {
