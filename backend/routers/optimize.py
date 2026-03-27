@@ -136,6 +136,7 @@ async def generate_schedule(
         idx_to_uuid: Dict[int, str] = {i: str(d.id) for i, d in enumerate(doctors)}
         uuid_to_idx: Dict[str, int] = {str(d.id): i for i, d in enumerate(doctors)}
         external_doctor_indices: set[int] = set(range(num_internal, total_doctors))
+        external_uuid_set = {str(d.id) for d in external_doctors}
 
         def _key_to_idx(key: Any) -> int:
             k = str(key)
