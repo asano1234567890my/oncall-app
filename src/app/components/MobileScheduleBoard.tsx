@@ -392,6 +392,30 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
               <span className={`shrink-0 font-bold ${stClass(e.tone)}`}>{fmt(e.score)}</span>
             </div>
           ))}
+          {/* 外部枠エントリ */}
+          {externalDoctors.length > 0 && (() => {
+            const isAnyExtHL = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
+            const usedExtIds = new Set<string>();
+            schedule.forEach((row) => {
+              if (row.night_shift && externalDoctorIds?.has(row.night_shift)) usedExtIds.add(row.night_shift);
+              else if (row.day_shift && externalDoctorIds?.has(row.day_shift)) usedExtIds.add(row.day_shift);
+            });
+            const extCount = usedExtIds.size;
+            if (extCount === 0 && (core.hardConstraints.external_slot_count ?? 0) === 0) return null;
+            const hlId = usedExtIds.size > 0 ? [...usedExtIds][0] : externalDoctors[0]?.id;
+            return (
+              <div
+                onClick={() => { if (hlId) toggleHighlightedDoctor(hlId); }}
+                className={`flex cursor-pointer items-center justify-between rounded px-1.5 py-0.5 border transition ${
+                  isAnyExtHL
+                    ? "border-teal-400 bg-teal-50 ring-1 ring-teal-300"
+                    : "border-teal-100 bg-white active:bg-teal-50"
+                }`}>
+                <span className="truncate font-semibold text-teal-700 max-w-[3.5rem]">外部</span>
+                <span className="shrink-0 font-bold text-teal-600">{extCount > 0 ? `${extCount}回` : "0"}</span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
