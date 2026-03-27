@@ -377,6 +377,8 @@ async def delete_doctor(
     )
     doctor = result.scalar_one_or_none()
     if doctor is not None:
+        if doctor.is_external:
+            raise HTTPException(status_code=400, detail="外部医師は削除できません")
         doctor.is_active = False
     await db.commit()
     return {"message": "削除しました"}
@@ -395,6 +397,8 @@ async def hard_delete_doctor(
     doctor = result.scalar_one_or_none()
     if doctor is None:
         raise HTTPException(status_code=404, detail="Doctor not found")
+    if doctor.is_external:
+        raise HTTPException(status_code=400, detail="外部医師は削除できません")
     await db.delete(doctor)
     await db.commit()
     return {"message": "物理削除しました"}

@@ -13,7 +13,7 @@ async def bulk_set_doctor_lock_state(
 ) -> int:
     result = await db.execute(
         update(Doctor)
-        .where(Doctor.hospital_id == hospital_id, Doctor.is_active.is_(True))
+        .where(Doctor.hospital_id == hospital_id, Doctor.is_active.is_(True), Doctor.is_external.is_(False))
         .values(is_locked=is_locked)
     )
     updated_count = result.rowcount or 0

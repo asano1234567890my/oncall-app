@@ -158,9 +158,12 @@ export function useOnCallCore() {
   const { getUnsavedDoctorNames, handleGenerate, handleSaveToDB, refetchDoctors } = apiState;
 
   // ── 外部医師の自動確保 ──
-  // external_slot_count > 0 なのに外部医師がDB上に不足している場合、自動作成して再取得
+  // 外部枠が必要なのに外部医師がDB上に不足している場合、自動作成して再取得
   useEffect(() => {
-    const needed = hardConstraints.external_slot_count ?? 0;
+    const mode = hardConstraints.external_input_mode ?? "external";
+    const needed = mode === "internal"
+      ? Math.max(0, getDaysInMonth(year, month) - (hardConstraints.internal_day_count ?? 8))
+      : (hardConstraints.external_slot_count ?? 0);
     if (needed <= 0) return;
     const existing = externalDoctors.length;
     if (existing >= needed) return;
@@ -181,7 +184,7 @@ export function useOnCallCore() {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hardConstraints.external_slot_count, externalDoctors.length]);
+  }, [hardConstraints.external_slot_count, hardConstraints.internal_day_count, hardConstraints.external_input_mode, externalDoctors.length, year, month]);
 
   // ── ナビゲーションガード ──
   useNavigationGuard({

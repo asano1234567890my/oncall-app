@@ -1601,33 +1601,40 @@ class OnCallOptimizer:
                 model.Add(work[(d, day)] == night_shifts[(d, day)] + day_shifts[(d, day)])
 
         # --- Slot fulfillment (NOT wrapped — always enforced) ---
-        allow_external_diag = self.external_slot_count > 0 or len(self.external_fixed_dates) > 0
+        ext_idx_diag = self.external_doctor_indices
+        int_idx_diag = self.internal_doctor_indices
         for day in days:
             ext_target = self.external_fixed_dates.get(day)
-            if ext_target:
+            if ext_target and ext_idx_diag:
                 if ext_target == "all":
-                    for d in doctors:
+                    model.AddExactlyOne(night_shifts[(d, day)] for d in ext_idx_diag)
+                    for d in int_idx_diag:
                         model.Add(night_shifts[(d, day)] == 0)
-                        model.Add(day_shifts[(d, day)] == 0)
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        model.AddExactlyOne(day_shifts[(d, day)] for d in ext_idx_diag)
+                        for d in int_idx_diag:
+                            model.Add(day_shifts[(d, day)] == 0)
+                    else:
+                        for d in doctors:
+                            model.Add(day_shifts[(d, day)] == 0)
                 elif ext_target == "day":
-                    for d in doctors:
-                        model.Add(day_shifts[(d, day)] == 0)
                     model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        model.AddExactlyOne(day_shifts[(d, day)] for d in ext_idx_diag)
+                        for d in int_idx_diag:
+                            model.Add(day_shifts[(d, day)] == 0)
+                    else:
+                        for d in doctors:
+                            model.Add(day_shifts[(d, day)] == 0)
                 elif ext_target == "night":
-                    for d in doctors:
+                    model.AddExactlyOne(night_shifts[(d, day)] for d in ext_idx_diag)
+                    for d in int_idx_diag:
                         model.Add(night_shifts[(d, day)] == 0)
                     if self.is_sunday_or_holiday(day) and not combined_mode:
                         model.AddExactlyOne(day_shifts[(d, day)] for d in doctors)
                     else:
                         for d in doctors:
                             model.Add(day_shifts[(d, day)] == 0)
-            elif allow_external_diag:
-                model.AddAtMostOne(night_shifts[(d, day)] for d in doctors)
-                if self.is_sunday_or_holiday(day) and not combined_mode:
-                    model.AddAtMostOne(day_shifts[(d, day)] for d in doctors)
-                else:
-                    for d in doctors:
-                        model.Add(day_shifts[(d, day)] == 0)
             else:
                 model.AddExactlyOne(night_shifts[(d, day)] for d in doctors)
                 if self.is_sunday_or_holiday(day) and not combined_mode:
@@ -1635,6 +1642,10 @@ class OnCallOptimizer:
                 else:
                     for d in doctors:
                         model.Add(day_shifts[(d, day)] == 0)
+
+        # External doctors: max 1 shift per month (diagnostic mode)
+        for d in ext_idx_diag:
+            model.Add(sum(work[(d, day)] for day in days) <= 1)
 
         # --- Prevent same-day double (NOT wrapped — structural) ---
         if prevent_sunhol_consecutive:
