@@ -264,6 +264,7 @@ export function useOnCallCore() {
     setPreviousMonthShifts([]);
     resetSchedule();
     setScores({});
+    setSaveValidationMessages([]);
     savedScheduleSignatureRef.current = getScheduleSignature([]);
     dirtyRef.current = false;
     setIsDirty(false);
@@ -357,6 +358,7 @@ export function useOnCallCore() {
 
   const handleGenerateWithGuard = () => {
     if (isOverrideMode) return;
+    setSaveValidationMessages([]);
     void handleGenerate();
   };
 
