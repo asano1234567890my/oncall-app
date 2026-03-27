@@ -220,6 +220,12 @@ export default function AppPage() {
               </select>
             </div>
             <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => openDrawer("doctor-manage")}
+                className="flex items-center gap-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-500 hover:bg-gray-50"
+              >
+                <UserCog className="h-3.5 w-3.5" /> 医師
+              </button>
               {hasSchedule && (
                 <button
                   onClick={() => setShowImportModal(true)}
