@@ -11,6 +11,7 @@ type Doctor = {
   id: string;
   name: string;
   is_active?: boolean;
+  is_external?: boolean;
   is_locked?: boolean;
   access_token?: string;
 };
@@ -335,10 +336,10 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeDoctors = useMemo(() =>
-    doctors.filter((d) => d.is_active !== false).sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true })),
+    doctors.filter((d) => d.is_active !== false && d.is_external !== true).sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true })),
     [doctors],
   );
-  const archivedDoctors = useMemo(() => doctors.filter((d) => d.is_active === false), [doctors]);
+  const archivedDoctors = useMemo(() => doctors.filter((d) => d.is_active === false && d.is_external !== true), [doctors]);
   const [showArchived, setShowArchived] = useState(false);
 
   const fetchDoctors = useCallback(async () => {

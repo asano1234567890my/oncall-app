@@ -181,7 +181,7 @@ export function useDoctorSettings({
       const data: Doctor[] = await res.json();
       setDoctors(data);
 
-      const firstActiveDoctor = data.find((doc) => doc.is_active !== false);
+      const firstActiveDoctor = data.find((doc) => doc.is_active !== false && doc.is_external !== true);
       setSelectedDoctorId((prev) => prev || firstActiveDoctor?.id || "");
 
       // fetchした時点を「保存済み」基準として正規化済みの値をそのまま保存

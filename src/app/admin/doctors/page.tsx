@@ -12,6 +12,7 @@ type Doctor = {
   access_token?: string;
   is_locked?: boolean;
   is_active?: boolean;
+  is_external?: boolean;
 };
 
 type ApiResponseMessage = {
@@ -65,8 +66,8 @@ export default function DoctorManagerPage() {
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [bulkLockAction, setBulkLockAction] = useState<"lock" | "unlock" | null>(null);
 
-  const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false), [doctors]);
-  const archivedDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active === false), [doctors]);
+  const activeDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active !== false && doctor.is_external !== true), [doctors]);
+  const archivedDoctors = useMemo(() => doctors.filter((doctor) => doctor.is_active === false && doctor.is_external !== true), [doctors]);
   const isBulkLocking = bulkLockAction !== null;
 
   const fetchDoctors = async () => {
