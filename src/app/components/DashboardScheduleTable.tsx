@@ -271,8 +271,8 @@ export default function DashboardScheduleTable({
               } ${
                 isExternalDoctor(doctorId)
                   ? (isAnyExternalHighlighted
-                    ? "bg-orange-200 text-orange-900 text-base font-bold ring-2 ring-orange-500 shadow-sm"
-                    : "bg-orange-100 text-orange-700 text-sm font-semibold")
+                    ? "bg-teal-200 text-teal-900 text-base font-bold ring-2 ring-teal-500 shadow-sm"
+                    : "bg-teal-100 text-teal-700 text-sm font-semibold")
                   : doctorId === highlightedDoctorId
                     ? "bg-blue-200 text-blue-900 text-base font-bold ring-2 ring-blue-500 shadow-sm"
                     : `text-sm font-semibold ${locked ? "bg-amber-100 text-amber-900"

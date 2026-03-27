@@ -122,7 +122,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
       if (extId) {
         internalOptions.push({
           doctorId: extId,
-          name: `外部医師（${usedExtIds.size}回配置中）`,
+          name: `外部枠（${usedExtIds.size}回配置中）`,
           score: externalScoreTotal ?? 0,
           target: null,
           tone: "default" as DoctorScoreEntry["tone"],
@@ -523,10 +523,10 @@ function renderCell(
       ? "text-red-400"
       : doctorId
         ? isDocHighlighted
-          ? (isExternal ? "text-orange-700 font-black" : "text-blue-700 font-black")
+          ? (isExternal ? "text-teal-700 font-black" : "text-blue-700 font-black")
           : highlightViolation
             ? "text-red-400"
-            : isExternal ? "text-orange-600"
+            : isExternal ? "text-teal-600"
             : shiftType === "day" ? "text-orange-800" : "text-indigo-800"
         : highlightViolation
           ? "text-red-300"

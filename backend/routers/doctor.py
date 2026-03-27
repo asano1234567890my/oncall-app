@@ -224,10 +224,10 @@ async def create_external_doctor(
         )
         existing_count = result.scalar() or 0
         if existing_count >= 31:
-            return {"message": "外部医師は既に上限（31人）です", "created": False}
+            return {"message": "外部枠は既に上限（31人）です", "created": False}
         new_doc = Doctor(
             hospital_id=hospital_id,
-            name=f"外部医師{existing_count + 1}",
+            name=f"外部{existing_count + 1}",
             is_external=True,
             experience_years=0,
         )
@@ -235,7 +235,7 @@ async def create_external_doctor(
         await db.commit()
         await db.refresh(new_doc)
         return {
-            "message": "外部医師を追加しました",
+            "message": "外部枠を追加しました",
             "id": str(new_doc.id),
             "name": new_doc.name,
             "is_external": True,

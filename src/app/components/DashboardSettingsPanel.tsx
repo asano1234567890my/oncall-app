@@ -66,7 +66,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
         onClick={() => setIsOpen(!isOpen)}
         className="text-[10px] text-blue-600 font-bold hover:underline"
       >
-        {isOpen ? "▼ 確定日カレンダーを閉じる" : "▶ 外部医師が入る日を指定"}
+        {isOpen ? "▼ 確定日カレンダーを閉じる" : "▶ 外部枠にする日を指定"}
       </button>
       {(() => {
         const calY = calMonth.getFullYear();
@@ -110,7 +110,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部医師設定` : "外部医師設定"}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部枠設定` : "外部枠設定"}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;
@@ -359,9 +359,9 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             </div>
           </div>
 
-          {/* 外部医師の枠 */}
+          {/* 外部枠（常勤以外） */}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-700">外部医師の枠</span>
+            <span className="text-xs text-gray-700">外部枠（常勤以外）</span>
             <div className="flex gap-1">
               <button
                 type="button"

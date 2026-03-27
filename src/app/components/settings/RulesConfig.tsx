@@ -202,11 +202,11 @@ export default function RulesConfig({
               </div>
             </div>
 
-            {/* 外部医師の枠 */}
+            {/* 外部枠（常勤以外） */}
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <div className="text-sm font-bold text-gray-800">外部医師の枠</div>
+              <div className="text-sm font-bold text-gray-800">外部枠（常勤以外）</div>
               <div className="mt-1 text-[11px] text-gray-500">
-                非常勤医師が入る枠がある場合、その分の枠を空けてスケジュールを生成します。
+                非常勤医師が入る日や、自チームの担当外の日に使います。指定した分の枠を外部枠としてスケジュールを生成します。
                 常勤医師だけで全枠を埋める場合は「なし」のままでOKです。
               </div>
               <div className="mt-3 flex shrink-0 gap-1">
@@ -243,7 +243,7 @@ export default function RulesConfig({
               {((hardConstraints.external_slot_count ?? 0) > 0 || (hardConstraints.external_fixed_dates?.length ?? 0) > 0) && (
                 <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
                   <label className="block">
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部医師の枠数（月あたり）</div>
+                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部枠（常勤以外）数（月あたり）</div>
                     <div className="mb-1 text-[10px] text-gray-500">この回数分の枠を空けて、残りを常勤医師で生成します</div>
                     <StepperNumberInput
                       value={hardConstraints.external_slot_count ?? 0}
@@ -259,7 +259,7 @@ export default function RulesConfig({
 
                   {/* 確定日カレンダー */}
                   <div>
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部医師が入る日（任意）</div>
+                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部枠にする日（任意）</div>
                     <div className="mb-2 text-[10px] text-gray-500">日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。</div>
                     <DayPicker
                       month={calMonth}
@@ -283,7 +283,7 @@ export default function RulesConfig({
                     />
                     <TargetShiftPopover
                       open={Boolean(extPopover)}
-                      title={extPopover ? `${Number(extPopover.dateStr.slice(5,7))}/${Number(extPopover.dateStr.slice(8))} の外部医師設定` : "外部医師設定"}
+                      title={extPopover ? `${Number(extPopover.dateStr.slice(5,7))}/${Number(extPopover.dateStr.slice(8))} の外部枠設定` : "外部枠設定"}
                       currentValue={extPopover ? (getExtEntry(extPopover.dateStr)?.target_shift ?? null) : null}
                       onSelect={handleExtPopoverSelect}
                       onClose={() => setExtPopover(null)}

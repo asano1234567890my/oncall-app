@@ -148,19 +148,19 @@ export default function DoctorPalette({
                   availableExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"
                 } ${
                   isAnyExternalHighlighted
-                    ? "border-orange-500 bg-orange-100 ring-2 ring-orange-400 shadow-md"
-                    : "border-orange-200 bg-orange-50 hover:border-orange-300"
+                    ? "border-teal-500 bg-teal-100 ring-2 ring-teal-400 shadow-md"
+                    : "border-teal-200 bg-teal-50 hover:border-teal-300"
                 }`}
-                title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
+                title="ドラッグでシフト配置 / クリックで全外部枠ハイライト"
               >
                 <div className="flex items-center gap-1.5">
-                  <Users className="h-4 w-4 text-orange-600" />
-                  <span className="text-sm font-bold text-orange-800">外部医師</span>
+                  <Users className="h-4 w-4 text-teal-600" />
+                  <span className="text-sm font-bold text-teal-800">外部枠</span>
                   {assignedCount > 0 && (
-                    <span className="rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">{assignedCount}回</span>
+                    <span className="rounded-full bg-teal-200 px-1.5 py-0.5 text-[10px] font-bold text-teal-700">{assignedCount}回</span>
                   )}
                 </div>
-                <span className="text-sm font-bold tabular-nums text-orange-700">
+                <span className="text-sm font-bold tabular-nums text-teal-700">
                   {(externalScoreTotal ?? 0).toFixed(1)}
                 </span>
               </button>

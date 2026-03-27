@@ -116,7 +116,7 @@ export default function useDashboardState() {
 
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
-    if (externalDoctorIds.has(doctorId)) return "外部医師";
+    if (externalDoctorIds.has(doctorId)) return "外部";
     return doctorNameById[doctorId] ?? "不明";
   };
 

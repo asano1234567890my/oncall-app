@@ -900,10 +900,10 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
           </div>
         </div>
 
-        {/* 外部医師の枠 */}
+        {/* 外部枠 */}
         <div>
-          <div className="text-xs font-bold text-gray-700 mb-2">外部医師の枠</div>
-          <div className="text-[10px] text-gray-500 mb-2">非常勤医師が入る枠がある場合、その分を空けて生成します</div>
+          <div className="text-xs font-bold text-gray-700 mb-2">外部枠（常勤以外）</div>
+          <div className="text-[10px] text-gray-500 mb-2">非常勤医師が入る日や、担当外の日に使います</div>
           <div className="flex gap-2 mb-2">
             {([0, 4] as const).map((val) => (
               <button
@@ -1000,7 +1000,7 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
             : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"
         }`}
       >
-        {isOpen ? "▼" : "▶"} 外部医師が入る日を指定{dates.length > 0 ? `（${dates.length}日）` : ""}
+        {isOpen ? "▼" : "▶"} 外部枠にする日を指定{dates.length > 0 ? `（${dates.length}日）` : ""}
       </button>
       {isOpen && (
         <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3">
@@ -1027,7 +1027,7 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部医師設定` : ""}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部枠設定` : ""}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;

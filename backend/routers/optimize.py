@@ -116,7 +116,7 @@ async def generate_schedule(
         if len(existing_external) < 31:
             for n in range(len(existing_external) + 1, 32):
                 new_ext = Doctor(
-                    name=f"外部医師{n}",
+                    name=f"外部{n}",
                     hospital_id=hospital_id,
                     is_external=True,
                     experience_years=0,
