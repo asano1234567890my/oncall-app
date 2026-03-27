@@ -41,6 +41,7 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
     highlightedDoctorId, toggleHighlightedDoctor,
     getHighlightedViolation,
     changedShiftKeys,
+    externalDoctorIds,
   } = core;
 
   const [sheetTarget, setSheetTarget] = useState<SheetTarget>(null);
@@ -336,8 +337,8 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
                           <span className={`text-xs font-bold ${dateC}`}>{row.day}</span>
                           <span className={`ml-0.5 text-[11px] font-bold ${wdC}`}>{wd}</span>
                         </td>
-                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys)}
-                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys)}
+                        {renderCell(row.day, "day", row.day_shift, isHL, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys, externalDoctorIds)}
+                        {renderCell(row.day, "night", row.night_shift, true, handleCellTap, getDoctorName, isShiftLocked, highlightedDoctorId, swapSource, getSwapViolation, getHighlightedViolation, changedShiftKeys, externalDoctorIds)}
                       </tr>
                     );
                   })}
@@ -454,9 +455,12 @@ function renderCell(
   getSwapViolation: (day: number, st: ShiftType) => string | null,
   getHighlightedViolation: (day: number, st: ShiftType) => string | null,
   changedShiftKeys?: Set<string>,
+  externalDoctorIds?: Set<string>,
 ) {
   const locked = isShiftLocked(day, shiftType);
-  const isDocHighlighted = Boolean(doctorId && highlightedDoctorId && doctorId === highlightedDoctorId);
+  const isExternal = Boolean(doctorId && externalDoctorIds?.has(doctorId));
+  const isAnyExtHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
+  const isDocHighlighted = isExternal ? isAnyExtHighlighted : Boolean(doctorId && highlightedDoctorId && doctorId === highlightedDoctorId);
   const isSwapSource = swapSource?.day === day && swapSource?.shiftType === shiftType;
   const swapViolation = swapSource ? getSwapViolation(day, shiftType) : null;
   const highlightViolation = highlightedDoctorId ? getHighlightedViolation(day, shiftType) : null;
@@ -491,9 +495,10 @@ function renderCell(
       ? "text-red-400"
       : doctorId
         ? isDocHighlighted
-          ? "text-blue-700 font-black"
+          ? (isExternal ? "text-orange-700 font-black" : "text-blue-700 font-black")
           : highlightViolation
             ? "text-red-400"
+            : isExternal ? "text-orange-600"
             : shiftType === "day" ? "text-orange-800" : "text-indigo-800"
         : highlightViolation
           ? "text-red-300"

@@ -84,6 +84,7 @@ type DashboardScheduleTableProps = {
   // Guide modal callbacks
   onOpenSettings?: () => void;
   onOpenDoctorManage?: () => void;
+  externalDoctorIds?: Set<string>;
 };
 
 export default function DashboardScheduleTable({
@@ -135,7 +136,10 @@ export default function DashboardScheduleTable({
   viewportZoom = 1,
   onOpenSettings,
   onOpenDoctorManage,
+  externalDoctorIds,
 }: DashboardScheduleTableProps) {
+  const isExternalDoctor = (id: string | null | undefined) => Boolean(id && externalDoctorIds?.has(id));
+  const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
   const isDragging = draggingDoctorId !== null;
   const [showGuideModal, setShowGuideModal] = useState(false);
   useEffect(() => {
@@ -265,12 +269,16 @@ export default function DashboardScheduleTable({
               className={`min-w-0 flex-1 truncate rounded-md px-1.5 py-0.5 text-center transition ${
                 locked ? "cursor-default" : "cursor-grab active:cursor-grabbing"
               } ${
-                doctorId === highlightedDoctorId
-                  ? "bg-blue-200 text-blue-900 text-base font-bold ring-2 ring-blue-500 shadow-sm"
-                  : `text-sm font-semibold ${locked ? "bg-amber-100 text-amber-900"
-                    : isHolidayLike ? "bg-stone-100 text-amber-700"
-                    : isSaturday ? "bg-stone-100 text-blue-800"
-                    : "bg-stone-100 text-gray-800"}`
+                isExternalDoctor(doctorId)
+                  ? (isAnyExternalHighlighted
+                    ? "bg-orange-200 text-orange-900 text-base font-bold ring-2 ring-orange-500 shadow-sm"
+                    : "bg-orange-100 text-orange-700 text-sm font-semibold")
+                  : doctorId === highlightedDoctorId
+                    ? "bg-blue-200 text-blue-900 text-base font-bold ring-2 ring-blue-500 shadow-sm"
+                    : `text-sm font-semibold ${locked ? "bg-amber-100 text-amber-900"
+                      : isHolidayLike ? "bg-stone-100 text-amber-700"
+                      : isSaturday ? "bg-stone-100 text-blue-800"
+                      : "bg-stone-100 text-gray-800"}`
               }`}
               title="クリックでハイライト / ドラッグで移動"
             >

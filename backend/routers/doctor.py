@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -203,6 +203,44 @@ async def create_doctor(
             "access_token": new_doc.access_token,
             "is_locked": new_doc.is_locked,
         }
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/external")
+async def create_external_doctor(
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+):
+    """外部医師（ダミー）を1人追加作成する"""
+    try:
+        result = await db.execute(
+            select(func.count()).select_from(Doctor).where(
+                Doctor.hospital_id == hospital_id,
+                Doctor.is_external.is_(True),
+            )
+        )
+        existing_count = result.scalar() or 0
+        if existing_count >= 31:
+            raise HTTPException(status_code=400, detail="外部医師は最大31人です")
+        new_doc = Doctor(
+            hospital_id=hospital_id,
+            name=f"外部医師{existing_count + 1}",
+            is_external=True,
+            experience_years=0,
+        )
+        db.add(new_doc)
+        await db.commit()
+        await db.refresh(new_doc)
+        return {
+            "message": "外部医師を追加しました",
+            "id": str(new_doc.id),
+            "name": new_doc.name,
+            "is_external": True,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

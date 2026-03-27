@@ -216,6 +216,7 @@ export default function DashboardPage() {
               viewportZoom={viewportZoom}
               onOpenSettings={() => setIsSettingsOpen(true)}
               onOpenDoctorManage={() => setIsDoctorDrawerOpen(true)}
+              externalDoctorIds={core.externalDoctorIds}
             />
           </div>
         </main>
