@@ -2031,24 +2031,36 @@ class OnCallOptimizer:
         for setting in settings_to_try:
             name = setting["name"]
             current = setting["current"]
-            is_score = setting.get("is_score_max", False)
+            is_score_max = setting.get("is_score_max", False)
+            is_score_min = setting.get("is_score_min", False)
 
             # Step 1: 設定を外して解けるか
             if not try_solve_with(
                 setting["removed_override"],
-                remove_score_max=is_score,
+                remove_score_max=is_score_max,
+                remove_score_min=is_score_min,
             ):
                 continue  # この設定を外しても解けない → スキップ
 
             solvable_alone.append(name)
 
-            # スコア上限は数値探索しない（外せるかどうかだけ）
-            if is_score:
+            # スコア上限/下限は数値探索しない（外せるかどうかだけ）
+            if is_score_max:
                 single_results.append({
                     "group_id": f"setting_{name}",
                     "category": "admin_setting",
                     "doctor_name": None,
                     "description_ja": "スコア上限を緩和すれば解けます",
+                    "is_admin_setting": True,
+                })
+                continue
+            if is_score_min:
+                ext_hint = f"（外部枠{len(self.external_doctor_indices)}回で常勤の配分枠が少ない可能性）" if self.external_doctor_indices else ""
+                single_results.append({
+                    "group_id": f"setting_{name}",
+                    "category": "admin_setting",
+                    "doctor_name": None,
+                    "description_ja": f"スコア下限を緩和すれば解けます{ext_hint}",
                     "is_admin_setting": True,
                 })
                 continue
@@ -2086,13 +2098,14 @@ class OnCallOptimizer:
             for i in range(len(unsolved)):
                 for j in range(i + 1, len(unsolved)):
                     s1, s2 = unsolved[i], unsolved[j]
-                    is_score_1 = s1.get("is_score_max", False)
-                    is_score_2 = s2.get("is_score_max", False)
+                    is_smax_1 = s1.get("is_score_max", False)
+                    is_smax_2 = s2.get("is_score_max", False)
+                    is_smin_1 = s1.get("is_score_min", False)
+                    is_smin_2 = s2.get("is_score_min", False)
                     combined_override = {}
                     combined_override.update(s1["removed_override"])
                     combined_override.update(s2["removed_override"])
-                    remove_score = is_score_1 or is_score_2
-                    if try_solve_with(combined_override, remove_score_max=remove_score):
+                    if try_solve_with(combined_override, remove_score_max=is_smax_1 or is_smax_2, remove_score_min=is_smin_1 or is_smin_2):
                         single_results.append({
                             "group_id": f"setting_combo_{s1['name']}_{s2['name']}",
                             "category": "admin_setting",
