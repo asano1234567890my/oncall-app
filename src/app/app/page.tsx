@@ -592,8 +592,13 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
           </div>
           {(hc.external_slot_count ?? 0) > 0 && (
             <div className="flex justify-between min-w-0 col-span-2 pt-1 border-t border-gray-100 mt-1">
-              <span className="text-teal-600 shrink-0">外部枠</span>
-              <span className="font-medium text-teal-700 shrink-0">{hc.external_slot_count}回 / 勤務{core.daysInMonth - (hc.external_slot_count ?? 0)}日</span>
+              {(hc.external_input_mode ?? "external") === "internal" ? (<>
+                <span className="text-blue-600 shrink-0">勤務日数</span>
+                <span className="font-medium text-blue-700 shrink-0">{core.daysInMonth - (hc.external_slot_count ?? 0)}日/{core.daysInMonth}日</span>
+              </>) : (<>
+                <span className="text-teal-600 shrink-0">外部枠</span>
+                <span className="font-medium text-teal-700 shrink-0">{hc.external_slot_count}回/{core.daysInMonth}日</span>
+              </>)}
             </div>
           )}
         </div>
