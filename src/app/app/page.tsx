@@ -936,11 +936,10 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
             ))}
           </div>
           {(hc.external_slot_count ?? 0) > 0 && (() => {
-            const hasFixedDates = (hc.external_fixed_dates?.length ?? 0) > 0;
             const extCount = hc.external_slot_count ?? 0;
             return (
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <div className={`space-y-1.5 ${hasFixedDates ? "opacity-50 pointer-events-none" : ""}`}>
+              <div className="space-y-1.5">
                 <div className="flex gap-1.5 mb-1">
                   <button type="button" onClick={() => setExtInputMode("external")}
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>

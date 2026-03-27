@@ -407,13 +407,10 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             </div>
           </div>
           {(hardConstraints.external_slot_count ?? 0) > 0 && (() => {
-            const hasFixed = (hardConstraints.external_fixed_dates?.length ?? 0) > 0;
-            const fixedCount = hardConstraints.external_fixed_dates?.length ?? 0;
             const extCount = hardConstraints.external_slot_count ?? 0;
-            const intCount = 30 - extCount;
             return (
             <>
-              <div className={`pl-3 border-l-2 border-teal-200 space-y-1.5 ${hasFixed ? "opacity-50 pointer-events-none" : ""}`}>
+              <div className="pl-3 border-l-2 border-teal-200 space-y-1.5">
                 <div className="flex gap-1 mb-1">
                   <button type="button" onClick={() => setExtInputMode("external")}
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "external" ? "bg-teal-100 text-teal-700 border border-teal-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
