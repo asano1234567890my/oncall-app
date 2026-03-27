@@ -288,18 +288,23 @@ export default function RulesConfig({
                       onSelect={handleExtPopoverSelect}
                       onClose={() => setExtPopover(null)}
                     />
-                    {externalDates.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {externalDates.map((e) => (
-                          <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                            {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{getExtShiftLabel(e.target_shift)}
-                            <button type="button" onClick={() => removeExtDate(e.date)} className="text-orange-400 hover:text-orange-700">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {(() => {
+                      const calY = calMonth.getFullYear();
+                      const calM = calMonth.getMonth() + 1;
+                      const filtered = externalDates.filter((e) => Number(e.date.slice(0, 4)) === calY && Number(e.date.slice(5, 7)) === calM);
+                      return filtered.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {filtered.map((e) => (
+                            <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
+                              {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{getExtShiftLabel(e.target_shift)}
+                              <button type="button" onClick={() => removeExtDate(e.date)} className="text-orange-400 hover:text-orange-700">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

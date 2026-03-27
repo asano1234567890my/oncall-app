@@ -908,7 +908,10 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
             {([0, 4] as const).map((val) => (
               <button
                 key={val}
-                onClick={() => onHardConstraintChange("external_slot_count", val)}
+                onClick={() => {
+                  onHardConstraintChange("external_slot_count", val);
+                  if (val === 0) onHardConstraintChange("external_fixed_dates", []);
+                }}
                 className={`flex-1 rounded-lg border-2 py-2 text-xs font-bold transition-colors ${
                   val === 0
                     ? (hc.external_slot_count ?? 0) === 0
@@ -1034,18 +1037,23 @@ function MobileExternalCalendarToggle({ dates, onChange }: { dates: ExternalFixe
             }}
             onClose={() => setPopover(null)}
           />
-          {dates.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {dates.map((e) => (
-                <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
-                  {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
-                  <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
+          {(() => {
+            const calY = calMonth.getFullYear();
+            const calM = calMonth.getMonth() + 1;
+            const filtered = dates.filter((e) => Number(e.date.slice(0, 4)) === calY && Number(e.date.slice(5, 7)) === calM);
+            return filtered.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {filtered.map((e) => (
+                  <span key={e.date} className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2 py-0.5 text-[10px] font-bold text-orange-700">
+                    {Number(e.date.slice(5,7))}/{Number(e.date.slice(8))}{shiftLabel(e.target_shift)}
+                    <button type="button" onClick={() => onChange(dates.filter((d) => d.date !== e.date))} className="text-orange-400 hover:text-orange-700">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
