@@ -37,6 +37,7 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 | `is_active` | Boolean | 有効フラグ |
 | `access_token` | String | マジックリンク用トークン |
 | `is_locked` | Boolean | 入力ロック状態（締切後はTrue） |
+| `is_external` | Boolean | 外部医師（ダミー）フラグ（default: false） |
 | `min_score` | Float | 月間スコア下限 |
 | `max_score` | Float | 月間スコア上限 |
 | `target_score` | Float | 月間目標スコア |
@@ -129,6 +130,8 @@ hospitals
 | `c3cddc2718ad` | unavailable_daysにshift_target関連カラム追加 |
 | `9d91c9b3e2f7` | unavailable_daysのshift_targetカラム確認・修正 |
 | `a1b2c3d4e5f6` | hospitalsテーブル追加・doctors/system_settingsにhospital_id FK追加・Ebina Hospitalシード |
+| `a5c81cf5d030` | transfer_codesテーブル追加 |
+| `27efd28f6bd1` | doctors.is_external追加（外部医師ダミー方式） |
 
 ---
 
