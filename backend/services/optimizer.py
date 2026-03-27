@@ -1963,13 +1963,28 @@ class OnCallOptimizer:
                 "label": "スコア上限",
                 "unit": "",
                 "direction": "increase",
-                "meaningless_threshold": lambda v: True,  # 数値探索しないので常にフィルタ対象外（外せば解ける表示）
+                "meaningless_threshold": lambda v: True,
                 "is_score_max": True,
+            })
+        # スコア下限: 外部枠が多い場合に引っかかりやすい
+        has_score_min = self.score_min_float is not None and self.score_min_float > 0
+        if has_score_min:
+            settings_to_try.append({
+                "name": "score_min",
+                "current": self.score_min_float,
+                "removed_override": {},  # 特殊: try_solve_withで別処理
+                "search_range": [],  # 外すだけ
+                "label": "スコア下限",
+                "unit": "",
+                "direction": "decrease",
+                "meaningless_threshold": lambda v: True,
+                "is_score_min": True,
             })
 
         def try_solve_with(
             overrides: Dict[str, Any],
             remove_score_max: bool = False,
+            remove_score_min: bool = False,
         ) -> bool:
             """設定を変えてモデル再構築→ソルブ。"""
             hc = dict(self.hard_constraints)
@@ -1986,16 +2001,20 @@ class OnCallOptimizer:
                 previous_month_shifts=self.previous_month_shifts,
                 hard_constraints=hc,
                 locked_shifts=self.locked_shifts,
+                external_doctor_indices=self.external_doctor_indices,
             )
-            if not remove_score_max:
+            if remove_score_min:
+                kwargs["score_min"] = 0.0
+                kwargs["score_max"] = self.score_max_float
+                kwargs["max_score_by_doctor"] = self.max_score_by_doctor
+            elif remove_score_max:
+                kwargs["score_min"] = self.score_min_float
+                kwargs["score_max"] = 99.0
+            elif not remove_score_max:
                 kwargs["score_min"] = self.score_min_float
                 kwargs["score_max"] = self.score_max_float
                 kwargs["min_score_by_doctor"] = self.min_score_by_doctor
                 kwargs["max_score_by_doctor"] = self.max_score_by_doctor
-            else:
-                # スコア上限を外す: 下限は残す、上限は十分大きな値に
-                kwargs["score_min"] = self.score_min_float
-                kwargs["score_max"] = 99.0
                 kwargs["min_score_by_doctor"] = self.min_score_by_doctor
                 kwargs["max_score_by_doctor"] = {}  # 個別上限も全解除
             trial = OnCallOptimizer(**kwargs)
@@ -2279,6 +2298,12 @@ class OnCallOptimizer:
         """Build statistical observations that a human scheduler would notice."""
         insights: List[str] = []
         days = range(1, self.num_days + 1)
+        num_ext = len(self.external_doctor_indices)
+        num_int = self.num_doctors - num_ext
+
+        # 0) 外部枠の概要
+        if num_ext > 0:
+            insights.append(f"外部枠: {num_ext}回/月（常勤{num_int}名が残り{self.num_days - num_ext}枠を担当）")
 
         # 1) Same-day unavailable concentration (deduplicate per doctor per day)
         day_unavail_doctors: Dict[int, set] = {}
@@ -2300,8 +2325,8 @@ class OnCallOptimizer:
                     if self._matches_fixed_unavailable_weekday(day, normalized["day_of_week"]):
                         day_unavail_doctors.setdefault(day, set()).add(name)
 
-        # Only show days where >60% of doctors are unavailable (truly critical), top 5
-        threshold = max(2, self.num_doctors * 0.6)
+        # Only show days where >60% of internal doctors are unavailable (truly critical), top 5
+        threshold = max(2, num_int * 0.6)
         critical_days = []
         for day in sorted(day_unavail_doctors.keys()):
             names = sorted(day_unavail_doctors[day])
@@ -2310,7 +2335,7 @@ class OnCallOptimizer:
                 weekday_ja = ["月", "火", "水", "木", "金", "土", "日"][date_obj.weekday()]
                 holiday_tag = "・祝" if self.is_holiday(day) else ""
                 critical_days.append((len(names), day,
-                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に{self.num_doctors}人中{len(names)}人が不可"
+                    f"{self.month}/{day}（{weekday_ja}{holiday_tag}）に常勤{num_int}人中{len(names)}人が不可"
                 ))
         # Sort by severity (most unavailable first), take top 5
         critical_days.sort(key=lambda x: -x[0])
