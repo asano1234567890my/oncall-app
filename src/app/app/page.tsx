@@ -610,6 +610,27 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
         </div>
       </div>
 
+      {/* ソフト化警告バナー */}
+      {(() => {
+        const hasSoftEntries = Object.values(core.unavailableMap).some((entries) =>
+          entries?.some((e) => e.is_soft_penalty === true)
+        );
+        if (!hasSoftEntries) return null;
+        return (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <div className="text-xs font-bold text-amber-800">不可日がソフト化されています</div>
+                <div className="mt-1 text-[10px] text-amber-700 leading-relaxed">
+                  一部の希望が無視される場合があります。無視された医師には個別に説明してください。次回は希望日数に上限を設けるなど、公平な運用をおすすめします。
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 不可日 — 全医師チップ */}
       <div className="mb-6 rounded-xl border border-gray-100 bg-white p-3">
         <div className="flex items-center justify-between mb-2">
