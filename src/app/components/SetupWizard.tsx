@@ -16,7 +16,9 @@ type WizardState = {
   step: StepNumber;
   holidayShiftMode: "combined" | "split" | "";
   scheduleType: "full" | "partial" | "";
+  partialInputMode: "external" | "internal";
   externalSlotCount: number;
+  internalDayCount: number;
   doctorCount: number;
   doctorNames: string[];
   minShifts: number;
@@ -37,7 +39,9 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     step: 1,
     holidayShiftMode: "",
     scheduleType: "",
-    externalSlotCount: 22,
+    partialInputMode: "external" as const,
+    externalSlotCount: 4,
+    internalDayCount: 8,
     doctorCount: 8,
     doctorNames: Array.from({ length: 8 }, (_, i) => doctorLabel(i, 8)),
     minShifts: 1,
@@ -163,7 +167,9 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           interval_days: state.intervalDays,
           max_saturday_nights: state.maxSaturdayNights,
           holiday_shift_mode: state.holidayShiftMode || "combined",
-          external_slot_count: state.scheduleType === "partial" ? state.externalSlotCount : 0,
+          external_slot_count: state.scheduleType === "partial"
+            ? (state.partialInputMode === "internal" ? 30 - state.internalDayCount : state.externalSlotCount)
+            : 0,
         },
       };
       await fetch(`${apiUrl}/api/settings/optimizer_config`, {
@@ -348,40 +354,48 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               label="一部の日程のみ担当"
               description="非常勤が入る日がある、または特定の日だけ担当する場合"
               selected={state.scheduleType === "partial"}
-              onClick={() => setState((s) => ({ ...s, scheduleType: "partial", externalSlotCount: s.externalSlotCount || 22 }))}
+              onClick={() => setState((s) => ({ ...s, scheduleType: "partial" }))}
             />
           </div>
           {state.scheduleType === "partial" && (() => {
-            const totalDays = 30;
-            const internalDays = totalDays - state.externalSlotCount;
-            const setByExternal = (n: number) => setState((s) => ({ ...s, externalSlotCount: Math.max(1, Math.min(29, n)) }));
-            const setByInternal = (n: number) => setByExternal(totalDays - n);
+            const inputMode = state.partialInputMode;
+            const setMode = (mode: "external" | "internal") => setState((s) => ({ ...s, partialInputMode: mode }));
             return (
               <div className="mt-4 grid grid-cols-2 gap-3">
-                {/* 外部枠数 */}
-                <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-center">
-                  <div className="text-[11px] font-bold text-teal-700 mb-2">外部枠（月あたり）</div>
+                {/* 外部枠数で指定 */}
+                <button type="button" onClick={() => setMode("external")}
+                  className={`rounded-xl border-2 p-3 text-center transition ${
+                    inputMode === "external" ? "border-teal-500 bg-teal-50" : "border-gray-200 bg-gray-50 opacity-50"
+                  }`}>
+                  <div className="text-[11px] font-bold text-teal-700 mb-2">外部枠で指定</div>
                   <div className="flex items-center justify-center gap-2">
-                    <button onClick={() => setByExternal(state.externalSlotCount - 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100">−</button>
+                    <button type="button" disabled={inputMode !== "external"}
+                      onClick={(e) => { e.stopPropagation(); setState((s) => ({ ...s, externalSlotCount: Math.max(1, s.externalSlotCount - 1) })); }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100 disabled:opacity-30">−</button>
                     <span className="text-2xl font-bold text-teal-800 w-10 text-center">{state.externalSlotCount}</span>
-                    <button onClick={() => setByExternal(state.externalSlotCount + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100">+</button>
+                    <button type="button" disabled={inputMode !== "external"}
+                      onClick={(e) => { e.stopPropagation(); setState((s) => ({ ...s, externalSlotCount: Math.min(29, s.externalSlotCount + 1) })); }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100 disabled:opacity-30">+</button>
                   </div>
                   <div className="text-[10px] text-teal-500 mt-1">非常勤・担当外の日数</div>
-                </div>
-                {/* 勤務日数 */}
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center">
-                  <div className="text-[11px] font-bold text-blue-700 mb-2">勤務日数（月あたり）</div>
+                </button>
+                {/* 勤務日数で指定 */}
+                <button type="button" onClick={() => setMode("internal")}
+                  className={`rounded-xl border-2 p-3 text-center transition ${
+                    inputMode === "internal" ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-gray-50 opacity-50"
+                  }`}>
+                  <div className="text-[11px] font-bold text-blue-700 mb-2">勤務日数で指定</div>
                   <div className="flex items-center justify-center gap-2">
-                    <button onClick={() => setByInternal(internalDays - 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100">−</button>
-                    <span className="text-2xl font-bold text-blue-800 w-10 text-center">{internalDays}</span>
-                    <button onClick={() => setByInternal(internalDays + 1)}
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100">+</button>
+                    <button type="button" disabled={inputMode !== "internal"}
+                      onClick={(e) => { e.stopPropagation(); setState((s) => ({ ...s, internalDayCount: Math.max(1, (s.internalDayCount ?? 8) - 1) })); }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100 disabled:opacity-30">−</button>
+                    <span className="text-2xl font-bold text-blue-800 w-10 text-center">{state.internalDayCount}</span>
+                    <button type="button" disabled={inputMode !== "internal"}
+                      onClick={(e) => { e.stopPropagation(); setState((s) => ({ ...s, internalDayCount: Math.min(29, (s.internalDayCount ?? 8) + 1) })); }}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100 disabled:opacity-30">+</button>
                   </div>
                   <div className="text-[10px] text-blue-500 mt-1">常勤で埋める日数</div>
-                </div>
+                </button>
                 <p className="col-span-2 text-[11px] text-gray-500 text-center">詳細な日程は設定画面のカレンダーで指定できます</p>
               </div>
             );
@@ -533,7 +547,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           <div className="my-6 rounded-xl bg-blue-50 p-4 text-sm text-gray-700 space-y-1 text-left">
             <p>医師：{state.doctorNames.join("、")}</p>
             <p>当直形式：{state.holidayShiftMode === "combined" ? "日直・当直 同一" : "日直・当直 別"}</p>
-            <p>担当範囲：{state.scheduleType === "full" ? "全日程" : `一部（外部枠 ${state.externalSlotCount}回/月）`}</p>
+            <p>担当範囲：{state.scheduleType === "full" ? "全日程" : state.partialInputMode === "internal" ? `一部（勤務${state.internalDayCount}日/月）` : `一部（外部枠${state.externalSlotCount}日/月）`}</p>
             <p>月あたり：{state.minShifts}〜{state.maxShifts}回</p>
             <p>当直間隔：{state.intervalDays === 0 ? "翌日OK" : `${state.intervalDays}日`}</p>
             <p>土曜上限：{state.maxSaturdayNights >= 99 ? "制限なし" : `${state.maxSaturdayNights}回`}</p>
