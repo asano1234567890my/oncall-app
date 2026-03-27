@@ -88,6 +88,7 @@ uvicorn main:app --reload   # http://localhost:8000
 | `docs/database.md` | DBテーブル設計・マイグレーション履歴 |
 | `docs/development.md` | 開発環境セットアップ・よく使うコマンド |
 | `docs/product_strategy.md` | プロダクト戦略・ロードマップ・価格・GTM |
+| `docs/system_spec_for_ai_guide.md` | **AIガイド用システム仕様書**（機能実装時に必ず追記すること） |
 
 ---
 
@@ -101,6 +102,10 @@ uvicorn main:app --reload   # http://localhost:8000
 - 会話の中で決まったことはその場で反映する
 - docsが古い・漏れていると感じたら先に読み直して確認してから作業する
 - 作業完了後は `CURRENT_STATE.md`（プロジェクト内）→ 親ファイル（`C:\Users\user\CURRENT_STATE.md`）の順で更新する（親ファイルはOneDriveで自動同期されるため手動アップロード不要）
+- **機能実装・改修完了後は `docs/system_spec_for_ai_guide.md`（AIガイド用仕様書）も更新する**
+  - この文書はAIガイド（チャットUI）の知識ベースとなる
+  - 新機能・仕様変更・制約の追加/変更があれば該当セクションに追記
+  - 過去セッションの履歴は参照せず、現コードと仕様書が常に最新の真実
 
 ---
 
@@ -118,6 +123,7 @@ uvicorn main:app --reload   # http://localhost:8000
 | DBスキーマ変更 | `docs/database.md` |
 | 最適化ロジック変更 | `docs/optimizer.md` |
 | フロントエンド構造変更 | `docs/frontend.md` |
+| 機能追加・仕様変更（全般） | `docs/system_spec_for_ai_guide.md` |
 
 **順序：**
 1. 影響範囲を特定し、該当docsを更新
