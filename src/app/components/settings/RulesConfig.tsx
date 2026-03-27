@@ -7,7 +7,7 @@ import { ja } from "react-day-picker/locale";
 import { format } from "date-fns";
 import "react-day-picker/dist/style.css";
 import StepperNumberInput from "../inputs/StepperNumberInput";
-import TargetShiftPopover from "../TargetShiftPopover";
+import TargetShiftPopover, { externalLabels, internalLabels } from "../TargetShiftPopover";
 import type { HardConstraints, ExternalFixedDate } from "../../types/dashboard";
 import SettingsModalPortal from "./SettingsModalPortal";
 import { hardConstraintNumberInputs, hardConstraintToggleInputs, dayPickerBaseClassName, dayPickerWithNavClassNames } from "./shared";
@@ -360,10 +360,11 @@ export default function RulesConfig({
                     />
                     <TargetShiftPopover
                       open={Boolean(extPopover)}
-                      title={extPopover ? `${Number(extPopover.dateStr.slice(5,7))}/${Number(extPopover.dateStr.slice(8))} の外部枠設定` : "外部枠設定"}
+                      title={extPopover ? `${Number(extPopover.dateStr.slice(5,7))}/${Number(extPopover.dateStr.slice(8))} の設定` : "設定"}
                       currentValue={extPopover ? (getExtEntry(extPopover.dateStr)?.target_shift ?? null) : null}
                       onSelect={handleExtPopoverSelect}
                       onClose={() => setExtPopover(null)}
+                      labels={extInputMode === "internal" ? internalLabels : externalLabels}
                     />
                   </div>
                 </div>

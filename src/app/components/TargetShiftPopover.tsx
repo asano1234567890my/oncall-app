@@ -3,6 +3,13 @@
 import { useEffect } from "react";
 import type { TargetShift } from "../types/dashboard";
 
+type OptionLabels = {
+  all: string;
+  day: string;
+  night: string;
+  none: string;
+};
+
 type TargetShiftPopoverProps = {
   open: boolean;
   position?: { top: number; left: number } | null;
@@ -10,16 +17,23 @@ type TargetShiftPopoverProps = {
   currentValue: TargetShift | null;
   onSelect: (value: TargetShift | null) => void;
   onClose: () => void;
+  labels?: OptionLabels;
 };
 
-const options: Array<{ value: TargetShift | null; label: string; tone: string }> = [
-  { value: "all", label: "終日休み", tone: "border-slate-900 bg-slate-900 text-white" },
-  { value: "day", label: "日直のみ休み", tone: "border-amber-300 bg-amber-50 text-amber-900" },
-  { value: "night", label: "当直のみ休み", tone: "border-sky-300 bg-sky-50 text-sky-900" },
-  { value: null, label: "休みなし", tone: "border-gray-200 bg-white text-gray-700" },
+const defaultLabels: OptionLabels = { all: "終日休み", day: "日直のみ休み", night: "当直のみ休み", none: "休みなし" };
+
+const buildOptions = (labels: OptionLabels): Array<{ value: TargetShift | null; label: string; tone: string }> => [
+  { value: "all", label: labels.all, tone: "border-slate-900 bg-slate-900 text-white" },
+  { value: "day", label: labels.day, tone: "border-amber-300 bg-amber-50 text-amber-900" },
+  { value: "night", label: labels.night, tone: "border-sky-300 bg-sky-50 text-sky-900" },
+  { value: null, label: labels.none, tone: "border-gray-200 bg-white text-gray-700" },
 ];
 
-export default function TargetShiftPopover({ open, title, currentValue, onSelect, onClose }: TargetShiftPopoverProps) {
+export const externalLabels: OptionLabels = { all: "終日", day: "日直のみ", night: "当直のみ", none: "解除" };
+export const internalLabels: OptionLabels = { all: "終日勤務", day: "日直のみ勤務", night: "当直のみ勤務", none: "外部枠に戻す" };
+
+export default function TargetShiftPopover({ open, title, currentValue, onSelect, onClose, labels }: TargetShiftPopoverProps) {
+  const options = buildOptions(labels ?? defaultLabels);
   useEffect(() => {
     if (!open) return;
 

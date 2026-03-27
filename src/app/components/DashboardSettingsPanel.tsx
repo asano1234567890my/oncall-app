@@ -30,7 +30,7 @@ import type {
   UnavailableDateMap,
   ExternalFixedDate,
 } from "../types/dashboard";
-import TargetShiftPopover from "./TargetShiftPopover";
+import TargetShiftPopover, { externalLabels, internalLabels } from "./TargetShiftPopover";
 import type { WeightChangeSummary } from "./settings/shared";
 
 // ── External fixed dates editor ──
@@ -124,7 +124,7 @@ function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: Exter
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部枠設定` : "外部枠設定"}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の設定` : "設定"}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;
@@ -133,6 +133,7 @@ function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: Exter
               onChange(next.sort((a, b) => a.date.localeCompare(b.date)));
             }}
             onClose={() => setPopover(null)}
+            labels={inputMode === "internal" ? internalLabels : externalLabels}
           />
         </div>
       )}

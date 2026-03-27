@@ -27,7 +27,7 @@ import ImageImportModal from "../components/ImageImportModal";
 import InfeasibleGuideModal from "../components/InfeasibleGuideModal";
 import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
-import TargetShiftPopover from "../components/TargetShiftPopover";
+import TargetShiftPopover, { externalLabels, internalLabels } from "../components/TargetShiftPopover";
 import { DayPicker } from "react-day-picker";
 import { ja } from "react-day-picker/locale";
 import { format } from "date-fns";
@@ -1109,7 +1109,7 @@ function MobileExternalCalendarToggle({ dates, onChange, inputMode = "external" 
           />
           <TargetShiftPopover
             open={Boolean(popover)}
-            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の外部枠設定` : ""}
+            title={popover ? `${Number(popover.dateStr.slice(5,7))}/${Number(popover.dateStr.slice(8))} の設定` : ""}
             currentValue={popover ? (getEntry(popover.dateStr)?.target_shift ?? null) : null}
             onSelect={(value) => {
               if (!popover) return;
@@ -1118,6 +1118,7 @@ function MobileExternalCalendarToggle({ dates, onChange, inputMode = "external" 
               onChange(next.sort((a, b) => a.date.localeCompare(b.date)));
             }}
             onClose={() => setPopover(null)}
+            labels={inputMode === "internal" ? internalLabels : externalLabels}
           />
         </div>
       )}
