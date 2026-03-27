@@ -286,7 +286,7 @@ export function useScheduleConstraints({
       }
     }
 
-    if (maxSunholDays !== null && shiftType === "day" && holidayInfo.isHolidayLike) {
+    if (maxSunholDays !== null && !isCombinedMode && shiftType === "day" && holidayInfo.isHolidayLike) {
       const sunholDayCount =
         countDoctorAssignments(
           doctorId,
@@ -306,7 +306,7 @@ export function useScheduleConstraints({
           doctorId,
           scheduleRows,
           (rowEntry) => isHolidayLikeDay(rowEntry.day).isHolidayLike,
-          ["day", "night"],
+          isCombinedMode ? ["night"] : ["day", "night"],
           ignoreShiftKeys
         ) + 1;
       if (sunholWorkCount > maxSunholWorks) {
@@ -323,7 +323,8 @@ export function useScheduleConstraints({
           const rowHolidayLike = isHolidayLikeDay(rowEntry.day).isHolidayLike;
           if (rowHolidayLike) {
             let nextCount = count;
-            (["day", "night"] as const).forEach((candidateShiftType) => {
+            const sunholShiftTypes: readonly ShiftType[] = isCombinedMode ? ["night"] : ["day", "night"];
+            sunholShiftTypes.forEach((candidateShiftType) => {
               const shiftKey = getShiftKey(rowEntry.day, candidateShiftType);
               if (ignoreShiftKeys.has(shiftKey)) return;
               if (getShiftDoctorIdFromRow(rowEntry, candidateShiftType) === doctorId) nextCount += 1;
