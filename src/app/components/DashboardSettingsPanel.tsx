@@ -96,11 +96,7 @@ function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: Exter
             navLayout="after"
             onDayClick={handleDayClick}
             modifiers={inputMode === "internal" ? {
-              internalWorking: (day: Date) => {
-                const cm = calMonth.getMonth() + 1; const cy = calMonth.getFullYear();
-                if (day.getMonth() + 1 !== cm || day.getFullYear() !== cy) return false;
-                return !getEntry(format(day, "yyyy-MM-dd"));
-              },
+              internalWorking: (day: Date) => !!getEntry(format(day, "yyyy-MM-dd")),
               saturday: (day: Date) => day.getDay() === 6,
               sunday: (day: Date) => day.getDay() === 0,
             } : {
@@ -275,7 +271,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
   } = props;
 
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
-  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const extInputMode = hardConstraints.external_input_mode ?? "external";
   const [localInternalDays, setLocalInternalDays] = useState(8);
   const displayMonth = new Date(year, month - 1, 1);
 
@@ -413,34 +409,11 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             <>
               <div className="pl-3 border-l-2 border-teal-200 space-y-1.5">
                 <div className="flex gap-1 mb-1">
-                  <button type="button" onClick={() => {
-                    setExtInputMode("external");
-                    // 外部枠モード: カレンダーをクリア（空スタート）
-                    const dates = hardConstraints.external_fixed_dates ?? [];
-                    const now = new Date();
-                    const ty = now.getFullYear(); const tm = now.getMonth() + 2;
-                    const fy = tm > 12 ? ty + 1 : ty; const fm = tm > 12 ? 1 : tm;
-                    const other = dates.filter((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
-                    onHardConstraintChange("external_fixed_dates", other);
-                  }}
+                  <button type="button" onClick={() => onHardConstraintChange("external_input_mode", "external")}
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "external" ? "bg-teal-100 text-teal-700 border border-teal-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
                     外部枠数
                   </button>
-                  <button type="button" onClick={() => {
-                    setExtInputMode("internal");
-                    // 当月に外部日が未設定なら全日を外部で埋める（白紙スタート）
-                    const now = new Date();
-                    const targetY = now.getFullYear(); const targetM = now.getMonth() + 2; // 来月
-                    const existingDates = hardConstraints.external_fixed_dates ?? [];
-                    const hasEntries = existingDates.some((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) === targetY && Number(e.date.slice(5, 7)) === (targetM > 12 ? 1 : targetM));
-                    if (!hasEntries) {
-                      const fy = targetM > 12 ? targetY + 1 : targetY; const fm = targetM > 12 ? 1 : targetM;
-                      const dim = new Date(fy, fm, 0).getDate();
-                      const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(fy, fm - 1, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                      const other = existingDates.filter((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
-                      onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a: ExternalFixedDate, b: ExternalFixedDate) => a.date.localeCompare(b.date)));
-                    }
-                  }}
+                  <button type="button" onClick={() => onHardConstraintChange("external_input_mode", "internal")}
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "internal" ? "bg-blue-100 text-blue-700 border border-blue-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
                     勤務日数
                   </button>
@@ -478,10 +451,11 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                 )}
               </div>
               <ExternalFixedDatesEditor
-                dates={hardConstraints.external_fixed_dates ?? []}
+                dates={(extInputMode === "internal" ? hardConstraints.internal_fixed_dates : hardConstraints.external_fixed_dates) ?? []}
                 onChange={(next) => {
-                  onHardConstraintChange("external_fixed_dates", next);
-                  if (next.length > 0) onHardConstraintChange("external_slot_count", next.length);
+                  const key = extInputMode === "internal" ? "internal_fixed_dates" : "external_fixed_dates";
+                  onHardConstraintChange(key, next);
+                  if (extInputMode === "external" && next.length > 0) onHardConstraintChange("external_slot_count", next.length);
                 }}
                 inputMode={extInputMode}
               />

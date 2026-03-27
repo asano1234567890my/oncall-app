@@ -74,6 +74,8 @@ export type HardConstraints = {
   holiday_shift_mode: "combined" | "split";
   external_slot_count: number;
   external_fixed_dates: ExternalFixedDate[];
+  internal_fixed_dates: ExternalFixedDate[];
+  external_input_mode: "external" | "internal";
 };
 
 export type ExternalFixedDate = {
@@ -177,6 +179,8 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   holiday_shift_mode: "split",
   external_slot_count: 0,
   external_fixed_dates: [],
+  internal_fixed_dates: [],
+  external_input_mode: "external",
 };
 
 export type ShiftScores = {

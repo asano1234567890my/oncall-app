@@ -40,12 +40,15 @@ export default function RulesConfig({
     return new Date(now.getFullYear(), now.getMonth() + 1, 1);
   });
   const [extPopover, setExtPopover] = useState<{ dateStr: string } | null>(null);
-  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const extInputMode = hardConstraints.external_input_mode ?? "external";
+  const setExtInputMode = (mode: "external" | "internal") => onHardConstraintChange("external_input_mode", mode);
   const [localInternalDays, setLocalInternalDays] = useState(8);
   const targetDaysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
 
-  const externalDates: ExternalFixedDate[] = hardConstraints.external_fixed_dates ?? [];
-  const getExtEntry = (dateStr: string) => externalDates.find((e) => e.date === dateStr);
+  // モードに応じたカレンダーデータ（完全分離）
+  const calDataKey = extInputMode === "internal" ? "internal_fixed_dates" : "external_fixed_dates";
+  const calDates: ExternalFixedDate[] = (extInputMode === "internal" ? hardConstraints.internal_fixed_dates : hardConstraints.external_fixed_dates) ?? [];
+  const getExtEntry = (dateStr: string) => calDates.find((e) => e.date === dateStr);
 
   const isSundayOrHoliday = (day: Date) => day.getDay() === 0;
 
@@ -55,24 +58,19 @@ export default function RulesConfig({
       setExtPopover({ dateStr });
       return;
     }
-    // 平日・土曜: トグル
     const existing = getExtEntry(dateStr);
     const next = existing
-      ? externalDates.filter((e) => e.date !== dateStr)
-      : [...externalDates, { date: dateStr, target_shift: "all" as const }];
-    onHardConstraintChange("external_fixed_dates", next.sort((a, b) => a.date.localeCompare(b.date)));
+      ? calDates.filter((e) => e.date !== dateStr)
+      : [...calDates, { date: dateStr, target_shift: "all" as const }];
+    onHardConstraintChange(calDataKey, next.sort((a, b) => a.date.localeCompare(b.date)));
   };
 
   const handleExtPopoverSelect = (value: "all" | "day" | "night" | null) => {
     if (!extPopover) return;
     const dateStr = extPopover.dateStr;
-    const filtered = externalDates.filter((e) => e.date !== dateStr);
+    const filtered = calDates.filter((e) => e.date !== dateStr);
     const next = value ? [...filtered, { date: dateStr, target_shift: value }] : filtered;
-    onHardConstraintChange("external_fixed_dates", next.sort((a, b) => a.date.localeCompare(b.date)));
-  };
-
-  const removeExtDate = (dateStr: string) => {
-    onHardConstraintChange("external_fixed_dates", externalDates.filter((e) => e.date !== dateStr));
+    onHardConstraintChange(calDataKey, next.sort((a, b) => a.date.localeCompare(b.date)));
   };
 
   const getExtShiftLabel = (ts: string) => ts === "all" ? "[外]" : ts === "day" ? "[外日]" : "[外当]";
@@ -248,28 +246,11 @@ export default function RulesConfig({
                 <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
                   {/* 指定方法の切り替え */}
                   <div className="flex gap-1.5 mb-2">
-                    <button type="button" onClick={() => {
-                      setExtInputMode("external");
-                      // 外部枠モード: カレンダーをクリア（空スタート）
-                      const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                      const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                      onHardConstraintChange("external_fixed_dates", other);
-                    }}
+                    <button type="button" onClick={() => setExtInputMode("external")}
                       className={`flex-1 rounded-lg border-2 px-2 py-2 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
                       外部枠数で指定
                     </button>
-                    <button type="button" onClick={() => {
-                      setExtInputMode("internal");
-                      // 当月に外部日が未設定なら全日を外部で埋める（白紙スタート）
-                      const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                      const hasMonthEntries = externalDates.some((e) => Number(e.date.slice(0, 4)) === y && Number(e.date.slice(5, 7)) === m);
-                      if (!hasMonthEntries) {
-                        const dim = new Date(y, m, 0).getDate();
-                        const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m - 1, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                        onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-                      }
-                    }}
+                    <button type="button" onClick={() => setExtInputMode("internal")}
                       className={`flex-1 rounded-lg border-2 px-2 py-2 text-[11px] font-bold transition ${extInputMode === "internal" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400"}`}>
                       勤務日数で指定
                     </button>
@@ -321,15 +302,15 @@ export default function RulesConfig({
                         const y = calMonth.getFullYear(); const m = calMonth.getMonth();
                         const dim = new Date(y, m + 1, 0).getDate();
                         const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
-                        onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+                        const other = calDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+                        onHardConstraintChange(calDataKey, [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
                       }} className={`rounded border px-2 py-1 text-[10px] font-bold transition ${extInputMode === "internal" ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
                         {extInputMode === "internal" ? "全日勤務" : "全日外部"}
                       </button>
                       <button type="button" onClick={() => {
                         const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                        onHardConstraintChange("external_fixed_dates", other);
+                        const other = calDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+                        onHardConstraintChange(calDataKey, other);
                       }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">リセット</button>
                     </div>
                     <DayPicker
@@ -339,11 +320,7 @@ export default function RulesConfig({
                       navLayout="after"
                       onDayClick={handleExternalDayClick}
                       modifiers={extInputMode === "internal" ? {
-                        internalWorking: (day: Date) => {
-                          const m = calMonth.getMonth() + 1; const y = calMonth.getFullYear();
-                          if (day.getMonth() + 1 !== m || day.getFullYear() !== y) return false;
-                          return !getExtEntry(format(day, "yyyy-MM-dd"));
-                        },
+                        internalWorking: (day: Date) => !!getExtEntry(format(day, "yyyy-MM-dd")),
                         saturday: (day: Date) => day.getDay() === 6,
                         sunday: (day: Date) => day.getDay() === 0,
                       } : {

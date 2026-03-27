@@ -232,18 +232,34 @@ export function useScheduleApi({
     return next;
   };
 
-  const formatHardConstraintsForOptimize = () => ({
-    interval_days: sanitizeConstraintValue(hardConstraints.interval_days),
-    max_weekend_holiday_works: sanitizeConstraintValue(hardConstraints.max_weekend_holiday_works),
-    max_saturday_nights: sanitizeConstraintValue(hardConstraints.max_saturday_nights),
-    max_sunhol_days: hardConstraints.max_sunhol_days ?? null,
-    max_sunhol_works: hardConstraints.max_sunhol_works ?? null,
-    prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
-    respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
-    holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
-    external_slot_count: hardConstraints.external_slot_count ?? 0,
-    external_fixed_dates: (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift })),
-  });
+  const formatHardConstraintsForOptimize = () => {
+    // 勤務日数モード: internal_fixed_dates の補集合を external_fixed_dates として送信
+    let extDates = (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift }));
+    if (hardConstraints.external_input_mode === "internal") {
+      const internalDates = new Set((hardConstraints.internal_fixed_dates ?? []).map((e) => e.date));
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      extDates = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${year}-${pad(month)}-${pad(d)}`;
+        if (!internalDates.has(dateStr)) {
+          extDates.push({ date: dateStr, target_shift: "all" });
+        }
+      }
+    }
+    return {
+      interval_days: sanitizeConstraintValue(hardConstraints.interval_days),
+      max_weekend_holiday_works: sanitizeConstraintValue(hardConstraints.max_weekend_holiday_works),
+      max_saturday_nights: sanitizeConstraintValue(hardConstraints.max_saturday_nights),
+      max_sunhol_days: hardConstraints.max_sunhol_days ?? null,
+      max_sunhol_works: hardConstraints.max_sunhol_works ?? null,
+      prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
+      respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
+      holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
+      external_slot_count: hardConstraints.external_slot_count ?? 0,
+      external_fixed_dates: extDates,
+    };
+  };
 
   const formatPreviousMonthShiftsForOptimize = () => {
     const activeDoctorIds = new Set(activeDoctors.map((doctor) => doctor.id));

@@ -850,7 +850,7 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
   saveMessage: string;
 }) {
   const hc = hardConstraints;
-  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const extInputMode = hardConstraints.external_input_mode ?? "external";
   const [localInternalDays, setLocalInternalDays] = useState(8);
 
   return (
@@ -942,32 +942,11 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
               <div className="space-y-1.5">
                 <div className="flex gap-1.5 mb-1">
-                  <button type="button" onClick={() => {
-                    setExtInputMode("external");
-                    const existingDates = hc.external_fixed_dates ?? [];
-                    const now = new Date();
-                    const fm = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
-                    const fy = fm === 1 ? now.getFullYear() + 1 : now.getFullYear();
-                    const other = existingDates.filter((e) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
-                    onHardConstraintChange("external_fixed_dates", other);
-                  }}
+                  <button type="button" onClick={() => onHardConstraintChange("external_input_mode", "external")}
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
                     外部枠数
                   </button>
-                  <button type="button" onClick={() => {
-                    setExtInputMode("internal");
-                    const existingDates = hc.external_fixed_dates ?? [];
-                    const now = new Date();
-                    const fy = now.getFullYear(); const fm = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
-                    const ay = fm === 1 ? fy + 1 : fy;
-                    const hasEntries = existingDates.some((e) => Number(e.date.slice(0, 4)) === ay && Number(e.date.slice(5, 7)) === fm);
-                    if (!hasEntries) {
-                      const dim = new Date(ay, fm, 0).getDate();
-                      const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(ay, fm - 1, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                      const other = existingDates.filter((e) => Number(e.date.slice(0, 4)) !== ay || Number(e.date.slice(5, 7)) !== fm);
-                      onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-                    }
-                  }}
+                  <button type="button" onClick={() => onHardConstraintChange("external_input_mode", "internal")}
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "internal" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400"}`}>
                     勤務日数
                   </button>
@@ -1007,10 +986,11 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
                 )}
               </div>
               <MobileExternalCalendarToggle
-                dates={hc.external_fixed_dates ?? []}
+                dates={(extInputMode === "internal" ? hc.internal_fixed_dates : hc.external_fixed_dates) ?? []}
                 onChange={(next) => {
-                  onHardConstraintChange("external_fixed_dates", next);
-                  if (next.length > 0) onHardConstraintChange("external_slot_count", next.length);
+                  const key = extInputMode === "internal" ? "internal_fixed_dates" : "external_fixed_dates";
+                  onHardConstraintChange(key, next);
+                  if (extInputMode === "external" && next.length > 0) onHardConstraintChange("external_slot_count", next.length);
                 }}
                 inputMode={extInputMode}
               />
@@ -1089,11 +1069,7 @@ function MobileExternalCalendarToggle({ dates, onChange, inputMode = "external" 
             navLayout="after"
             onDayClick={handleDayClick}
             modifiers={inputMode === "internal" ? {
-              internalWorking: (day: Date) => {
-                const cm = calMonth.getMonth() + 1; const cy = calMonth.getFullYear();
-                if (day.getMonth() + 1 !== cm || day.getFullYear() !== cy) return false;
-                return !getEntry(format(day, "yyyy-MM-dd"));
-              },
+              internalWorking: (day: Date) => !!getEntry(format(day, "yyyy-MM-dd")),
               saturday: (day: Date) => day.getDay() === 6,
               sunday: (day: Date) => day.getDay() === 0,
             } : {
