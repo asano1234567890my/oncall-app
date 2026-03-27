@@ -11,12 +11,14 @@ export type UnavailableDayRecord = {
 export type UnavailableDateEntry = {
   date: string;
   target_shift: TargetShift;
+  is_soft_penalty?: boolean;
 };
 
 export type FixedUnavailableWeekdayEntry = {
   day_of_week: number;
   weekday?: number | null;
   target_shift: TargetShift;
+  is_soft_penalty?: boolean;
 };
 
 export type Doctor = {

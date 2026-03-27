@@ -187,16 +187,19 @@ export function useScheduleApi({
     const prefix = `${year}-${pad2(month)}-`;
     const next: Record<
       string,
-      { date: number; target_shift: "all" | "day" | "night"; is_soft_penalty: false }[]
+      { date: number; target_shift: "all" | "day" | "night"; is_soft_penalty: boolean }[]
     > = {};
 
     Object.entries(filtered).forEach(([doctorId, entries]) => {
+      // normalizeはdate+target_shiftのみ返すので、元エントリからis_soft_penaltyを引き継ぐ
+      const rawEntries = (entries ?? []).filter((e) => typeof e.date === "string" && e.date.startsWith(prefix));
+      const softMap = new Map(rawEntries.map((e) => [e.date, e.is_soft_penalty ?? false]));
       const unavailableEntries = normalizeUnavailableDateEntries(entries ?? [])
         .filter((entry) => entry.date.startsWith(prefix))
         .map((entry) => ({
           date: Number.parseInt(entry.date.slice(-2), 10),
           target_shift: entry.target_shift,
-          is_soft_penalty: false as const,
+          is_soft_penalty: softMap.get(entry.date) ?? false,
         }))
         .filter((entry) => Number.isFinite(entry.date));
 
@@ -212,7 +215,7 @@ export function useScheduleApi({
     const filtered = filterRecordByActiveDoctors(input);
     const next: Record<
       string,
-      { day_of_week: number; target_shift: "all" | "day" | "night"; is_soft_penalty: false }[]
+      { day_of_week: number; target_shift: "all" | "day" | "night"; is_soft_penalty: boolean }[]
     > = {};
 
     Object.entries(filtered).forEach(([doctorId, entries]) => {
@@ -220,7 +223,7 @@ export function useScheduleApi({
         .map((entry) => ({
           day_of_week: entry.day_of_week,
           target_shift: entry.target_shift,
-          is_soft_penalty: false as const,
+          is_soft_penalty: false,  // 固定不可曜日はbulk-soften対象外（常にハード制約）
         }))
         .filter((entry) => entry.day_of_week >= 0 && entry.day_of_week <= 7);
 

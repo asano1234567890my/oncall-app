@@ -915,8 +915,11 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                             onClick={async () => {
                               if (!window.confirm(
                                 "⚠️ 全医師の個別不可日をソフト制約に変換します。\n\n" +
-                                "・ソフト制約 = なるべく尊重するが、解なし時は無視される\n" +
-                                "・固定不可曜日はハード制約のまま（変更なし）\n\n" +
+                                "ソフト化すると、希望が多すぎてスケジュールが作れない場合に、一部の希望が無視されることがあります。\n\n" +
+                                "【重要】\n" +
+                                "・希望が無視された医師には必ず個別に説明してください\n" +
+                                "・次回以降は希望日数に上限を設けるなど、公平性を保つ運用をおすすめします\n" +
+                                "・固定不可曜日はハード制約のまま変更されません\n\n" +
                                 "実行しますか？"
                               )) return;
                               try {
@@ -928,6 +931,8 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 if (!res.ok) throw new Error("失敗しました");
                                 const data = await res.json();
                                 toast.success(data.message || "一括ソフト化しました");
+                                // 不可日データを反映するためリロード
+                                setTimeout(() => window.location.reload(), 1000);
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "一括ソフト化に失敗しました");
                               }
@@ -950,6 +955,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 if (!res.ok) throw new Error("失敗しました");
                                 const data = await res.json();
                                 toast.success(data.message || "ハード制約に復元しました");
+                                setTimeout(() => window.location.reload(), 1000);
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "復元に失敗しました");
                               }
