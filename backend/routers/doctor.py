@@ -224,7 +224,7 @@ async def create_external_doctor(
         )
         existing_count = result.scalar() or 0
         if existing_count >= 31:
-            raise HTTPException(status_code=400, detail="外部医師は最大31人です")
+            return {"message": "外部医師は既に上限（31人）です", "created": False}
         new_doc = Doctor(
             hospital_id=hospital_id,
             name=f"外部医師{existing_count + 1}",
