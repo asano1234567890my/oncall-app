@@ -2004,19 +2004,22 @@ class OnCallOptimizer:
                 external_doctor_indices=self.external_doctor_indices,
             )
             if remove_score_min:
+                # スコア下限を外す: min=0、上限と個別上限はそのまま
                 kwargs["score_min"] = 0.0
                 kwargs["score_max"] = self.score_max_float
                 kwargs["max_score_by_doctor"] = self.max_score_by_doctor
             elif remove_score_max:
+                # スコア上限を外す: max=99、下限はそのまま、個別上限も全解除
                 kwargs["score_min"] = self.score_min_float
                 kwargs["score_max"] = 99.0
-            elif not remove_score_max:
+                kwargs["min_score_by_doctor"] = self.min_score_by_doctor
+                kwargs["max_score_by_doctor"] = {}
+            else:
+                # 通常: 全パラメータそのまま
                 kwargs["score_min"] = self.score_min_float
                 kwargs["score_max"] = self.score_max_float
                 kwargs["min_score_by_doctor"] = self.min_score_by_doctor
                 kwargs["max_score_by_doctor"] = self.max_score_by_doctor
-                kwargs["min_score_by_doctor"] = self.min_score_by_doctor
-                kwargs["max_score_by_doctor"] = {}  # 個別上限も全解除
             trial = OnCallOptimizer(**kwargs)
             trial.build_model()
             solver = cp_model.CpSolver()
