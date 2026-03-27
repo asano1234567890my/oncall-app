@@ -309,22 +309,22 @@ export default function RulesConfig({
                         ? "タップした日が勤務日になります。それ以外が外部枠です。"
                         : "日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。"}
                     </div>
-                    {extInputMode === "external" && (
-                      <div className="mb-2 flex gap-1.5">
-                        <button type="button" onClick={() => {
-                          const y = calMonth.getFullYear(); const m = calMonth.getMonth();
-                          const dim = new Date(y, m + 1, 0).getDate();
-                          const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                          const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
-                          onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-                        }} className="rounded border border-teal-300 bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
-                        <button type="button" onClick={() => {
-                          const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                          const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                          onHardConstraintChange("external_fixed_dates", other);
-                        }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
-                      </div>
-                    )}
+                    <div className="mb-2 flex gap-1.5">
+                      <button type="button" onClick={() => {
+                        const y = calMonth.getFullYear(); const m = calMonth.getMonth();
+                        const dim = new Date(y, m + 1, 0).getDate();
+                        const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+                        onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+                      }} className={`rounded border px-2 py-1 text-[10px] font-bold transition ${extInputMode === "internal" ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
+                        {extInputMode === "internal" ? "全日勤務" : "全日外部"}
+                      </button>
+                      <button type="button" onClick={() => {
+                        const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+                        onHardConstraintChange("external_fixed_dates", other);
+                      }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">リセット</button>
+                    </div>
                     <DayPicker
                       month={calMonth}
                       onMonthChange={setCalMonth}

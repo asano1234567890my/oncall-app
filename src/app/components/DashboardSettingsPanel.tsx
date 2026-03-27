@@ -90,22 +90,22 @@ function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: Exter
           <div className="text-[9px] text-gray-500 mb-1">
             {inputMode === "internal" ? "勤務する日をタップ。それ以外が外部枠になります。" : "外部枠にする日をタップ。日曜・祝日は日直/当直を選択できます。"}
           </div>
-          {inputMode === "external" && (
-            <div className="mb-1.5 flex gap-1">
-              <button type="button" onClick={() => {
-                const y = calMonth.getFullYear(); const m = calMonth.getMonth();
-                const dim = new Date(y, m + 1, 0).getDate();
-                const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
-                const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
-                onChange([...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-              }} className="rounded border border-teal-300 bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
-              <button type="button" onClick={() => {
-                const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                onChange(other);
-              }} className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
-            </div>
-          )}
+          <div className="mb-1.5 flex gap-1">
+            <button type="button" onClick={() => {
+              const y = calMonth.getFullYear(); const m = calMonth.getMonth();
+              const dim = new Date(y, m + 1, 0).getDate();
+              const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+              onChange([...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+            }} className={`rounded border px-1.5 py-0.5 text-[9px] font-bold transition ${inputMode === "internal" ? "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100" : "border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"}`}>
+              {inputMode === "internal" ? "全日勤務" : "全日外部"}
+            </button>
+            <button type="button" onClick={() => {
+              const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+              onChange(other);
+            }} className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-100 transition">リセット</button>
+          </div>
           <DayPicker
             month={calMonth}
             onMonthChange={setCalMonth}
