@@ -213,7 +213,8 @@ export function useScheduleConstraints({
     const maxSunholDays = getMaxSunholDays();
     const maxSunholWorks = getMaxSunholWorks();
     const maxWeekendHolidayWorks = getMaxWeekendHolidayWorks();
-    const preventSunholConsecutive = Boolean(hardConstraints.prevent_sunhol_consecutive);
+    const isCombinedMode = hardConstraints.holiday_shift_mode === "combined";
+    const preventSunholConsecutive = !isCombinedMode && Boolean(hardConstraints.prevent_sunhol_consecutive);
     const respectUnavailableDays = Boolean(hardConstraints.respect_unavailable_days);
 
     if (shiftType === "day" && !holidayInfo.isHolidayLike) {
