@@ -929,23 +929,40 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
           {(hc.external_slot_count ?? 0) > 0 && (() => {
             const hasFixedDates = (hc.external_fixed_dates?.length ?? 0) > 0;
             const fixedCount = hc.external_fixed_dates?.length ?? 0;
+            const extCount = hc.external_slot_count ?? 0;
+            const intCount = 30 - extCount;
             return (
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-[11px] font-bold ${hasFixedDates ? "text-gray-400" : "text-gray-600"}`}>
-                  枠数{hasFixedDates ? "（カレンダー連動）" : ""}
-                </span>
-                <div className={`flex items-center gap-1.5 ${hasFixedDates ? "opacity-50 pointer-events-none" : ""}`}>
-                  <StepperNumberInput
-                    value={hasFixedDates ? fixedCount : (hc.external_slot_count ?? 0)}
-                    onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
-                    fallbackValue={0}
-                    min={0} max={20} step={1} inputMode="numeric"
-                    inputClassName="text-sm font-bold !py-1 !px-1"
-                    buttonClassName="!h-7 !w-7 text-sm"
-                    className="max-w-[140px]"
-                  />
-                  <span className="text-[11px] text-gray-400 shrink-0">回/月</span>
+              <div className={`space-y-1.5 ${hasFixedDates ? "opacity-50 pointer-events-none" : ""}`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-teal-700">外部枠</span>
+                  <div className="flex items-center gap-1.5">
+                    <StepperNumberInput
+                      value={hasFixedDates ? fixedCount : extCount}
+                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                      fallbackValue={0}
+                      min={0} max={29} step={1} inputMode="numeric"
+                      inputClassName="text-sm font-bold !py-1 !px-1"
+                      buttonClassName="!h-7 !w-7 text-sm"
+                      className="max-w-[130px]"
+                    />
+                    <span className="text-[10px] text-gray-400 shrink-0">回</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-blue-700">勤務日数</span>
+                  <div className="flex items-center gap-1.5">
+                    <StepperNumberInput
+                      value={hasFixedDates ? 30 - fixedCount : intCount}
+                      onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
+                      fallbackValue={8}
+                      min={1} max={30} step={1} inputMode="numeric"
+                      inputClassName="text-sm font-bold !py-1 !px-1"
+                      buttonClassName="!h-7 !w-7 text-sm"
+                      className="max-w-[130px]"
+                    />
+                    <span className="text-[10px] text-gray-400 shrink-0">日</span>
+                  </div>
                 </div>
               </div>
               <MobileExternalCalendarToggle

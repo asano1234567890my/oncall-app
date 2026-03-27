@@ -40,6 +40,7 @@ export default function RulesConfig({
     return new Date(now.getFullYear(), now.getMonth() + 1, 1);
   });
   const [extPopover, setExtPopover] = useState<{ dateStr: string } | null>(null);
+  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
 
   const externalDates: ExternalFixedDate[] = hardConstraints.external_fixed_dates ?? [];
   const getExtEntry = (dateStr: string) => externalDates.find((e) => e.date === dateStr);
@@ -243,20 +244,48 @@ export default function RulesConfig({
               </div>
               {((hardConstraints.external_slot_count ?? 0) > 0 || (hardConstraints.external_fixed_dates?.length ?? 0) > 0) && (
                 <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                  <label className="block">
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部枠（常勤以外）数（月あたり）</div>
-                    <div className="mb-1 text-[10px] text-gray-500">この回数分の枠を空けて、残りを常勤医師で生成します</div>
-                    <StepperNumberInput
-                      value={hardConstraints.external_slot_count ?? 0}
-                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
-                      fallbackValue={0}
-                      min={0}
-                      max={20}
-                      step={1}
-                      inputMode="numeric"
-                      inputClassName="text-sm font-bold"
-                    />
-                  </label>
+                  {/* 指定方法の切り替え */}
+                  <div className="flex gap-1.5 mb-2">
+                    <button type="button" onClick={() => setExtInputMode("external")}
+                      className={`flex-1 rounded-lg border-2 px-2 py-2 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
+                      外部枠数で指定
+                    </button>
+                    <button type="button" onClick={() => setExtInputMode("internal")}
+                      className={`flex-1 rounded-lg border-2 px-2 py-2 text-[11px] font-bold transition ${extInputMode === "internal" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400"}`}>
+                      勤務日数で指定
+                    </button>
+                  </div>
+                  {extInputMode === "external" ? (
+                    <label className="block">
+                      <div className="mb-1 text-[11px] font-bold text-teal-700">外部枠数（月あたり）</div>
+                      <div className="mb-1 text-[10px] text-gray-500">この回数分を外部枠にして、残りを常勤で生成します</div>
+                      <StepperNumberInput
+                        value={hardConstraints.external_slot_count ?? 0}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                        fallbackValue={0}
+                        min={0}
+                        max={29}
+                        step={1}
+                        inputMode="numeric"
+                        inputClassName="text-sm font-bold"
+                      />
+                    </label>
+                  ) : (
+                    <label className="block">
+                      <div className="mb-1 text-[11px] font-bold text-blue-700">勤務日数（月あたり）</div>
+                      <div className="mb-1 text-[10px] text-gray-500">常勤で埋める日数を指定。残りが外部枠になります</div>
+                      <StepperNumberInput
+                        value={30 - (hardConstraints.external_slot_count ?? 0)}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
+                        fallbackValue={8}
+                        min={1}
+                        max={30}
+                        step={1}
+                        inputMode="numeric"
+                        inputClassName="text-sm font-bold"
+                      />
+                    </label>
+                  )}
 
                   {/* 確定日カレンダー */}
                   <div>

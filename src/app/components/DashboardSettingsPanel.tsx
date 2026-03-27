@@ -410,20 +410,38 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
           {(hardConstraints.external_slot_count ?? 0) > 0 && (() => {
             const hasFixed = (hardConstraints.external_fixed_dates?.length ?? 0) > 0;
             const fixedCount = hardConstraints.external_fixed_dates?.length ?? 0;
+            const extCount = hardConstraints.external_slot_count ?? 0;
+            const intCount = 30 - extCount;
             return (
             <>
-              <div className={`flex items-center justify-between gap-2 pl-3 border-l-2 border-blue-200 ${hasFixed ? "opacity-50" : ""}`}>
-                <span className="text-xs text-gray-600">枠数{hasFixed ? "（カレンダー連動）" : "（月あたり）"}</span>
-                <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
-                  <StepperNumberInput
-                    value={hasFixed ? fixedCount : (hardConstraints.external_slot_count ?? 0)}
-                    onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
-                    fallbackValue={0}
-                    min={0} max={20} step={1}
-                    inputMode="numeric"
-                    inputClassName="text-xs font-bold w-12 text-center"
-                  />
-                  <span className="text-[10px] text-gray-400 w-4">回</span>
+              <div className={`pl-3 border-l-2 border-teal-200 space-y-1.5 ${hasFixed ? "opacity-50" : ""}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold text-teal-700">外部枠</span>
+                  <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
+                    <StepperNumberInput
+                      value={hasFixed ? fixedCount : extCount}
+                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                      fallbackValue={0}
+                      min={0} max={29} step={1}
+                      inputMode="numeric"
+                      inputClassName="text-xs font-bold w-12 text-center"
+                    />
+                    <span className="text-[10px] text-gray-400 w-4">回</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-bold text-blue-700">勤務日数</span>
+                  <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
+                    <StepperNumberInput
+                      value={hasFixed ? 30 - fixedCount : intCount}
+                      onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
+                      fallbackValue={8}
+                      min={1} max={30} step={1}
+                      inputMode="numeric"
+                      inputClassName="text-xs font-bold w-12 text-center"
+                    />
+                    <span className="text-[10px] text-gray-400 w-4">日</span>
+                  </div>
                 </div>
               </div>
               <ExternalFixedDatesEditor
