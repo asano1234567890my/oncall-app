@@ -982,9 +982,9 @@ class OnCallOptimizer:
                     for d in doctors:
                         self.model.Add(self.day_shifts[(d, day)] == 0)
 
-        # 2b) 外部医師は当月最大1回勤務
+        # 2b) 外部医師は当月ちょうど1回勤務（枠数分を必ず外部が担当）
         for d in ext_indices:
-            self.model.Add(sum(self.work[(d, day)] for day in days) <= 1)
+            self.model.Add(sum(self.work[(d, day)] for day in days) == 1)
 
         # 3) hard: prevent same-day day/night double assignment
         if prevent_sunhol_consecutive:
@@ -1648,9 +1648,9 @@ class OnCallOptimizer:
                     for d in doctors:
                         model.Add(day_shifts[(d, day)] == 0)
 
-        # External doctors: max 1 shift per month (diagnostic mode)
+        # External doctors: exactly 1 shift per month (diagnostic mode)
         for d in ext_idx_diag:
-            model.Add(sum(work[(d, day)] for day in days) <= 1)
+            model.Add(sum(work[(d, day)] for day in days) == 1)
 
         # --- Prevent same-day double (NOT wrapped — structural) ---
         if prevent_sunhol_consecutive:
