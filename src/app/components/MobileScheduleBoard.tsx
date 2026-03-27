@@ -89,11 +89,14 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
   })() : false;
 
   // Build doctor constraint info for the action sheet
+  const { externalDoctors, externalScoreTotal } = core;
   const doctorOptions = useMemo(() => {
     if (!sheetTarget) return [];
     const { day, shiftType } = sheetTarget;
     const ignoreKeys = new Set([getShiftKey(day, shiftType)]);
-    return activeDoctors.map((doc) => {
+
+    // 常勤医師
+    const internalOptions = activeDoctors.map((doc) => {
       const entry = scoreEntries.find((e) => e.doctorId === doc.id);
       const msg = getPlacementConstraintMessage(doc.id, day, shiftType, { ignoreShiftKeys: ignoreKeys });
       return {
@@ -103,9 +106,34 @@ export default function MobileScheduleBoard({ core, onOpenSettings, onOpenDoctor
         target: entry?.target ?? null,
         tone: (entry?.tone ?? "default") as DoctorScoreEntry["tone"],
         constraintMessage: msg,
+        isExternal: false,
       };
     });
-  }, [sheetTarget, activeDoctors, scoreEntries, getPlacementConstraintMessage]);
+
+    // 外部医師（未使用のIDを1つ選んで表示）
+    if (externalDoctors.length > 0) {
+      const usedExtIds = new Set<string>();
+      schedule.forEach((row) => {
+        if (row.day_shift && externalDoctorIds?.has(row.day_shift)) usedExtIds.add(row.day_shift);
+        if (row.night_shift && externalDoctorIds?.has(row.night_shift)) usedExtIds.add(row.night_shift);
+      });
+      const availableExt = externalDoctors.find((d) => !usedExtIds.has(d.id));
+      const extId = availableExt?.id ?? externalDoctors[0]?.id;
+      if (extId) {
+        internalOptions.push({
+          doctorId: extId,
+          name: `外部医師（${usedExtIds.size}回配置中）`,
+          score: externalScoreTotal ?? 0,
+          target: null,
+          tone: "default" as DoctorScoreEntry["tone"],
+          constraintMessage: null,
+          isExternal: true,
+        });
+      }
+    }
+
+    return internalOptions;
+  }, [sheetTarget, activeDoctors, externalDoctors, externalDoctorIds, externalScoreTotal, schedule, scoreEntries, getPlacementConstraintMessage]);
 
   const handleSheetAssign = useCallback((doctorId: string) => {
     if (!sheetTarget) return;
