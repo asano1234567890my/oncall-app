@@ -170,6 +170,8 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
           external_slot_count: state.scheduleType === "partial"
             ? (state.partialInputMode === "internal" ? 30 - state.internalDayCount : state.externalSlotCount)
             : 0,
+          internal_day_count: state.scheduleType === "partial" ? state.internalDayCount : 8,
+          external_input_mode: state.scheduleType === "partial" ? state.partialInputMode : "external",
         },
       };
       await fetch(`${apiUrl}/api/settings/optimizer_config`, {
