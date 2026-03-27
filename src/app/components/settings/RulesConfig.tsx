@@ -298,38 +298,50 @@ export default function RulesConfig({
                         ? "タップした日が勤務日になります。それ以外が外部枠です。"
                         : "日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。"}
                     </div>
-                    <div className="mb-2 flex gap-1.5">
-                      <button type="button" onClick={() => {
-                        const y = calMonth.getFullYear(); const m = calMonth.getMonth();
-                        const daysInMonth = new Date(y, m + 1, 0).getDate();
-                        const all = Array.from({ length: daysInMonth }, (_, i) => {
-                          const d = new Date(y, m, i + 1);
-                          return { date: format(d, "yyyy-MM-dd"), target_shift: "all" as const };
-                        });
-                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
-                        onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-                      }} className="rounded border border-teal-300 bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
-                      <button type="button" onClick={() => {
-                        const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-                        const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-                        onHardConstraintChange("external_fixed_dates", other);
-                      }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
-                    </div>
+                    {extInputMode === "external" && (
+                      <div className="mb-2 flex gap-1.5">
+                        <button type="button" onClick={() => {
+                          const y = calMonth.getFullYear(); const m = calMonth.getMonth();
+                          const dim = new Date(y, m + 1, 0).getDate();
+                          const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+                          const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+                          onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+                        }} className="rounded border border-teal-300 bg-teal-50 px-2 py-1 text-[10px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
+                        <button type="button" onClick={() => {
+                          const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+                          const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+                          onHardConstraintChange("external_fixed_dates", other);
+                        }} className="rounded border border-gray-300 bg-white px-2 py-1 text-[10px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
+                      </div>
+                    )}
                     <DayPicker
                       month={calMonth}
                       onMonthChange={setCalMonth}
                       locale={ja}
                       navLayout="after"
                       onDayClick={handleExternalDayClick}
-                      modifiers={{
+                      modifiers={extInputMode === "internal" ? {
+                        internalWorking: (day: Date) => {
+                          const m = calMonth.getMonth() + 1; const y = calMonth.getFullYear();
+                          if (day.getMonth() + 1 !== m || day.getFullYear() !== y) return false;
+                          return !getExtEntry(format(day, "yyyy-MM-dd"));
+                        },
+                        saturday: (day: Date) => day.getDay() === 6,
+                        sunday: (day: Date) => day.getDay() === 0,
+                      } : {
                         externalFixed: (day: Date) => !!getExtEntry(format(day, "yyyy-MM-dd")),
                         saturday: (day: Date) => day.getDay() === 6,
                         sunday: (day: Date) => day.getDay() === 0,
                       }}
                       className={dayPickerBaseClassName}
                       classNames={dayPickerWithNavClassNames}
-                      modifiersClassNames={{
-                        externalFixed: "[&>button]:!bg-orange-200 [&>button]:!text-orange-900 [&>button]:!border-orange-400 [&>button]:font-bold",
+                      modifiersClassNames={extInputMode === "internal" ? {
+                        internalWorking: "[&>button]:!bg-blue-200 [&>button]:!text-blue-900 [&>button]:!border-blue-400 [&>button]:font-bold",
+                        saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
+                        sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
+                        today: "[&>button]:ring-1 [&>button]:ring-indigo-200",
+                      } : {
+                        externalFixed: "[&>button]:!bg-teal-200 [&>button]:!text-teal-900 [&>button]:!border-teal-400 [&>button]:font-bold",
                         saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
                         sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
                         today: "[&>button]:ring-1 [&>button]:ring-indigo-200",

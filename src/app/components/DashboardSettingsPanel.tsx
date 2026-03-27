@@ -34,7 +34,7 @@ import TargetShiftPopover from "./TargetShiftPopover";
 import type { WeightChangeSummary } from "./settings/shared";
 
 // ── External fixed dates editor ──
-function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDate[]; onChange: (dates: ExternalFixedDate[]) => void }) {
+function ExternalFixedDatesEditor({ dates, onChange, inputMode }: { dates: ExternalFixedDate[]; onChange: (dates: ExternalFixedDate[]) => void; inputMode: "external" | "internal" }) {
   const [calMonth, setCalMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth() + 1, 1);
@@ -66,7 +66,7 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
         onClick={() => setIsOpen(!isOpen)}
         className="text-[10px] text-blue-600 font-bold hover:underline"
       >
-        {isOpen ? "▼ 確定日カレンダーを閉じる" : "▶ 外部枠にする日を指定"}
+        {isOpen ? "▼ カレンダーを閉じる" : inputMode === "internal" ? "▶ 勤務する日を指定" : "▶ 外部枠にする日を指定"}
       </button>
       {(() => {
         const calY = calMonth.getFullYear();
@@ -87,39 +87,53 @@ function ExternalFixedDatesEditor({ dates, onChange }: { dates: ExternalFixedDat
       })()}
       {isOpen && (
         <div className="mt-2">
-          <div className="text-[9px] text-gray-500 mb-1">日曜・祝日は日直/当直を選択できます</div>
-          <div className="mb-1.5 flex gap-1">
-            <button type="button" onClick={() => {
-              const y = calMonth.getFullYear(); const m = calMonth.getMonth();
-              const daysInMonth = new Date(y, m + 1, 0).getDate();
-              const all = Array.from({ length: daysInMonth }, (_, i) => {
-                const d = new Date(y, m, i + 1);
-                return { date: format(d, "yyyy-MM-dd"), target_shift: "all" as const };
-              });
-              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
-              onChange([...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
-            }} className="rounded border border-teal-300 bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
-            <button type="button" onClick={() => {
-              const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
-              const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
-              onChange(other);
-            }} className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
+          <div className="text-[9px] text-gray-500 mb-1">
+            {inputMode === "internal" ? "勤務する日をタップ。それ以外が外部枠になります。" : "外部枠にする日をタップ。日曜・祝日は日直/当直を選択できます。"}
           </div>
+          {inputMode === "external" && (
+            <div className="mb-1.5 flex gap-1">
+              <button type="button" onClick={() => {
+                const y = calMonth.getFullYear(); const m = calMonth.getMonth();
+                const dim = new Date(y, m + 1, 0).getDate();
+                const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(y, m, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+                const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m + 1);
+                onChange([...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+              }} className="rounded border border-teal-300 bg-teal-50 px-1.5 py-0.5 text-[9px] font-bold text-teal-700 hover:bg-teal-100 transition">全選択</button>
+              <button type="button" onClick={() => {
+                const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+                const other = dates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+                onChange(other);
+              }} className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[9px] font-bold text-gray-600 hover:bg-gray-100 transition">全解除</button>
+            </div>
+          )}
           <DayPicker
             month={calMonth}
             onMonthChange={setCalMonth}
             locale={ja}
             navLayout="after"
             onDayClick={handleDayClick}
-            modifiers={{
+            modifiers={inputMode === "internal" ? {
+              internalWorking: (day: Date) => {
+                const cm = calMonth.getMonth() + 1; const cy = calMonth.getFullYear();
+                if (day.getMonth() + 1 !== cm || day.getFullYear() !== cy) return false;
+                return !getEntry(format(day, "yyyy-MM-dd"));
+              },
+              saturday: (day: Date) => day.getDay() === 6,
+              sunday: (day: Date) => day.getDay() === 0,
+            } : {
               externalFixed: (day: Date) => !!getEntry(format(day, "yyyy-MM-dd")),
               saturday: (day: Date) => day.getDay() === 6,
               sunday: (day: Date) => day.getDay() === 0,
             }}
             className={dayPickerBaseClassName}
             classNames={dayPickerWithNavClassNames}
-            modifiersClassNames={{
-              externalFixed: "[&>button]:!bg-orange-200 [&>button]:!text-orange-900 [&>button]:!border-orange-400 [&>button]:font-bold",
+            modifiersClassNames={inputMode === "internal" ? {
+              internalWorking: "[&>button]:!bg-blue-200 [&>button]:!text-blue-900 [&>button]:!border-blue-400 [&>button]:font-bold",
+              saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
+              sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
+              today: "[&>button]:ring-1 [&>button]:ring-indigo-200",
+            } : {
+              externalFixed: "[&>button]:!bg-teal-200 [&>button]:!text-teal-900 [&>button]:!border-teal-400 [&>button]:font-bold",
               saturday: "[&>button]:bg-blue-50/70 [&>button]:text-blue-600",
               sunday: "[&>button]:bg-red-50/70 [&>button]:text-red-600",
               today: "[&>button]:ring-1 [&>button]:ring-indigo-200",
@@ -464,6 +478,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                   onHardConstraintChange("external_fixed_dates", next);
                   if (next.length > 0) onHardConstraintChange("external_slot_count", next.length);
                 }}
+                inputMode={extInputMode}
               />
             </>
             );
