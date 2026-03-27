@@ -236,8 +236,12 @@ export function useScheduleApi({
   };
 
   const formatHardConstraintsForOptimize = () => {
+    // 全日程モード: 外部枠なし
+    const isFullSchedule = (hardConstraints.external_input_mode ?? "external") !== "internal"
+      && (hardConstraints.external_slot_count ?? 0) === 0;
+
     // 勤務日数モード: internal_fixed_dates の補集合を external_fixed_dates として送信
-    let extDates = (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift }));
+    let extDates = isFullSchedule ? [] : (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift }));
     if (hardConstraints.external_input_mode === "internal") {
       const internalFixedDates = hardConstraints.internal_fixed_dates ?? [];
       if (internalFixedDates.length > 0) {
@@ -266,9 +270,10 @@ export function useScheduleApi({
       prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
       respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
       holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
-      external_slot_count: hardConstraints.external_input_mode === "internal"
-        ? Math.max(0, new Date(year, month, 0).getDate() - (hardConstraints.internal_day_count ?? 8))
-        : (hardConstraints.external_slot_count ?? 0),
+      external_slot_count: isFullSchedule ? 0
+        : hardConstraints.external_input_mode === "internal"
+          ? Math.max(0, new Date(year, month, 0).getDate() - (hardConstraints.internal_day_count ?? 8))
+          : (hardConstraints.external_slot_count ?? 0),
       external_fixed_dates: extDates,
     };
   };

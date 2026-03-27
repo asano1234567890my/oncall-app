@@ -386,7 +386,11 @@ export default function DashboardPage() {
           externalDoctors={core.externalDoctors}
           externalDoctorIds={core.externalDoctorIds}
           externalScoreTotal={core.externalScoreTotal}
-          externalSlotCount={core.hardConstraints.external_slot_count ?? 0}
+          externalSlotCount={
+            (core.hardConstraints.external_input_mode ?? "external") === "internal"
+              ? Math.max(0, core.daysInMonth - (core.hardConstraints.internal_day_count ?? 8))
+              : (core.hardConstraints.external_slot_count ?? 0)
+          }
           schedule={core.schedule}
         />
       </div>

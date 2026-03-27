@@ -117,7 +117,7 @@ export default function DoctorPalette({
           })}
 
           {/* 外部医師エントリ — 枠数>0 または外部医師がDB上に存在する場合に表示 */}
-          {((externalSlotCount ?? 0) > 0 || (externalDoctors && externalDoctors.length > 0)) && (() => {
+          {(externalSlotCount ?? 0) > 0 && (() => {
             const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
             // スケジュール内で使用中の外部医師IDを集計
             const usedExternalIds = new Set<string>();
