@@ -123,7 +123,7 @@ async def generate_schedule(
                 )
                 db.add(new_ext)
                 existing_external.append(new_ext)
-            await db.flush()
+            await db.commit()
 
         # 必要分だけ使う
         external_doctors = existing_external[:required_external] if required_external > 0 else []
