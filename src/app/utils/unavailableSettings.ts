@@ -22,18 +22,18 @@ export const matchesTargetShift = (targetShift: TargetShift, shiftType: "day" | 
   targetShift === "all" || targetShift === shiftType;
 
 export const normalizeUnavailableDateEntries = (entries: UnavailableDateEntry[]) => {
-  const next = new Map<string, TargetShift>();
+  const next = new Map<string, { target_shift: TargetShift; is_soft_penalty: boolean }>();
   entries.forEach((entry) => {
     if (!entry?.date) return;
-    next.set(String(entry.date), entry.target_shift ?? "all");
+    next.set(String(entry.date), { target_shift: entry.target_shift ?? "all", is_soft_penalty: entry.is_soft_penalty ?? false });
   });
 
   return Array.from(next.entries())
-    .sort(([leftDate, leftShift], [rightDate, rightShift]) => {
-      if (leftDate === rightDate) return targetShiftOrder[leftShift] - targetShiftOrder[rightShift];
+    .sort(([leftDate, leftVal], [rightDate, rightVal]) => {
+      if (leftDate === rightDate) return targetShiftOrder[leftVal.target_shift] - targetShiftOrder[rightVal.target_shift];
       return leftDate.localeCompare(rightDate);
     })
-    .map(([date, target_shift]) => ({ date, target_shift }));
+    .map(([date, val]) => ({ date, target_shift: val.target_shift, is_soft_penalty: val.is_soft_penalty }));
 };
 
 const parseUnavailableDateParts = (value: string) => {

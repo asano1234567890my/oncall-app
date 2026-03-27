@@ -130,6 +130,7 @@ export function useDoctorSettings({
           datesFromEntries.push({
             date: String(entry.date),
             target_shift: entry.target_shift ?? "all",
+            is_soft_penalty: entry.is_soft_penalty ?? false,
           });
           return;
         }

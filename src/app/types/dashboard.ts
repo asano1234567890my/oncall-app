@@ -6,6 +6,7 @@ export type UnavailableDayRecord = {
   weekday?: number | null;
   is_fixed: boolean;
   target_shift: TargetShift;
+  is_soft_penalty?: boolean;
 };
 
 export type UnavailableDateEntry = {
