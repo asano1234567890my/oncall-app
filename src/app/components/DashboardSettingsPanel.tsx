@@ -276,6 +276,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
 
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
   const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const [localInternalDays, setLocalInternalDays] = useState(8);
   const displayMonth = new Date(year, month - 1, 1);
 
   // ── Holiday calendar helpers ──
@@ -464,8 +465,8 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                     <span className="text-[10px] text-blue-600">勤務日数</span>
                     <div className="flex items-center gap-1">
                       <StepperNumberInput
-                        value={daysInMonth - extCount}
-                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v))}
+                        value={localInternalDays}
+                        onCommit={(v) => { setLocalInternalDays(v); onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v)); }}
                         fallbackValue={8}
                         min={1} max={daysInMonth} step={1}
                         inputMode="numeric"

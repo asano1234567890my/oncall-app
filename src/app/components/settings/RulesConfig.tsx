@@ -41,6 +41,7 @@ export default function RulesConfig({
   });
   const [extPopover, setExtPopover] = useState<{ dateStr: string } | null>(null);
   const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const [localInternalDays, setLocalInternalDays] = useState(8);
   const targetDaysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
 
   const externalDates: ExternalFixedDate[] = hardConstraints.external_fixed_dates ?? [];
@@ -293,8 +294,8 @@ export default function RulesConfig({
                       <div className="mb-1 text-[11px] font-bold text-blue-700">勤務日数（{targetDaysInMonth}日中）</div>
                       <div className="mb-1 text-[10px] text-gray-500">常勤で埋める日数を指定。残りが外部枠になります</div>
                       <StepperNumberInput
-                        value={targetDaysInMonth - (hardConstraints.external_slot_count ?? 0)}
-                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, targetDaysInMonth - v))}
+                        value={localInternalDays}
+                        onCommit={(v) => { setLocalInternalDays(v); onHardConstraintChange("external_slot_count", Math.max(0, targetDaysInMonth - v)); }}
                         fallbackValue={8}
                         min={1}
                         max={targetDaysInMonth}

@@ -851,6 +851,7 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
 }) {
   const hc = hardConstraints;
   const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const [localInternalDays, setLocalInternalDays] = useState(8);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -992,8 +993,8 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
                     <span className="text-[11px] text-blue-600">勤務日数（{daysInMonth}日中）</span>
                     <div className="flex items-center gap-1.5">
                       <StepperNumberInput
-                        value={daysInMonth - extCount}
-                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v))}
+                        value={localInternalDays}
+                        onCommit={(v) => { setLocalInternalDays(v); onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v)); }}
                         fallbackValue={8}
                         min={1} max={daysInMonth} step={1} inputMode="numeric"
                         inputClassName="text-sm font-bold !py-1 !px-1"
