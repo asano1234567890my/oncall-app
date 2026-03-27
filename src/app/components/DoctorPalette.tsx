@@ -135,38 +135,35 @@ export default function DoctorPalette({
             const availableExternalId = externalDoctors?.find((d) => !usedExternalIds.has(d.id))?.id
               ?? externalDoctors?.[0]?.id ?? null;
             return (
-              <div
-                className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition ${
+              <button
+                type="button"
+                draggable={Boolean(availableExternalId)}
+                onDragStart={(event) => availableExternalId && onDoctorListDragStart(event, availableExternalId)}
+                onDragEnd={onClearDragState}
+                onClick={() => {
+                  const hlId = usedExternalIds.size > 0 ? [...usedExternalIds][0] : externalDoctors?.[0]?.id;
+                  if (hlId) onToggleHighlightedDoctor(hlId);
+                }}
+                className={`flex w-full items-center justify-between rounded-lg border p-2.5 text-left transition ${
+                  availableExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                } ${
                   isAnyExternalHighlighted
                     ? "border-orange-500 bg-orange-100 ring-2 ring-orange-400 shadow-md"
                     : "border-orange-200 bg-orange-50 hover:border-orange-300"
                 }`}
+                title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
               >
-                <div className="flex items-center justify-between">
-                  <button
-                    type="button"
-                    draggable={Boolean(availableExternalId)}
-                    onDragStart={(event) => availableExternalId && onDoctorListDragStart(event, availableExternalId)}
-                    onDragEnd={onClearDragState}
-                    onClick={() => {
-                      // ハイライト: 使用中の外部医師のいずれか（なければ最初のID）
-                      const hlId = usedExternalIds.size > 0 ? [...usedExternalIds][0] : externalDoctors?.[0]?.id;
-                      if (hlId) onToggleHighlightedDoctor(hlId);
-                    }}
-                    className={`flex items-center gap-1.5 ${availableExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
-                    title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
-                  >
-                    <Users className="h-4 w-4 text-orange-600" />
-                    <span className="text-sm font-bold text-orange-800">外部医師</span>
-                    {assignedCount > 0 && (
-                      <span className="rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">{assignedCount}回</span>
-                    )}
-                  </button>
-                  <span className="text-sm font-bold tabular-nums text-orange-700">
-                    {(externalScoreTotal ?? 0).toFixed(1)}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <Users className="h-4 w-4 text-orange-600" />
+                  <span className="text-sm font-bold text-orange-800">外部医師</span>
+                  {assignedCount > 0 && (
+                    <span className="rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">{assignedCount}回</span>
+                  )}
                 </div>
-              </div>
+                <span className="text-sm font-bold tabular-nums text-orange-700">
+                  {(externalScoreTotal ?? 0).toFixed(1)}
+                </span>
+              </button>
             );
           })()}
         </div>
