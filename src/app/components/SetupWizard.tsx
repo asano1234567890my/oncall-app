@@ -351,23 +351,41 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
               onClick={() => setState((s) => ({ ...s, scheduleType: "partial", externalSlotCount: s.externalSlotCount || 4 }))}
             />
           </div>
-          {state.scheduleType === "partial" && (
-            <div className="mt-4 rounded-xl border border-teal-200 bg-teal-50 p-4">
-              <div className="text-sm font-bold text-teal-800 mb-2">月あたりの外部枠</div>
-              <div className="flex items-center justify-center gap-4">
-                <button
-                  onClick={() => setState((s) => ({ ...s, externalSlotCount: Math.max(1, s.externalSlotCount - 1) }))}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-300 text-lg font-bold text-teal-600 hover:bg-teal-100"
-                >−</button>
-                <span className="text-3xl font-bold text-teal-800 w-12 text-center">{state.externalSlotCount}</span>
-                <button
-                  onClick={() => setState((s) => ({ ...s, externalSlotCount: Math.min(28, s.externalSlotCount + 1) }))}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-teal-300 text-lg font-bold text-teal-600 hover:bg-teal-100"
-                >+</button>
+          {state.scheduleType === "partial" && (() => {
+            const totalDays = 30;
+            const internalDays = totalDays - state.externalSlotCount;
+            const setByExternal = (n: number) => setState((s) => ({ ...s, externalSlotCount: Math.max(1, Math.min(29, n)) }));
+            const setByInternal = (n: number) => setByExternal(totalDays - n);
+            return (
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {/* 外部枠数 */}
+                <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 text-center">
+                  <div className="text-[11px] font-bold text-teal-700 mb-2">外部枠（月あたり）</div>
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => setByExternal(state.externalSlotCount - 1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100">−</button>
+                    <span className="text-2xl font-bold text-teal-800 w-10 text-center">{state.externalSlotCount}</span>
+                    <button onClick={() => setByExternal(state.externalSlotCount + 1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-teal-300 text-sm font-bold text-teal-600 hover:bg-teal-100">+</button>
+                  </div>
+                  <div className="text-[10px] text-teal-500 mt-1">非常勤・担当外の日数</div>
+                </div>
+                {/* 勤務日数 */}
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-center">
+                  <div className="text-[11px] font-bold text-blue-700 mb-2">勤務日数（月あたり）</div>
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => setByInternal(internalDays - 1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100">−</button>
+                    <span className="text-2xl font-bold text-blue-800 w-10 text-center">{internalDays}</span>
+                    <button onClick={() => setByInternal(internalDays + 1)}
+                      className="flex h-8 w-8 items-center justify-center rounded-full border border-blue-300 text-sm font-bold text-blue-600 hover:bg-blue-100">+</button>
+                  </div>
+                  <div className="text-[10px] text-blue-500 mt-1">常勤で埋める日数</div>
+                </div>
+                <p className="col-span-2 text-[11px] text-gray-500 text-center">詳細な日程は設定画面のカレンダーで指定できます</p>
               </div>
-              <p className="text-[11px] text-teal-600 text-center mt-2">詳細な日程は設定画面のカレンダーで指定できます</p>
-            </div>
-          )}
+            );
+          })()}
           <button
             onClick={() => setStep(5)}
             className="mt-6 w-full rounded-lg bg-blue-600 py-3 text-white font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
