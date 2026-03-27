@@ -48,6 +48,7 @@ type UseScheduleDndParams = {
   getDoctorName: (doctorId: string | null | undefined) => string;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
   isActiveDoctorId: (doctorId: string | null | undefined) => boolean;
+  externalDoctorIds?: Set<string>;
 };
 
 type ScheduleMutationResult = {
@@ -77,6 +78,7 @@ export function useScheduleDnd({
   getDoctorName,
   isHolidayLikeDay,
   isActiveDoctorId,
+  externalDoctorIds,
 }: UseScheduleDndParams) {
   const [lockedShiftKeys, setLockedShiftKeys] = useState<Set<string>>(() => new Set());
   const [dragSourceKey, setDragSourceKey] = useState<string | null>(null);
@@ -118,6 +120,7 @@ export function useScheduleDnd({
     getDoctorName,
     isHolidayLikeDay,
     highlightedDoctorId,
+    externalDoctorIds,
   });
 
   const getSelectedManualDoctorId = () =>

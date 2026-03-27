@@ -23,6 +23,7 @@ export type Doctor = {
   id: string;
   name: string;
   is_active?: boolean;
+  is_external?: boolean;
   access_token?: string;
   min_score?: number | null;
   max_score?: number | null;

@@ -58,6 +58,7 @@ export function useOnCallCore() {
     handleToggleWeightsPanel, handleToggleHardConstraintsPanel,
     handleTogglePreviousMonthShiftsPanel,
     getDoctorName, activeDoctors, activeDoctorIds, numDoctors,
+    externalDoctors, externalDoctorIds, isExternalDoctor,
     prevMonthWorkedDaysMap, filterRecordByActiveDoctors,
     isActiveDoctorId, toggleUnavailable, toggleAllUnavailable,
     toggleFixedWeekday, handleHardConstraintChange,
@@ -124,7 +125,7 @@ export function useOnCallCore() {
     schedule, commitSchedule, year, month, prevMonthLastDay,
     hardConstraints, isOverrideMode, unavailableMap,
     fixedUnavailableWeekdaysMap, prevMonthWorkedDaysMap,
-    getDoctorName, isHolidayLikeDay, isActiveDoctorId,
+    getDoctorName, isHolidayLikeDay, isActiveDoctorId, externalDoctorIds,
   });
 
   const { buildLockedShiftsPayload, lockedShiftKeys, validateScheduleViolations } = dndState;
@@ -542,6 +543,7 @@ export function useOnCallCore() {
     prevMonthLastDay, prevMonthTailDays,
     pyWeekdaysJp, pyWeekdays, toYmd, getWeekday,
     daysInMonth, numDoctors, activeDoctors,
+    externalDoctors, externalDoctorIds, isExternalDoctor,
     getDoctorName,
 
     // 設定パネルトグル

@@ -35,6 +35,7 @@ export type UseScheduleConstraintsParams = {
   getDoctorName: (doctorId: string | null | undefined) => string;
   isHolidayLikeDay: (day: number) => HolidayLikeDayInfo;
   highlightedDoctorId: string | null;
+  externalDoctorIds?: Set<string>;
 };
 
 export function useScheduleConstraints({
@@ -50,6 +51,7 @@ export function useScheduleConstraints({
   getDoctorName,
   isHolidayLikeDay,
   highlightedDoctorId,
+  externalDoctorIds,
 }: UseScheduleConstraintsParams) {
   const getWeekdayPy = (y: number, m: number, d: number) => (new Date(y, m - 1, d).getDay() + 6) % 7;
 
@@ -203,6 +205,9 @@ export function useScheduleConstraints({
   ) => {
     if (!doctorId) return null;
 
+    // 外部医師は制約チェック対象外（平日日直チェックのみ適用）
+    const isExternal = externalDoctorIds?.has(doctorId) ?? false;
+
     const scheduleRows = options?.scheduleRows ?? schedule;
     const ignoreShiftKeys = options?.ignoreShiftKeys ?? new Set<string>();
     const respectOverrideMode = options?.respectOverrideMode !== false;
@@ -223,6 +228,11 @@ export function useScheduleConstraints({
 
     // 日当直モードの祝日ではday_shiftはnight_shiftのコピー。nightのみ検証すれば十分。
     if (isCombinedMode && shiftType === "day" && holidayInfo.isHolidayLike) {
+      return null;
+    }
+
+    // 外部医師は間隔・回数・不可日等の制約チェック対象外
+    if (isExternal) {
       return null;
     }
 

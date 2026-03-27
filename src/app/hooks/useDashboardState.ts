@@ -116,17 +116,25 @@ export default function useDashboardState() {
 
   const getDoctorName = (doctorId: string | null | undefined) => {
     if (!doctorId) return "-";
+    if (externalDoctorIds.has(doctorId)) return "外部医師";
     return doctorNameById[doctorId] ?? "不明";
   };
 
   const activeDoctors = useMemo(() =>
     doctors
-      .filter((doctor) => doctor.is_active !== false)
+      .filter((doctor) => doctor.is_active !== false && doctor.is_external !== true)
       .sort((a, b) => a.name.localeCompare(b.name, "ja", { numeric: true })),
     [doctors],
   );
   const activeDoctorIds = useMemo(() => activeDoctors.map((doctor) => doctor.id), [activeDoctors]);
   const numDoctors = activeDoctors.length;
+
+  const externalDoctors = useMemo(() =>
+    doctors.filter((doctor) => doctor.is_external === true && doctor.is_active !== false),
+    [doctors],
+  );
+  const externalDoctorIds = useMemo(() => new Set(externalDoctors.map((d) => d.id)), [externalDoctors]);
+  const isExternalDoctor = (doctorId: string | null | undefined) => Boolean(doctorId && externalDoctorIds.has(doctorId));
 
   const previousMonthShiftDoctorIdByKey = useMemo(() => {
     const next: Record<string, string> = {};
@@ -356,6 +364,9 @@ export default function useDashboardState() {
     activeDoctors,
     activeDoctorIds,
     numDoctors,
+    externalDoctors,
+    externalDoctorIds,
+    isExternalDoctor,
     previousMonthShiftDoctorIdByKey,
     prevMonthWorkedDaysMap,
     filterRecordByActiveDoctors,
