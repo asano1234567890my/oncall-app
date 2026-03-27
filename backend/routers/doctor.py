@@ -62,6 +62,7 @@ async def get_doctors(
             "name": doctor.name,
             "experience_years": doctor.experience_years,
             "is_active": doctor.is_active,
+            "is_external": doctor.is_external,
             "min_score": doctor.min_score,
             "max_score": doctor.max_score,
             "target_score": doctor.target_score,
