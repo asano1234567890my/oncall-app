@@ -236,15 +236,22 @@ export function useScheduleApi({
     // 勤務日数モード: internal_fixed_dates の補集合を external_fixed_dates として送信
     let extDates = (hardConstraints.external_fixed_dates ?? []).map((e) => ({ date: e.date, target_shift: e.target_shift }));
     if (hardConstraints.external_input_mode === "internal") {
-      const internalDates = new Set((hardConstraints.internal_fixed_dates ?? []).map((e) => e.date));
-      const daysInMonth = new Date(year, month, 0).getDate();
-      const pad = (n: number) => String(n).padStart(2, "0");
-      extDates = [];
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateStr = `${year}-${pad(month)}-${pad(d)}`;
-        if (!internalDates.has(dateStr)) {
-          extDates.push({ date: dateStr, target_shift: "all" });
+      const internalFixedDates = hardConstraints.internal_fixed_dates ?? [];
+      if (internalFixedDates.length > 0) {
+        // カレンダーで勤務日が指定されている場合: 補集合を外部日として送信
+        const internalDates = new Set(internalFixedDates.map((e) => e.date));
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        extDates = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `${year}-${pad(month)}-${pad(d)}`;
+          if (!internalDates.has(dateStr)) {
+            extDates.push({ date: dateStr, target_shift: "all" });
+          }
         }
+      } else {
+        // カレンダー未操作: 日別指定なし、external_slot_countだけで制御
+        extDates = [];
       }
     }
     return {
