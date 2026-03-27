@@ -392,6 +392,9 @@ export function useScheduleApi({
       commitScheduleFrom(scheduleBeforeGenerate, nextSchedule);
       setScores(data.scores ?? {});
 
+      // 生成時に外部医師がDBに作成される可能性があるため、医師リストを再取得
+      void refetchDoctors();
+
       // Show warning if soft unavailable days were violated
       if (Array.isArray(data.soft_unavail_violations) && data.soft_unavail_violations.length > 0) {
         const violations = data.soft_unavail_violations as { doctor_name: string; day: number; shift_type: string }[];

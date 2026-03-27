@@ -1,8 +1,8 @@
 "use client";
 
-import { Trash2, Settings2, Plus, Minus, Users } from "lucide-react";
+import { Trash2, Settings2, Users } from "lucide-react";
 import type { DragEvent } from "react";
-import type { Doctor, DoctorScoreEntry, ShiftType } from "../types/dashboard";
+import type { Doctor, DoctorScoreEntry, ScheduleRow, ShiftType } from "../types/dashboard";
 
 type DoctorPaletteProps = {
   scoreEntries: DoctorScoreEntry[];
@@ -21,7 +21,7 @@ type DoctorPaletteProps = {
   externalDoctorIds?: Set<string>;
   externalScoreTotal?: number;
   externalSlotCount?: number;
-  onExternalSlotCountChange?: (delta: number) => void;
+  schedule?: ScheduleRow[];
 };
 
 const formatScore = (score: number | null) => (score === null ? "-" : score.toFixed(1));
@@ -43,7 +43,7 @@ export default function DoctorPalette({
   externalDoctorIds,
   externalScoreTotal,
   externalSlotCount,
-  onExternalSlotCountChange,
+  schedule,
 }: DoctorPaletteProps) {
   const getBarPercent = (score: number) => {
     if (scoreMax <= scoreMin) return 50;
@@ -121,6 +121,13 @@ export default function DoctorPalette({
             const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
             // D&D用に外部医師IDを取得（まだ生成前ならnull）
             const firstExternalId = externalDoctors?.[0]?.id ?? null;
+            // スケジュール内の外部医師割当数を自動集計
+            const assignedCount = schedule?.reduce((count, row) => {
+              let n = count;
+              if (row.day_shift && externalDoctorIds?.has(row.day_shift)) n++;
+              if (row.night_shift && externalDoctorIds?.has(row.night_shift)) n++;
+              return n;
+            }, 0) ?? 0;
             return (
               <div
                 className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition ${
@@ -132,44 +139,23 @@ export default function DoctorPalette({
                 <div className="flex items-center justify-between">
                   <button
                     type="button"
-                    draggable
-                    onDragStart={(event) => onDoctorListDragStart(event, firstExternalId)}
+                    draggable={Boolean(firstExternalId)}
+                    onDragStart={(event) => firstExternalId && onDoctorListDragStart(event, firstExternalId)}
                     onDragEnd={onClearDragState}
-                    onClick={() => onToggleHighlightedDoctor(firstExternalId)}
-                    className="flex items-center gap-1.5 cursor-grab active:cursor-grabbing"
+                    onClick={() => firstExternalId && onToggleHighlightedDoctor(firstExternalId)}
+                    className={`flex items-center gap-1.5 ${firstExternalId ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
                     title="ドラッグでシフト配置 / クリックで全外部医師ハイライト"
                   >
                     <Users className="h-4 w-4 text-orange-600" />
                     <span className="text-sm font-bold text-orange-800">外部医師</span>
+                    {assignedCount > 0 && (
+                      <span className="rounded-full bg-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-orange-700">{assignedCount}回</span>
+                    )}
                   </button>
                   <span className="text-sm font-bold tabular-nums text-orange-700">
                     {(externalScoreTotal ?? 0).toFixed(1)}
                   </span>
                 </div>
-                {onExternalSlotCountChange && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-orange-600">枠数</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onExternalSlotCountChange(-1)}
-                        disabled={(externalSlotCount ?? 0) <= 0}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-orange-300 bg-white text-orange-600 hover:bg-orange-50 disabled:opacity-30 transition"
-                      >
-                        <Minus className="h-3 w-3" />
-                      </button>
-                      <span className="w-6 text-center text-sm font-bold text-orange-800">{externalSlotCount ?? 0}</span>
-                      <button
-                        type="button"
-                        onClick={() => onExternalSlotCountChange(1)}
-                        disabled={(externalSlotCount ?? 0) >= 31}
-                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-orange-300 bg-white text-orange-600 hover:bg-orange-50 disabled:opacity-30 transition"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })()}

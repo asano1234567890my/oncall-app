@@ -387,11 +387,7 @@ export default function DashboardPage() {
           externalDoctorIds={core.externalDoctorIds}
           externalScoreTotal={core.externalScoreTotal}
           externalSlotCount={core.hardConstraints.external_slot_count ?? 0}
-          onExternalSlotCountChange={(delta) => {
-            const current = core.hardConstraints.external_slot_count ?? 0;
-            const next = Math.max(0, Math.min(31, current + delta));
-            core.handleHardConstraintChange("external_slot_count", next);
-          }}
+          schedule={core.schedule}
         />
       </div>
     </aside>
