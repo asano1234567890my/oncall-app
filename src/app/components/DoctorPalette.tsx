@@ -116,11 +116,11 @@ export default function DoctorPalette({
             );
           })}
 
-          {/* 外部医師エントリ */}
-          {externalDoctors && externalDoctors.length > 0 && (() => {
+          {/* 外部医師エントリ — 枠数>0 または外部医師がDB上に存在する場合に表示 */}
+          {((externalSlotCount ?? 0) > 0 || (externalDoctors && externalDoctors.length > 0)) && (() => {
             const isAnyExternalHighlighted = Boolean(highlightedDoctorId && externalDoctorIds?.has(highlightedDoctorId));
-            // D&D用に未割当の外部医師IDを取得
-            const firstExternalId = externalDoctors[0]?.id ?? null;
+            // D&D用に外部医師IDを取得（まだ生成前ならnull）
+            const firstExternalId = externalDoctors?.[0]?.id ?? null;
             return (
               <div
                 className={`flex flex-col gap-1.5 rounded-lg border p-2.5 transition ${
