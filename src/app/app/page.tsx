@@ -941,7 +941,15 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
               <div className="space-y-1.5">
                 <div className="flex gap-1.5 mb-1">
-                  <button type="button" onClick={() => setExtInputMode("external")}
+                  <button type="button" onClick={() => {
+                    setExtInputMode("external");
+                    const existingDates = hc.external_fixed_dates ?? [];
+                    const now = new Date();
+                    const fm = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
+                    const fy = fm === 1 ? now.getFullYear() + 1 : now.getFullYear();
+                    const other = existingDates.filter((e) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
+                    onHardConstraintChange("external_fixed_dates", other);
+                  }}
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
                     外部枠数
                   </button>

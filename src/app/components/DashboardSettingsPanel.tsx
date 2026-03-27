@@ -412,7 +412,16 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             <>
               <div className="pl-3 border-l-2 border-teal-200 space-y-1.5">
                 <div className="flex gap-1 mb-1">
-                  <button type="button" onClick={() => setExtInputMode("external")}
+                  <button type="button" onClick={() => {
+                    setExtInputMode("external");
+                    // 外部枠モード: カレンダーをクリア（空スタート）
+                    const dates = hardConstraints.external_fixed_dates ?? [];
+                    const now = new Date();
+                    const ty = now.getFullYear(); const tm = now.getMonth() + 2;
+                    const fy = tm > 12 ? ty + 1 : ty; const fm = tm > 12 ? 1 : tm;
+                    const other = dates.filter((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
+                    onHardConstraintChange("external_fixed_dates", other);
+                  }}
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "external" ? "bg-teal-100 text-teal-700 border border-teal-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
                     外部枠数
                   </button>

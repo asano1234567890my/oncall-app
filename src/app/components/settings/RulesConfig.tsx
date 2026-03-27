@@ -247,7 +247,13 @@ export default function RulesConfig({
                 <div className="mt-3 space-y-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
                   {/* 指定方法の切り替え */}
                   <div className="flex gap-1.5 mb-2">
-                    <button type="button" onClick={() => setExtInputMode("external")}
+                    <button type="button" onClick={() => {
+                      setExtInputMode("external");
+                      // 外部枠モード: カレンダーをクリア（空スタート）
+                      const y = calMonth.getFullYear(); const m = calMonth.getMonth() + 1;
+                      const other = externalDates.filter((e) => Number(e.date.slice(0, 4)) !== y || Number(e.date.slice(5, 7)) !== m);
+                      onHardConstraintChange("external_fixed_dates", other);
+                    }}
                       className={`flex-1 rounded-lg border-2 px-2 py-2 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
                       外部枠数で指定
                     </button>
