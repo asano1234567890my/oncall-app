@@ -256,7 +256,9 @@ export function useScheduleApi({
       prevent_sunhol_consecutive: Boolean(hardConstraints.prevent_sunhol_consecutive),
       respect_unavailable_days: Boolean(hardConstraints.respect_unavailable_days),
       holiday_shift_mode: hardConstraints.holiday_shift_mode ?? "split",
-      external_slot_count: hardConstraints.external_slot_count ?? 0,
+      external_slot_count: hardConstraints.external_input_mode === "internal"
+        ? Math.max(0, new Date(year, month, 0).getDate() - (hardConstraints.internal_day_count ?? 8))
+        : (hardConstraints.external_slot_count ?? 0),
       external_fixed_dates: extDates,
     };
   };

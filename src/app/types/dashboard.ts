@@ -75,6 +75,7 @@ export type HardConstraints = {
   external_slot_count: number;
   external_fixed_dates: ExternalFixedDate[];
   internal_fixed_dates: ExternalFixedDate[];
+  internal_day_count: number;
   external_input_mode: "external" | "internal";
 };
 
@@ -180,6 +181,7 @@ export const DEFAULT_HARD_CONSTRAINTS: HardConstraints = {
   external_slot_count: 0,
   external_fixed_dates: [],
   internal_fixed_dates: [],
+  internal_day_count: 8,
   external_input_mode: "external",
 };
 

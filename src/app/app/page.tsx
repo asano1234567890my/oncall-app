@@ -594,7 +594,7 @@ function CompactGenerateCard({ core, onOpenSettings, onOpenDoctorManage, onOpenI
             <div className="flex justify-between min-w-0 col-span-2 pt-1 border-t border-gray-100 mt-1">
               {(hc.external_input_mode ?? "external") === "internal" ? (<>
                 <span className="text-blue-600 shrink-0">勤務日数</span>
-                <span className="font-medium text-blue-700 shrink-0">{core.daysInMonth - (hc.external_slot_count ?? 0)}日/{core.daysInMonth}日</span>
+                <span className="font-medium text-blue-700 shrink-0">{hc.internal_day_count ?? 8}日/{core.daysInMonth}日</span>
               </>) : (<>
                 <span className="text-teal-600 shrink-0">外部枠</span>
                 <span className="font-medium text-teal-700 shrink-0">{hc.external_slot_count}回/{core.daysInMonth}日</span>
@@ -856,7 +856,6 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
 }) {
   const hc = hardConstraints;
   const extInputMode = hardConstraints.external_input_mode ?? "external";
-  const [localInternalDays, setLocalInternalDays] = useState(8);
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -977,8 +976,8 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
                     <span className="text-[11px] text-blue-600">勤務日数（{daysInMonth}日中）</span>
                     <div className="flex items-center gap-1.5">
                       <StepperNumberInput
-                        value={localInternalDays}
-                        onCommit={(v) => { setLocalInternalDays(v); onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v)); }}
+                        value={hc.internal_day_count ?? 8}
+                        onCommit={(v) => onHardConstraintChange("internal_day_count", v)}
                         fallbackValue={8}
                         min={1} max={daysInMonth} step={1} inputMode="numeric"
                         inputClassName="text-sm font-bold !py-1 !px-1"
