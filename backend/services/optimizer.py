@@ -70,8 +70,8 @@ class OnCallOptimizer:
         respect_unavailable_days: Optional[Any] = None,
         locked_shifts: Optional[List[Dict[str, Any]]] = None,
         shift_scores: Optional[Dict[str, float]] = None,
-        external_slot_count: int = 0,
-        external_fixed_dates: Optional[List[str]] = None,
+        external_doctor_indices: Optional[set[int]] = None,
+        external_fixed_dates: Optional[List] = None,
     ):
         self.num_doctors = num_doctors
         self.year = year
@@ -112,8 +112,10 @@ class OnCallOptimizer:
         # locked_shifts are normalized to doctor_idx at the router boundary.
         self.locked_shifts = locked_shifts or []
 
-        # 外部枠（外部医師スロット）
-        self.external_slot_count = external_slot_count
+        # 外部医師（ダミー）インデックス集合
+        self.external_doctor_indices: set[int] = external_doctor_indices or set()
+        self.internal_doctor_indices: set[int] = set(range(num_doctors)) - self.external_doctor_indices
+
         # {day: target_shift} のマッピング（"all"/"day"/"night"）
         self.external_fixed_dates: dict[int, str] = {}
         for item in (external_fixed_dates or []):
@@ -921,40 +923,48 @@ class OnCallOptimizer:
                 self.work[(d, day)] = self.model.NewBoolVar(f"work_d{d}_day{day}")
                 self.model.Add(self.work[(d, day)] == self.night_shifts[(d, day)] + self.day_shifts[(d, day)])
 
-        # 2) slot fulfillment
-        allow_external = self.external_slot_count > 0 or len(self.external_fixed_dates) > 0
+        # 2) slot fulfillment — 全スロットに必ず1人配置（外部医師含む）
+        ext_indices = self.external_doctor_indices
+        int_indices = self.internal_doctor_indices
         for day in days:
             ext_target = self.external_fixed_dates.get(day)
-            if ext_target:
-                # 外部医師確定日: target_shiftに応じて制約
+            if ext_target and ext_indices:
+                # 外部医師確定日: 外部医師を割当、内部医師は割当不可
                 if ext_target == "all":
-                    for d in doctors:
+                    # 当直: 外部医師のいずれかを割当
+                    self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in ext_indices)
+                    for d in int_indices:
                         self.model.Add(self.night_shifts[(d, day)] == 0)
-                        self.model.Add(self.day_shifts[(d, day)] == 0)
+                    # 日直: 日祝のみ
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in ext_indices)
+                        for d in int_indices:
+                            self.model.Add(self.day_shifts[(d, day)] == 0)
+                    else:
+                        for d in doctors:
+                            self.model.Add(self.day_shifts[(d, day)] == 0)
                 elif ext_target == "day":
-                    # 日直のみ外部 → 日直=0、当直は通常通り1人配置
-                    for d in doctors:
-                        self.model.Add(self.day_shifts[(d, day)] == 0)
+                    # 日直のみ外部 → 当直は通常通り
                     self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
+                    if self.is_sunday_or_holiday(day) and not combined_mode:
+                        self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in ext_indices)
+                        for d in int_indices:
+                            self.model.Add(self.day_shifts[(d, day)] == 0)
+                    else:
+                        for d in doctors:
+                            self.model.Add(self.day_shifts[(d, day)] == 0)
                 elif ext_target == "night":
-                    # 当直のみ外部 → 当直=0、日直は通常通り1人配置（日祝のみ）
-                    for d in doctors:
+                    # 当直のみ外部 → 日直は通常通り
+                    self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in ext_indices)
+                    for d in int_indices:
                         self.model.Add(self.night_shifts[(d, day)] == 0)
                     if self.is_sunday_or_holiday(day) and not combined_mode:
                         self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
                     else:
                         for d in doctors:
                             self.model.Add(self.day_shifts[(d, day)] == 0)
-            elif allow_external:
-                # 外部枠あり: 0人 or 1人（空き枠を許容）
-                self.model.AddAtMostOne(self.night_shifts[(d, day)] for d in doctors)
-                if self.is_sunday_or_holiday(day) and not combined_mode:
-                    self.model.AddAtMostOne(self.day_shifts[(d, day)] for d in doctors)
-                else:
-                    for d in doctors:
-                        self.model.Add(self.day_shifts[(d, day)] == 0)
             else:
-                # デフォルト: 必ず1人配置
+                # 通常: 必ず1人配置（内部+外部から）
                 self.model.AddExactlyOne(self.night_shifts[(d, day)] for d in doctors)
                 if self.is_sunday_or_holiday(day) and not combined_mode:
                     self.model.AddExactlyOne(self.day_shifts[(d, day)] for d in doctors)
@@ -962,12 +972,9 @@ class OnCallOptimizer:
                     for d in doctors:
                         self.model.Add(self.day_shifts[(d, day)] == 0)
 
-        # 2b) 外部枠数の制約: 空き枠数の上限を設定
-        if self.external_slot_count > 0 and not self.external_fixed_dates:
-            # 全スロットのうち「誰も配置されていない枠」の数 <= external_slot_count
-            total_night_assigned = sum(self.night_shifts[(d, day)] for d in doctors for day in days)
-            night_slot_count = len(days) - len(self.external_fixed_dates)
-            self.model.Add(total_night_assigned >= night_slot_count - self.external_slot_count)
+        # 2b) 外部医師は当月最大1回勤務
+        for d in ext_indices:
+            self.model.Add(sum(self.work[(d, day)] for day in days) <= 1)
 
         # 3) hard: prevent same-day day/night double assignment
         if prevent_sunhol_consecutive:
@@ -1117,6 +1124,7 @@ class OnCallOptimizer:
                 self.model.Add(weekend_holiday_work_expr(d) <= max_weekend_holiday_works)
 
         # 11) hard: compute monthly scores and enforce per-doctor min/max
+        #     外部医師はスコア制約の対象外
         doctor_scores: List[cp_model.IntVar] = []
         for d in doctors:
             score_expr = 0
@@ -1135,10 +1143,12 @@ class OnCallOptimizer:
             doc_score = self.model.NewIntVar(0, 2000, f"score_d{d}")
             self.model.Add(doc_score == score_expr)
 
-            d_min = int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
-            d_max = int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
-            self.model.Add(doc_score >= d_min)
-            self.model.Add(doc_score <= d_max)
+            # 外部医師にはスコアmin/max制約を適用しない
+            if d not in ext_indices:
+                d_min = int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
+                d_max = int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
+                self.model.Add(doc_score >= d_min)
+                self.model.Add(doc_score <= d_max)
 
             doctor_scores.append(doc_score)
 
