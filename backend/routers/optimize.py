@@ -79,27 +79,70 @@ async def generate_schedule(
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        # --- 内部（常勤）医師を取得 ---
         result = await db.execute(
             select(Doctor)
-            .where(Doctor.hospital_id == hospital_id, Doctor.is_active.is_(True))
+            .where(
+                Doctor.hospital_id == hospital_id,
+                Doctor.is_active.is_(True),
+                Doctor.is_external.is_(False),
+            )
             .order_by(Doctor.id)
         )
-        doctors = result.scalars().all()
+        internal_doctors = list(result.scalars().all())
 
-        if len(doctors) < req.num_doctors:
+        if len(internal_doctors) < req.num_doctors:
             raise HTTPException(status_code=400, detail="num_doctors exceeds registered active doctors")
 
-        doctors = doctors[: req.num_doctors]
+        internal_doctors = internal_doctors[: req.num_doctors]
+
+        # --- 外部（ダミー）医師の確保 ---
+        hc = req.hard_constraints if isinstance(req.hard_constraints, dict) else {}
+        external_slot_count = int(hc.get("external_slot_count", 0) or 0)
+        external_fixed_dates_raw = list(hc.get("external_fixed_dates", []) or [])
+        required_external = max(external_slot_count, len(external_fixed_dates_raw))
+
+        ext_result = await db.execute(
+            select(Doctor)
+            .where(
+                Doctor.hospital_id == hospital_id,
+                Doctor.is_external.is_(True),
+            )
+            .order_by(Doctor.name)
+        )
+        existing_external = list(ext_result.scalars().all())
+
+        # 31人に満たない場合は自動作成
+        if len(existing_external) < 31:
+            for n in range(len(existing_external) + 1, 32):
+                new_ext = Doctor(
+                    name=f"外部医師{n}",
+                    hospital_id=hospital_id,
+                    is_external=True,
+                    experience_years=0,
+                )
+                db.add(new_ext)
+                existing_external.append(new_ext)
+            await db.flush()
+
+        # 必要分だけ使う
+        external_doctors = existing_external[:required_external] if required_external > 0 else []
+
+        # --- 内部 + 外部を結合してインデックス付け ---
+        doctors = list(internal_doctors) + list(external_doctors)
+        num_internal = len(internal_doctors)
+        total_doctors = len(doctors)
 
         idx_to_uuid: Dict[int, str] = {i: str(d.id) for i, d in enumerate(doctors)}
         uuid_to_idx: Dict[str, int] = {str(d.id): i for i, d in enumerate(doctors)}
+        external_doctor_indices: set[int] = set(range(num_internal, total_doctors))
 
         def _key_to_idx(key: Any) -> int:
             k = str(key)
 
             if k.isdigit():
                 idx = int(k)
-                if 0 <= idx < req.num_doctors:
+                if 0 <= idx < total_doctors:
                     return idx
                 raise HTTPException(status_code=400, detail=f"doctor index out of range: {k}")
 
@@ -121,7 +164,7 @@ async def generate_schedule(
         historical_past_total_scores = await build_past_total_scores(
             db,
             hospital_id=hospital_id,
-            doctor_ids=[doctor.id for doctor in doctors],
+            doctor_ids=[doctor.id for doctor in internal_doctors],
             target_year=req.year,
             target_month=req.month,
             shift_scores=shift_scores,
@@ -132,7 +175,12 @@ async def generate_schedule(
         }
         merged_past_total_scores.update(req.past_total_scores)
 
-        formatted_prev_month = _remap_keys(req.prev_month_worked_days)
+        # 外部医師UUIDを除外してリマップ（月マタギ間隔チェック対象外）
+        prev_month_internal_only = {
+            k: v for k, v in req.prev_month_worked_days.items()
+            if k not in external_uuid_set
+        }
+        formatted_prev_month = _remap_keys(prev_month_internal_only)
         formatted_min_score = _remap_keys(req.min_score_by_doctor)
         formatted_max_score = _remap_keys(req.max_score_by_doctor)
         formatted_target_score = _remap_keys(req.target_score_by_doctor)
@@ -148,13 +196,18 @@ async def generate_schedule(
             for locked in req.locked_shifts
         ]
 
+        # 前月シフトからも外部医師を除外
+        previous_month_shifts_filtered = [
+            shift for shift in (req.previous_month_shifts or [])
+            if str(shift.doctor_id) not in external_uuid_set
+        ]
         previous_month_shifts_idx = [
             {
                 "date": _serialize_scalar(shift.date),
                 "shift_type": shift.shift_type,
                 "doctor_idx": _key_to_idx(shift.doctor_id),
             }
-            for shift in (req.previous_month_shifts or [])
+            for shift in previous_month_shifts_filtered
         ]
 
         _u = _remap_keys(req.unavailable)
@@ -185,13 +238,8 @@ async def generate_schedule(
             else req.objective_weights.dict()
         )
 
-        # 外部枠パラメータをhard_constraintsから取り出す
-        hc = req.hard_constraints if isinstance(req.hard_constraints, dict) else {}
-        external_slot_count = int(hc.get("external_slot_count", 0) or 0)
-        external_fixed_dates = list(hc.get("external_fixed_dates", []) or [])
-
         optimizer = OnCallOptimizer(
-            num_doctors=req.num_doctors,
+            num_doctors=total_doctors,
             year=req.year,
             month=req.month,
             holidays=req.holidays,
@@ -213,8 +261,8 @@ async def generate_schedule(
             hard_constraints=req.hard_constraints,
             locked_shifts=locked_shifts_idx,
             shift_scores=shift_scores,
-            external_slot_count=external_slot_count,
-            external_fixed_dates=external_fixed_dates,
+            external_doctor_indices=external_doctor_indices,
+            external_fixed_dates=external_fixed_dates_raw,
         )
 
         # Pre-validation: fast arithmetic checks before solving
