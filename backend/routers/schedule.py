@@ -200,7 +200,7 @@ async def get_public_schedule(
         select(Doctor).where(Doctor.hospital_id == doctor.hospital_id)
     )
     all_doctors = doctors_result.scalars().all()
-    doctor_name_map = {str(d.id): d.name for d in all_doctors}
+    doctor_name_map = {str(d.id): ("外部" if d.is_external else d.name) for d in all_doctors}
 
     start_date, end_date = _month_bounds(year, month)
     hospital_doctor_ids = [d.id for d in all_doctors]

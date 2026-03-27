@@ -163,10 +163,10 @@ export default function PublicViewPage() {
               <td className={`px-1.5 py-1 font-medium whitespace-nowrap ${isHolidayLike ? "text-red-600" : isSat ? "text-blue-600" : "text-gray-800"}`}>
                 {row.day}({weekday})
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
+              <td className={`px-1.5 py-1 text-center truncate max-w-[5rem] border-l border-gray-400 ${row.day_shift === "外部" ? "text-teal-700 font-semibold bg-teal-50" : "text-gray-700"}`}>
                 {showDayShift ? (row.day_shift ?? "-") : ""}
               </td>
-              <td className="px-1.5 py-1 text-center text-gray-700 truncate max-w-[5rem] border-l border-gray-400">
+              <td className={`px-1.5 py-1 text-center truncate max-w-[5rem] border-l border-gray-400 ${row.night_shift === "外部" ? "text-teal-700 font-semibold bg-teal-50" : "text-gray-700"}`}>
                 {row.night_shift ?? "-"}
               </td>
             </tr>

@@ -82,7 +82,7 @@ async def get_doctors_by_shared_token(
         # 医師リスト取得
         result = await db.execute(
             select(Doctor)
-            .where(Doctor.hospital_id == hospital_id, Doctor.is_active == True)
+            .where(Doctor.hospital_id == hospital_id, Doctor.is_active == True, Doctor.is_external == False)  # noqa: E712
             .order_by(Doctor.name)
         )
         doctors = result.scalars().all()
