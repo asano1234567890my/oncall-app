@@ -917,7 +917,8 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
         {/* 外部枠 */}
         <div>
           <div className="text-xs font-bold text-gray-700 mb-2">外部枠（常勤以外）</div>
-          <div className="text-[10px] text-gray-500 mb-2">非常勤医師が入る日や、担当外の日に使います</div>
+          <div className="text-[10px] text-gray-500 mb-1">非常勤が入る日や担当外の日がある場合に使います</div>
+          <div className="text-[9px] text-gray-400 mb-2">💡 外部枠数と勤務日数は表裏の関係です（例: {daysInMonth}日の月なら「外部枠8」=「勤務{daysInMonth - 8}日」）</div>
           <div className="flex gap-2 mb-2">
             {([0, 4] as const).map((val) => (
               <button

@@ -206,9 +206,10 @@ export default function RulesConfig({
             <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <div className="text-sm font-bold text-gray-800">外部枠（常勤以外）</div>
               <div className="mt-1 text-[11px] text-gray-500">
-                非常勤医師が入る日や、自チームの担当外の日に使います。指定した分の枠を外部枠としてスケジュールを生成します。
-                担当する日だけ選ぶ場合は、カレンダーで「全選択」→ 担当日を解除すると便利です。
-                常勤医師だけで全枠を埋める場合は「なし」のままでOKです。
+                非常勤が入る日や担当外の日がある場合に使います。常勤だけで全枠を埋める場合は「なし」のままでOKです。
+              </div>
+              <div className="mt-1 text-[10px] text-gray-400 leading-relaxed">
+                💡 外部枠数と勤務日数は表裏の関係です。例えば4月（30日）なら「外部枠8回」と「勤務日数22日」は同じ結果になります。お好みの方でどうぞ。
               </div>
               <div className="mt-3 flex shrink-0 gap-1">
                 <button
