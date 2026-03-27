@@ -45,7 +45,7 @@ async def get_doctors(
     result = await db.execute(
         select(Doctor)
         .options(selectinload(Doctor.unavailable_days))
-        .where(Doctor.hospital_id == hospital_id)
+        .where(Doctor.hospital_id == hospital_id, Doctor.is_external == False)  # noqa: E712
     )
     doctors = sorted(
         result.scalars().all(),
