@@ -940,7 +940,20 @@ function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardC
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
                     外部枠数
                   </button>
-                  <button type="button" onClick={() => setExtInputMode("internal")}
+                  <button type="button" onClick={() => {
+                    setExtInputMode("internal");
+                    const existingDates = hc.external_fixed_dates ?? [];
+                    const now = new Date();
+                    const fy = now.getFullYear(); const fm = now.getMonth() + 2 > 12 ? 1 : now.getMonth() + 2;
+                    const ay = fm === 1 ? fy + 1 : fy;
+                    const hasEntries = existingDates.some((e) => Number(e.date.slice(0, 4)) === ay && Number(e.date.slice(5, 7)) === fm);
+                    if (!hasEntries) {
+                      const dim = new Date(ay, fm, 0).getDate();
+                      const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(ay, fm - 1, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+                      const other = existingDates.filter((e) => Number(e.date.slice(0, 4)) !== ay || Number(e.date.slice(5, 7)) !== fm);
+                      onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a, b) => a.date.localeCompare(b.date)));
+                    }
+                  }}
                     className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "internal" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400"}`}>
                     勤務日数
                   </button>

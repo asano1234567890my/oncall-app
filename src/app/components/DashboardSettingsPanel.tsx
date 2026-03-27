@@ -435,7 +435,21 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "external" ? "bg-teal-100 text-teal-700 border border-teal-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
                     外部枠数
                   </button>
-                  <button type="button" onClick={() => setExtInputMode("internal")}
+                  <button type="button" onClick={() => {
+                    setExtInputMode("internal");
+                    // 当月に外部日が未設定なら全日を外部で埋める（白紙スタート）
+                    const now = new Date();
+                    const targetY = now.getFullYear(); const targetM = now.getMonth() + 2; // 来月
+                    const existingDates = hardConstraints.external_fixed_dates ?? [];
+                    const hasEntries = existingDates.some((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) === targetY && Number(e.date.slice(5, 7)) === (targetM > 12 ? 1 : targetM));
+                    if (!hasEntries) {
+                      const fy = targetM > 12 ? targetY + 1 : targetY; const fm = targetM > 12 ? 1 : targetM;
+                      const dim = new Date(fy, fm, 0).getDate();
+                      const all = Array.from({ length: dim }, (_, i) => ({ date: format(new Date(fy, fm - 1, i + 1), "yyyy-MM-dd"), target_shift: "all" as const }));
+                      const other = existingDates.filter((e: ExternalFixedDate) => Number(e.date.slice(0, 4)) !== fy || Number(e.date.slice(5, 7)) !== fm);
+                      onHardConstraintChange("external_fixed_dates", [...other, ...all].sort((a: ExternalFixedDate, b: ExternalFixedDate) => a.date.localeCompare(b.date)));
+                    }
+                  }}
                     className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "internal" ? "bg-blue-100 text-blue-700 border border-blue-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
                     勤務日数
                   </button>
