@@ -62,8 +62,8 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
     if (!isRedo) return;
     fetch(`${apiUrl}/api/doctors/`, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then((data: Array<{ name: string; is_active: boolean }>) => {
-        const active = data.filter((d) => d.is_active);
+      .then((data: Array<{ name: string; is_active: boolean; is_external?: boolean }>) => {
+        const active = data.filter((d) => d.is_active && !d.is_external);
         setCurrentDoctorCount(active.length);
         setExistingDoctorNames(active.map((d) => d.name));
         setState((s) => ({
