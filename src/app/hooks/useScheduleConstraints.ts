@@ -221,6 +221,11 @@ export function useScheduleConstraints({
       return "平日の日直には配置できません";
     }
 
+    // 日当直モードの祝日ではday_shiftはnight_shiftのコピー。nightのみ検証すれば十分。
+    if (isCombinedMode && shiftType === "day" && holidayInfo.isHolidayLike) {
+      return null;
+    }
+
     if (respectOverrideMode && isOverrideMode) {
       return null;
     }
