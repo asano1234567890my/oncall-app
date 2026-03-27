@@ -622,6 +622,7 @@ class OnCallOptimizer:
                 })
 
         # --- Check 3: score range contradiction ---
+        # 外部医師が埋める分のスコアを除外して計算
         total_score_in_month = 0
         for day in days:
             if self.is_sunday_or_holiday(day):
@@ -634,35 +635,39 @@ class OnCallOptimizer:
             else:
                 total_score_in_month += self.W_WEEKDAY_NIGHT
 
+        # 外部医師のスコア分を差し引く（各外部医師は平均1回勤務）
+        avg_score_per_shift = total_score_in_month / max(self.num_days, 1)
+        internal_total_score = total_score_in_month - int(num_external * avg_score_per_shift)
+
+        # 常勤医師のみでスコア合計を計算
+        internal_indices = [d for d in range(self.num_doctors) if d not in self.external_doctor_indices]
         sum_min = sum(
             int(round(self.min_score_by_doctor.get(d, self.score_min_float) * 10))
-            for d in range(self.num_doctors)
+            for d in internal_indices
         )
         sum_max = sum(
             int(round(self.max_score_by_doctor.get(d, self.score_max_float) * 10))
-            for d in range(self.num_doctors)
+            for d in internal_indices
         )
 
-        if sum_min > total_score_in_month:
+        if num_internal > 0 and sum_min > internal_total_score:
             import math
-            # Margin: 10% below the even split
-            even_split = total_score_in_month / self.num_doctors / 10
+            even_split = internal_total_score / num_internal / 10
             recommended_min = math.floor(even_split * 0.9 * 10) / 10
             errors.append({
                 "id": "score_min_exceeds_total",
                 "name_ja": "スコア下限が高すぎます",
-                "current_value": f"現在の下限: {self.score_min_float:.1f}",
-                "suggestion_ja": f"→ スコア下限を{recommended_min:.1f}以下にしてください",
+                "current_value": f"現在の下限: {self.score_min_float:.1f}（常勤{num_internal}名で配分可能なスコア: {internal_total_score / 10:.1f}）",
+                "suggestion_ja": f"→ スコア下限を{recommended_min:.1f}以下にするか、外部枠を減らしてください",
             })
-        if sum_max < total_score_in_month:
+        if num_internal > 0 and sum_max < internal_total_score:
             import math
-            # Margin: 10% above the even split
-            even_split = total_score_in_month / self.num_doctors / 10
+            even_split = internal_total_score / num_internal / 10
             recommended_max = math.ceil(even_split * 1.1 * 10) / 10
             errors.append({
                 "id": "score_max_below_total",
                 "name_ja": "スコア上限が低すぎます",
-                "current_value": f"現在の上限: {self.score_max_float:.1f}",
+                "current_value": f"現在の上限: {self.score_max_float:.1f}（常勤{num_internal}名で配分可能なスコア: {internal_total_score / 10:.1f}）",
                 "suggestion_ja": f"→ スコア上限を{recommended_max:.1f}以上にしてください",
             })
 
