@@ -41,6 +41,7 @@ export default function RulesConfig({
   });
   const [extPopover, setExtPopover] = useState<{ dateStr: string } | null>(null);
   const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
+  const targetDaysInMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 0).getDate();
 
   const externalDates: ExternalFixedDate[] = hardConstraints.external_fixed_dates ?? [];
   const getExtEntry = (dateStr: string) => externalDates.find((e) => e.date === dateStr);
@@ -257,14 +258,14 @@ export default function RulesConfig({
                   </div>
                   {extInputMode === "external" ? (
                     <label className="block">
-                      <div className="mb-1 text-[11px] font-bold text-teal-700">外部枠数（月あたり）</div>
+                      <div className="mb-1 text-[11px] font-bold text-teal-700">外部枠数（{targetDaysInMonth}日中）</div>
                       <div className="mb-1 text-[10px] text-gray-500">この回数分を外部枠にして、残りを常勤で生成します</div>
                       <StepperNumberInput
                         value={hardConstraints.external_slot_count ?? 0}
                         onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
                         fallbackValue={0}
                         min={0}
-                        max={29}
+                        max={targetDaysInMonth - 1}
                         step={1}
                         inputMode="numeric"
                         inputClassName="text-sm font-bold"
@@ -272,14 +273,14 @@ export default function RulesConfig({
                     </label>
                   ) : (
                     <label className="block">
-                      <div className="mb-1 text-[11px] font-bold text-blue-700">勤務日数（月あたり）</div>
+                      <div className="mb-1 text-[11px] font-bold text-blue-700">勤務日数（{targetDaysInMonth}日中）</div>
                       <div className="mb-1 text-[10px] text-gray-500">常勤で埋める日数を指定。残りが外部枠になります</div>
                       <StepperNumberInput
-                        value={30 - (hardConstraints.external_slot_count ?? 0)}
-                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
+                        value={targetDaysInMonth - (hardConstraints.external_slot_count ?? 0)}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, targetDaysInMonth - v))}
                         fallbackValue={8}
                         min={1}
-                        max={30}
+                        max={targetDaysInMonth}
                         step={1}
                         inputMode="numeric"
                         inputClassName="text-sm font-bold"
@@ -289,8 +290,14 @@ export default function RulesConfig({
 
                   {/* 確定日カレンダー */}
                   <div>
-                    <div className="mb-1 text-[11px] font-bold text-gray-700">外部枠にする日（任意）</div>
-                    <div className="mb-2 text-[10px] text-gray-500">日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。</div>
+                    <div className="mb-1 text-[11px] font-bold text-gray-700">
+                      {extInputMode === "internal" ? "勤務する日をタップで指定" : "外部枠にする日（任意）"}
+                    </div>
+                    <div className="mb-2 text-[10px] text-gray-500">
+                      {extInputMode === "internal"
+                        ? "タップした日が勤務日になります。それ以外が外部枠です。"
+                        : "日付が決まっている場合はタップで指定。日曜・祝日は日直/当直を選べます。"}
+                    </div>
                     <div className="mb-2 flex gap-1.5">
                       <button type="button" onClick={() => {
                         const y = calMonth.getFullYear(); const m = calMonth.getMonth();

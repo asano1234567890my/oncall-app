@@ -274,6 +274,7 @@ export default function AppPage() {
           <div className="mx-auto max-w-lg px-4 py-4 space-y-5">
             {/* ── ルール ── */}
             <MobileRulesSection
+              daysInMonth={core.daysInMonth}
               hardConstraints={core.hardConstraints}
               shiftScores={core.shiftScores}
               onHardConstraintChange={core.handleHardConstraintChange}
@@ -830,7 +831,8 @@ function MobileUnavailableMenuItem({ activeDoctors, unavailableMap, fixedUnavail
   );
 }
 
-function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChange, onShiftScoreChange, onResetRules, onResetScores, onSave, isSaving, saveMessage }: {
+function MobileRulesSection({ daysInMonth, hardConstraints, shiftScores, onHardConstraintChange, onShiftScoreChange, onResetRules, onResetScores, onSave, isSaving, saveMessage }: {
+  daysInMonth: number;
   hardConstraints: HardConstraints;
   shiftScores: ShiftScores;
   onHardConstraintChange: (key: keyof HardConstraints, value: number | boolean | string | unknown[]) => void;
@@ -842,6 +844,7 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
   saveMessage: string;
 }) {
   const hc = hardConstraints;
+  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -928,42 +931,53 @@ function MobileRulesSection({ hardConstraints, shiftScores, onHardConstraintChan
           </div>
           {(hc.external_slot_count ?? 0) > 0 && (() => {
             const hasFixedDates = (hc.external_fixed_dates?.length ?? 0) > 0;
-            const fixedCount = hc.external_fixed_dates?.length ?? 0;
             const extCount = hc.external_slot_count ?? 0;
-            const intCount = 30 - extCount;
             return (
             <div className="space-y-2 rounded-lg border border-gray-100 bg-gray-50 p-3">
               <div className={`space-y-1.5 ${hasFixedDates ? "opacity-50 pointer-events-none" : ""}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-teal-700">外部枠</span>
-                  <div className="flex items-center gap-1.5">
-                    <StepperNumberInput
-                      value={hasFixedDates ? fixedCount : extCount}
-                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
-                      fallbackValue={0}
-                      min={0} max={29} step={1} inputMode="numeric"
-                      inputClassName="text-sm font-bold !py-1 !px-1"
-                      buttonClassName="!h-7 !w-7 text-sm"
-                      className="max-w-[130px]"
-                    />
-                    <span className="text-[10px] text-gray-400 shrink-0">回</span>
-                  </div>
+                <div className="flex gap-1.5 mb-1">
+                  <button type="button" onClick={() => setExtInputMode("external")}
+                    className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "external" ? "border-teal-500 bg-teal-50 text-teal-700" : "border-gray-200 bg-white text-gray-400"}`}>
+                    外部枠数
+                  </button>
+                  <button type="button" onClick={() => setExtInputMode("internal")}
+                    className={`flex-1 rounded-lg border-2 py-1.5 text-[11px] font-bold transition ${extInputMode === "internal" ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400"}`}>
+                    勤務日数
+                  </button>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-blue-700">勤務日数</span>
-                  <div className="flex items-center gap-1.5">
-                    <StepperNumberInput
-                      value={hasFixedDates ? 30 - fixedCount : intCount}
-                      onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
-                      fallbackValue={8}
-                      min={1} max={30} step={1} inputMode="numeric"
-                      inputClassName="text-sm font-bold !py-1 !px-1"
-                      buttonClassName="!h-7 !w-7 text-sm"
-                      className="max-w-[130px]"
-                    />
-                    <span className="text-[10px] text-gray-400 shrink-0">日</span>
+                {extInputMode === "external" ? (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-teal-600">外部枠（{daysInMonth}日中）</span>
+                    <div className="flex items-center gap-1.5">
+                      <StepperNumberInput
+                        value={extCount}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                        fallbackValue={0}
+                        min={0} max={daysInMonth - 1} step={1} inputMode="numeric"
+                        inputClassName="text-sm font-bold !py-1 !px-1"
+                        buttonClassName="!h-7 !w-7 text-sm"
+                        className="max-w-[130px]"
+                      />
+                      <span className="text-[10px] text-gray-400 shrink-0">回</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-blue-600">勤務日数（{daysInMonth}日中）</span>
+                    <div className="flex items-center gap-1.5">
+                      <StepperNumberInput
+                        value={daysInMonth - extCount}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v))}
+                        fallbackValue={8}
+                        min={1} max={daysInMonth} step={1} inputMode="numeric"
+                        inputClassName="text-sm font-bold !py-1 !px-1"
+                        buttonClassName="!h-7 !w-7 text-sm"
+                        className="max-w-[130px]"
+                      />
+                      <span className="text-[10px] text-gray-400 shrink-0">日</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <MobileExternalCalendarToggle
                 dates={hc.external_fixed_dates ?? []}

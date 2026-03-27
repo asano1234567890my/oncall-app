@@ -277,6 +277,7 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
   } = props;
 
   const [isShiftScoresOpen, setIsShiftScoresOpen] = useState(false);
+  const [extInputMode, setExtInputMode] = useState<"external" | "internal">("external");
   const displayMonth = new Date(year, month - 1, 1);
 
   // ── Holiday calendar helpers ──
@@ -414,35 +415,48 @@ export default function DashboardSettingsPanel(props: DashboardSettingsPanelProp
             const intCount = 30 - extCount;
             return (
             <>
-              <div className={`pl-3 border-l-2 border-teal-200 space-y-1.5 ${hasFixed ? "opacity-50" : ""}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold text-teal-700">外部枠</span>
-                  <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
-                    <StepperNumberInput
-                      value={hasFixed ? fixedCount : extCount}
-                      onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
-                      fallbackValue={0}
-                      min={0} max={29} step={1}
-                      inputMode="numeric"
-                      inputClassName="text-xs font-bold w-12 text-center"
-                    />
-                    <span className="text-[10px] text-gray-400 w-4">回</span>
-                  </div>
+              <div className={`pl-3 border-l-2 border-teal-200 space-y-1.5 ${hasFixed ? "opacity-50 pointer-events-none" : ""}`}>
+                <div className="flex gap-1 mb-1">
+                  <button type="button" onClick={() => setExtInputMode("external")}
+                    className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "external" ? "bg-teal-100 text-teal-700 border border-teal-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
+                    外部枠数
+                  </button>
+                  <button type="button" onClick={() => setExtInputMode("internal")}
+                    className={`flex-1 rounded px-1.5 py-1 text-[10px] font-bold transition ${extInputMode === "internal" ? "bg-blue-100 text-blue-700 border border-blue-300" : "bg-gray-50 text-gray-400 border border-gray-200"}`}>
+                    勤務日数
+                  </button>
                 </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-bold text-blue-700">勤務日数</span>
-                  <div className={`flex items-center gap-1 ${hasFixed ? "pointer-events-none" : ""}`}>
-                    <StepperNumberInput
-                      value={hasFixed ? 30 - fixedCount : intCount}
-                      onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, 30 - v))}
-                      fallbackValue={8}
-                      min={1} max={30} step={1}
-                      inputMode="numeric"
-                      inputClassName="text-xs font-bold w-12 text-center"
-                    />
-                    <span className="text-[10px] text-gray-400 w-4">日</span>
+                {extInputMode === "external" ? (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-teal-600">外部枠</span>
+                    <div className="flex items-center gap-1">
+                      <StepperNumberInput
+                        value={extCount}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", v)}
+                        fallbackValue={0}
+                        min={0} max={daysInMonth - 1} step={1}
+                        inputMode="numeric"
+                        inputClassName="text-xs font-bold w-12 text-center"
+                      />
+                      <span className="text-[10px] text-gray-400">/{daysInMonth}日</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-blue-600">勤務日数</span>
+                    <div className="flex items-center gap-1">
+                      <StepperNumberInput
+                        value={daysInMonth - extCount}
+                        onCommit={(v) => onHardConstraintChange("external_slot_count", Math.max(0, daysInMonth - v))}
+                        fallbackValue={8}
+                        min={1} max={daysInMonth} step={1}
+                        inputMode="numeric"
+                        inputClassName="text-xs font-bold w-12 text-center"
+                      />
+                      <span className="text-[10px] text-gray-400">/{daysInMonth}日</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <ExternalFixedDatesEditor
                 dates={hardConstraints.external_fixed_dates ?? []}
