@@ -397,6 +397,7 @@ export default function SetupWizard({ onComplete, isRedo }: WizardProps) {
                   <div className="text-[10px] text-blue-500 mt-1">常勤で埋める日数</div>
                 </button>
                 <p className="col-span-2 text-[11px] text-gray-500 text-center">詳細な日程は設定画面のカレンダーで指定できます</p>
+                <p className="col-span-2 text-[10px] text-gray-400 text-center">💡 どちらも表裏の関係です（例: 30日の月なら「外部枠8」=「勤務22日」）。使いやすい方でどうぞ</p>
               </div>
             );
           })()}
