@@ -183,6 +183,33 @@ export function useScheduleDnd({
       return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
     }
 
+    const isCombinedMode = hardConstraints.holiday_shift_mode === "combined";
+    const isHoliday = isHolidayLikeDay(day).isHolidayLike;
+    const pairAssign = isCombinedMode && isHoliday && !isOverrideMode;
+
+    if (pairAssign) {
+      // 日当直ペア配置: night_shiftで制約チェック、day_shift も同期
+      const currentDoctorId = targetRow.night_shift ?? null;
+      if (currentDoctorId === doctorId) {
+        return { nextSchedule: null, errorMessage: null };
+      }
+
+      const ignoreShiftKeys = getPlacementIgnoreShiftKeys(doctorId, day, "night", next);
+      const constraintMessage = getPlacementConstraintMessage(doctorId, day, "night", {
+        scheduleRows: next,
+        ignoreShiftKeys,
+      });
+
+      if (constraintMessage) {
+        return { nextSchedule: null, errorMessage: formatConstraintForToast(doctorId, constraintMessage) };
+      }
+
+      targetRow.night_shift = doctorId;
+      targetRow.day_shift = doctorId;
+      return { nextSchedule: next, errorMessage: null };
+    }
+
+    // --- 通常配置（個別セル） ---
     const targetField = shiftType === "day" ? "day_shift" : "night_shift";
     const currentDoctorId = targetRow[targetField] ?? null;
     if (currentDoctorId === doctorId) {
@@ -291,6 +318,23 @@ export function useScheduleDnd({
   };
 
   const buildClearSchedule = (day: number, shiftType: ShiftType): ScheduleMutationResult => {
+    const isCombinedMode = hardConstraints.holiday_shift_mode === "combined";
+    const isHoliday = isHolidayLikeDay(day).isHolidayLike;
+    const pairClear = isCombinedMode && isHoliday && !isOverrideMode;
+
+    if (pairClear) {
+      if (isShiftLocked(day, "night") || isShiftLocked(day, "day")) {
+        return { nextSchedule: null, errorMessage: "ロック済みの枠は解除できません" };
+      }
+      const next = cloneSchedule(schedule);
+      const row = next.find((entry) => entry.day === day);
+      if (!row) return { nextSchedule: null, errorMessage: "対象日のシフトが見つかりません" };
+      if (!row.night_shift && !row.day_shift) return { nextSchedule: null, errorMessage: null };
+      row.night_shift = null;
+      row.day_shift = null;
+      return { nextSchedule: next, errorMessage: null };
+    }
+
     if (isShiftLocked(day, shiftType)) {
       return { nextSchedule: null, errorMessage: "ロック済みの枠は解除できません" };
     }
