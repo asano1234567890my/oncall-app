@@ -931,8 +931,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 if (!res.ok) throw new Error("失敗しました");
                                 const data = await res.json();
                                 toast.success(data.message || "一括ソフト化しました");
-                                // 不可日データを反映するためリロード
-                                setTimeout(() => window.location.reload(), 1000);
+                                onDoctorsChanged();
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "一括ソフト化に失敗しました");
                               }
@@ -955,7 +954,7 @@ export default function DoctorManageDrawer({ isOpen, onClose, onDoctorsChanged, 
                                 if (!res.ok) throw new Error("失敗しました");
                                 const data = await res.json();
                                 toast.success(data.message || "ハード制約に復元しました");
-                                setTimeout(() => window.location.reload(), 1000);
+                                onDoctorsChanged();
                               } catch (err) {
                                 toast.error(err instanceof Error ? err.message : "復元に失敗しました");
                               }
