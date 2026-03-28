@@ -31,6 +31,12 @@ class Hospital(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Stripe billing
+    plan: Mapped[str] = mapped_column(String(20), nullable=False, default="free")
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     doctors: Mapped[list["Doctor"]] = relationship(
         back_populates="hospital",
         cascade="all, delete-orphan",

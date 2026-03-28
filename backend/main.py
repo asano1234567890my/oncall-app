@@ -16,6 +16,7 @@ import routers.import_image as import_image_router
 import routers.shared_entry as shared_entry_router
 import routers.admin as admin_router
 import routers.guide as guide_router
+import routers.billing as billing_router
 
 settings = get_settings()
 
@@ -63,6 +64,7 @@ app.include_router(import_image_router.router)
 app.include_router(shared_entry_router.router)
 app.include_router(admin_router.router)
 app.include_router(guide_router.router)
+app.include_router(billing_router.router)
 
 
 @app.get("/")

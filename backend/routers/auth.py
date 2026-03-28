@@ -149,6 +149,7 @@ async def get_me(
         "hospital_name": hospital.name,
         "email": hospital.email,
         "has_email": hospital.email is not None,
+        "plan": hospital.plan,
     }
 
 
