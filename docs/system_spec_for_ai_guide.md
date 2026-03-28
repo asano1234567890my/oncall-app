@@ -15,6 +15,8 @@
 - **最適化エンジン**: Google OR-Tools CP-SAT ソルバー
 - **DB**: PostgreSQL（Neon クラウド）
 - **デプロイ**: Vercel（フロント）+ Render（バックエンド）
+- **ドメイン**: shifuraku.com（Cloudflare DNS → Vercel）
+- **決済**: Stripe（Checkout + Customer Portal + Webhook）
 
 ### 画面構成
 
