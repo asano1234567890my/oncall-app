@@ -26,6 +26,7 @@ import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import AccountActions from "../components/settings/AccountActions";
 import ImageImportModal from "../components/ImageImportModal";
 import InfeasibleGuideModal from "../components/InfeasibleGuideModal";
+import AiGuideChat from "../components/AiGuideChat";
 import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
 import StepperNumberInput from "../components/inputs/StepperNumberInput";
 import TargetShiftPopover, { externalLabels, internalLabels } from "../components/TargetShiftPopover";
@@ -484,6 +485,8 @@ export default function AppPage() {
         hasExistingSchedule={hasSchedule}
         onImported={() => { void core.refetchDoctors(); window.location.reload(); }}
       />
+
+      <AiGuideChat />
     </div>
   );
 }
