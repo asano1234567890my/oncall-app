@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import get_current_hospital
 from core.db import get_db
 from schemas.guide import GuideChatRequest, GuideChatResponse
-from services import guide_service
+from services import guide_service, usage_service
 
 router = APIRouter(prefix="/api/guide", tags=["guide"])
 
@@ -27,6 +27,7 @@ async def guide_chat(
     hospital_id: uuid.UUID = Depends(get_current_hospital),
     db: AsyncSession = Depends(get_db),
 ) -> GuideChatResponse:
+    await usage_service.log_event(db, hospital_id, "guide_chat")
     reply = await guide_service.chat(
         db,
         hospital_id,
