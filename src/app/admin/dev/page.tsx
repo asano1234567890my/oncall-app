@@ -52,6 +52,27 @@ type HospitalDetail = {
   }[];
 };
 
+type InsightsSummary = {
+  total: number;
+  by_category: { category: string; count: number }[];
+  feature_requests: {
+    summary: string;
+    count: number;
+    latest: string;
+  }[];
+};
+
+type InsightRow = {
+  id: string;
+  hospital_id: string;
+  hospital_name: string;
+  category: string;
+  summary: string;
+  feature_request: string | null;
+  user_message: string;
+  created_at: string;
+};
+
 // ── Helpers ──
 
 const fmtDate = (iso: string | null) => {
@@ -102,6 +123,18 @@ type GenerateRatio = {
   ratio: number | null;
 };
 
+// ── Guide Insights constants ──
+
+const CATEGORY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  usage_question:  { label: "使い方",   color: "text-blue-700",   bg: "bg-blue-50",   border: "border-blue-200" },
+  troubleshooting: { label: "トラブル", color: "text-red-700",    bg: "bg-red-50",    border: "border-red-200" },
+  feature_request: { label: "改修要望", color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+  workflow_advice: { label: "運用相談", color: "text-amber-700",  bg: "bg-amber-50",  border: "border-amber-200" },
+  general:         { label: "その他",   color: "text-gray-700",   bg: "bg-gray-50",   border: "border-gray-200" },
+};
+
+const ALL_CATEGORIES = ["usage_question", "troubleshooting", "feature_request", "workflow_advice", "general"] as const;
+
 // ── Component ──
 
 export default function AdminDevPage() {
@@ -120,6 +153,12 @@ export default function AdminDevPage() {
   const [monthly, setMonthly] = useState<MonthlyData[]>([]);
   const [ratios, setRatios] = useState<GenerateRatio[]>([]);
 
+  // Guide Insights state
+  const [insightsSummary, setInsightsSummary] = useState<InsightsSummary | null>(null);
+  const [insights, setInsights] = useState<InsightRow[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null);
+
   // ── Fetch data ──
 
   const fetchData = useCallback(async () => {
@@ -127,11 +166,13 @@ export default function AdminDevPage() {
     setError(null);
     try {
       const headers = getAuthHeaders();
-      const [hRes, sRes, mRes, rRes] = await Promise.all([
+      const [hRes, sRes, mRes, rRes, giSumRes, giListRes] = await Promise.all([
         fetch(`${API()}/api/admin/hospitals`, { headers }),
         fetch(`${API()}/api/admin/usage/summary`, { headers }),
         fetch(`${API()}/api/admin/usage/monthly?months=6`, { headers }),
         fetch(`${API()}/api/admin/usage/generate-ratio`, { headers }),
+        fetch(`${API()}/api/admin/guide-insights/summary?days=90`, { headers }),
+        fetch(`${API()}/api/admin/guide-insights?days=90&limit=200`, { headers }),
       ]);
       if (hRes.status === 403 || sRes.status === 403) {
         router.replace("/app");
@@ -149,12 +190,29 @@ export default function AdminDevPage() {
       setSummary(await sRes.json());
       if (mRes.ok) setMonthly(await mRes.json());
       if (rRes.ok) setRatios(await rRes.json());
+      if (giSumRes.ok) setInsightsSummary(await giSumRes.json());
+      if (giListRes.ok) setInsights(await giListRes.json());
     } catch {
       setError("サーバーに接続できません");
     } finally {
       setLoading(false);
     }
   }, [router]);
+
+  // Re-fetch insights when category filter changes
+  const fetchInsights = useCallback(async () => {
+    try {
+      const headers = getAuthHeaders();
+      const categoryParam = selectedCategory !== "all" ? `&category=${selectedCategory}` : "";
+      const res = await fetch(
+        `${API()}/api/admin/guide-insights?days=90&limit=200${categoryParam}`,
+        { headers }
+      );
+      if (res.ok) setInsights(await res.json());
+    } catch {
+      // silently fail — insights are supplementary
+    }
+  }, [selectedCategory]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -164,6 +222,14 @@ export default function AdminDevPage() {
     }
     fetchData();
   }, [authLoading, auth.isAuthenticated, router, fetchData]);
+
+  // Re-fetch when category changes (skip initial mount — fetchData handles it)
+  useEffect(() => {
+    if (!loading && auth.isAuthenticated) {
+      fetchInsights();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
 
   // ── Detail expand ──
 
@@ -407,6 +473,16 @@ export default function AdminDevPage() {
             </table>
           </div>
         </div>
+
+        {/* ── AIガイド分析 ── */}
+        <GuideInsightsSection
+          insightsSummary={insightsSummary}
+          insights={insights}
+          selectedCategory={selectedCategory}
+          onCategoryChange={setSelectedCategory}
+          expandedInsightId={expandedInsightId}
+          onToggleInsight={(id) => setExpandedInsightId(expandedInsightId === id ? null : id)}
+        />
       </div>
     </div>
   );
@@ -567,5 +643,188 @@ function HospitalDetailPanel({ detail }: { detail: HospitalDetail }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Guide Insights Section ──
+
+function CategoryBadge({ category }: { category: string }) {
+  const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.general;
+  return (
+    <span
+      className={`inline-flex items-center text-xs px-2 py-0.5 rounded border ${config.bg} ${config.color} ${config.border}`}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+function GuideInsightsSection({
+  insightsSummary,
+  insights,
+  selectedCategory,
+  onCategoryChange,
+  expandedInsightId,
+  onToggleInsight,
+}: {
+  insightsSummary: InsightsSummary | null;
+  insights: InsightRow[];
+  selectedCategory: string;
+  onCategoryChange: (cat: string) => void;
+  expandedInsightId: string | null;
+  onToggleInsight: (id: string) => void;
+}) {
+  if (!insightsSummary && insights.length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-sm font-semibold text-gray-700">AIガイド分析</h2>
+
+      {/* ── Category Summary Cards ── */}
+      {insightsSummary && (
+        <div className="bg-white rounded-lg border p-4">
+          <div className="flex items-center gap-4 mb-3">
+            <div>
+              <p className="text-xs text-gray-500">質問総数（直近90日）</p>
+              <p className="text-2xl font-bold text-gray-800">{insightsSummary.total}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {ALL_CATEGORIES.map((cat) => {
+              const config = CATEGORY_CONFIG[cat];
+              const entry = insightsSummary.by_category.find((c) => c.category === cat);
+              const count = entry?.count || 0;
+              return (
+                <div
+                  key={cat}
+                  className={`flex items-center gap-2 rounded border px-3 py-2 text-sm ${config.bg} ${config.border}`}
+                >
+                  <span className={`font-medium ${config.color}`}>{config.label}</span>
+                  <span className={`font-mono font-bold ${config.color}`}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Feature Request Ranking ── */}
+      {insightsSummary && insightsSummary.feature_requests.length > 0 && (
+        <div className="bg-white rounded-lg border p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">改修要望ランキング</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 border-b">
+                  <th className="text-left py-1.5">要望内容</th>
+                  <th className="text-center py-1.5">件数</th>
+                  <th className="text-left py-1.5">最新日時</th>
+                </tr>
+              </thead>
+              <tbody>
+                {insightsSummary.feature_requests.map((fr, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="py-1.5 text-gray-700">{fr.summary}</td>
+                    <td className="py-1.5 text-center font-mono font-semibold">{fr.count}</td>
+                    <td className="py-1.5 text-gray-500">{fmtDateTime(fr.latest)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Question Log ── */}
+      <div className="bg-white rounded-lg border">
+        <div className="px-4 py-3 border-b flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <h3 className="text-sm font-semibold text-gray-700">
+            質問ログ ({insights.length})
+          </h3>
+          <select
+            value={selectedCategory}
+            onChange={(e) => onCategoryChange(e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+          >
+            <option value="all">すべてのカテゴリ</option>
+            {ALL_CATEGORIES.map((cat) => (
+              <option key={cat} value={cat}>
+                {CATEGORY_CONFIG[cat].label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-left text-xs text-gray-500 uppercase">
+                <th className="px-4 py-2">日時</th>
+                <th className="px-4 py-2">病院名</th>
+                <th className="px-4 py-2">カテゴリ</th>
+                <th className="px-4 py-2">要約</th>
+              </tr>
+            </thead>
+            <tbody>
+              {insights.map((row) => (
+                <InsightTableRow
+                  key={row.id}
+                  row={row}
+                  isExpanded={expandedInsightId === row.id}
+                  onToggle={() => onToggleInsight(row.id)}
+                />
+              ))}
+              {insights.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+                    質問データがありません
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InsightTableRow({
+  row,
+  isExpanded,
+  onToggle,
+}: {
+  row: InsightRow;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <tr
+        className="border-t hover:bg-blue-50/30 cursor-pointer"
+        onClick={onToggle}
+      >
+        <td className="px-4 py-2 text-gray-500 whitespace-nowrap">
+          {fmtDateTime(row.created_at)}
+        </td>
+        <td className="px-4 py-2 text-gray-700">{row.hospital_name}</td>
+        <td className="px-4 py-2">
+          <CategoryBadge category={row.category} />
+        </td>
+        <td className="px-4 py-2 text-gray-700">{row.summary}</td>
+      </tr>
+
+      {/* Expanded: show user_message */}
+      {isExpanded && (
+        <tr>
+          <td colSpan={4} className="bg-gray-50 px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">ユーザーの質問:</p>
+            <div className="bg-gray-100 rounded px-3 py-2 text-sm text-gray-700 whitespace-pre-wrap">
+              {row.user_message}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
