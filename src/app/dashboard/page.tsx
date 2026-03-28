@@ -17,6 +17,7 @@ import AccountActions from "../components/settings/AccountActions";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
 import ImageImportModal from "../components/ImageImportModal";
 import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
+import AiGuideChat from "../components/AiGuideChat";
 import { useOnCallCore } from "../hooks/useOnCallCore";
 
 export default function DashboardPage() {
@@ -422,6 +423,8 @@ export default function DashboardPage() {
         </div>
       </div>
     )}
+
+    <AiGuideChat />
     </>
   );
 }
