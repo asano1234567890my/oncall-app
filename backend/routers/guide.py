@@ -20,7 +20,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/chat", response_model=GuideChatResponse)
-@limiter.limit("20/minute")
+@limiter.limit("3/minute")
 async def guide_chat(
     request: Request,
     req: GuideChatRequest,

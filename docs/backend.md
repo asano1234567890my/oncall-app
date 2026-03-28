@@ -187,5 +187,5 @@ uvicorn main:app --reload
 | `GEMINI_API_KEY` | AI機能使用時 | Google Gemini APIキー（Google AI Studioで発行） |
 | `GEMINI_MODEL` | 任意 | 使用するGeminiモデル（デフォルト: `gemini-3-flash-preview`） |
 | `ANTHROPIC_API_KEY` | AIガイド使用時 | Anthropic Claude APIキー |
-| `CLAUDE_MODEL` | 任意 | 使用するClaudeモデル（デフォルト: `claude-sonnet-4-20250514`） |
+| `CLAUDE_MODEL` | 任意 | 使用するClaudeモデル（デフォルト: `claude-haiku-4-5-20251001`） |
 | `FRONTEND_URL` | 本番時 | CORS許可するフロントエンドURL（`*`で全許可） |
