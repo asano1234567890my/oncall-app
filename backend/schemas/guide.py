@@ -13,3 +13,5 @@ class GuideChatRequest(BaseModel):
 
 class GuideChatResponse(BaseModel):
     reply: str
+    insight_id: str | None = None
+    category: str | None = None

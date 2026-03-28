@@ -38,6 +38,8 @@ async def guide_chat(
     )
 
     # Record insight (fire-and-forget)
+    insight_id = None
+    category = None
     if meta:
         try:
             insight = GuideInsight(
@@ -46,11 +48,31 @@ async def guide_chat(
                 summary=meta["summary"],
                 feature_request=meta.get("feature_request"),
                 user_message=req.message,
+                ai_response=reply,
                 created_at=datetime.now(timezone.utc),
             )
             db.add(insight)
             await db.flush()
+            insight_id = str(insight.id)
+            category = meta["category"]
         except Exception:
             pass  # Don't break chat for analytics failure
 
-    return GuideChatResponse(reply=reply)
+    return GuideChatResponse(reply=reply, insight_id=insight_id, category=category)
+
+
+@router.patch("/{insight_id}/submit")
+async def submit_insight(
+    insight_id: uuid.UUID,
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """ユーザーが明示的に開発者へ送信したインサイトにフラグを立てる"""
+    from sqlalchemy import select, update
+    result = await db.execute(
+        update(GuideInsight)
+        .where(GuideInsight.id == insight_id, GuideInsight.hospital_id == hospital_id)
+        .values(is_user_submitted=True)
+    )
+    await db.commit()
+    return {"ok": True}

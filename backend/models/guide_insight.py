@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.db import Base
@@ -23,6 +23,8 @@ class GuideInsight(Base):
     summary: Mapped[str] = mapped_column(Text)
     feature_request: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_message: Mapped[str] = mapped_column(Text)
+    ai_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_user_submitted: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
