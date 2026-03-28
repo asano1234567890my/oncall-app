@@ -52,10 +52,9 @@ async def guide_chat(
                 created_at=datetime.now(timezone.utc),
             )
             db.add(insight)
-            await db.flush()
+            await db.commit()
             insight_id = str(insight.id)
             category = meta["category"]
-            pass
         except Exception:
             pass  # Don't break chat for analytics failure
 
