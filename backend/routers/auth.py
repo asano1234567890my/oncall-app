@@ -27,6 +27,7 @@ from services.auth_service import (
     update_password,
     verify_password,
 )
+from services.usage_service import log_event
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -72,6 +73,10 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
             detail="病院名（またはメールアドレス）かパスワードが正しくありません",
         )
     token = create_access_token(hospital.id)
+    # last_login_at 更新 + イベント記録
+    hospital.last_login_at = datetime.now(timezone.utc)
+    await log_event(db, hospital.id, "login")
+    await db.commit()
     return TokenResponse(
         access_token=token,
         hospital_id=str(hospital.id),
@@ -101,6 +106,8 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
     hospital = await create_hospital(db, body.name, body.password, email=email)
     token = create_access_token(hospital.id)
+    await log_event(db, hospital.id, "register")
+    await db.commit()
     return TokenResponse(
         access_token=token,
         hospital_id=str(hospital.id),

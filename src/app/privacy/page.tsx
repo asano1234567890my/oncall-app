@@ -29,6 +29,7 @@ export default function PrivacyPolicyPage() {
               <li><span className="font-medium">医師情報:</span> 氏名、経験年数、勤務不可日</li>
               <li><span className="font-medium">シフトデータ:</span> 当直・日直の配置情報</li>
               <li><span className="font-medium">利用ログ:</span> アクセス日時、操作履歴（サービス改善目的）</li>
+              <li><span className="font-medium">利用状況データ:</span> 機能の利用回数（スケジュール生成回数、出力回数等）、ログイン日時</li>
             </ul>
           </section>
 
@@ -40,6 +41,7 @@ export default function PrivacyPolicyPage() {
               <li>アカウントの認証・管理</li>
               <li>サービスの改善・機能追加</li>
               <li>お問い合わせへの対応</li>
+              <li>利用プランの管理・課金処理</li>
             </ul>
           </section>
 
@@ -77,7 +79,7 @@ export default function PrivacyPolicyPage() {
             <p>個人情報の取り扱いに関するお問い合わせは、サービス内のお問い合わせ機能よりご連絡ください。</p>
           </section>
 
-          <p className="text-xs text-gray-400 pt-4">最終更新日: 2026年3月22日</p>
+          <p className="text-xs text-gray-400 pt-4">最終更新日: 2026年3月28日</p>
         </div>
       </main>
 

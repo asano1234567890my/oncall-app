@@ -15,6 +15,7 @@ from core.auth import get_current_hospital
 from core.db import get_db
 from models.doctor import Doctor
 from models.shift import ShiftAssignment
+from services.usage_service import log_event
 
 router = APIRouter(prefix="/api/import", tags=["Import"])
 
@@ -179,6 +180,7 @@ SCHEDULE_ACCEPTED_EXTENSIONS = ACCEPTED_EXTENSIONS
 async def parse_image(
     file: UploadFile = File(...),
     hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
 ):
     """画像・Excel・Word・PDF・テキストからスケジュールデータを抽出する。"""
     if not GEMINI_API_KEY:
@@ -216,6 +218,10 @@ async def parse_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ファイル解析に失敗しました: {str(e)}")
 
+    await log_event(db, hospital_id, "ai_parse_image", {
+        "file_type": ext.lstrip("."),
+    })
+    await db.commit()
     return parsed
 
 
@@ -309,6 +315,7 @@ async def confirm_import(
 async def parse_doctors(
     file: UploadFile = File(...),
     hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(get_db),
 ):
     """画像・Excel・Word・PDF・テキストから医師名リストを抽出する。"""
     if not GEMINI_API_KEY:
@@ -352,6 +359,10 @@ async def parse_doctors(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ファイル解析に失敗しました: {str(e)}")
 
+    await log_event(db, hospital_id, "ai_parse_doctors", {
+        "file_type": ext.lstrip("."),
+    })
+    await db.commit()
     return {"names": names}
 
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import String
+from sqlalchemy import Boolean, DateTime, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +19,17 @@ class Hospital(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     email: Mapped[str | None] = mapped_column(String(300), nullable=True, unique=True)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    is_superadmin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     doctors: Mapped[list["Doctor"]] = relationship(
         back_populates="hospital",

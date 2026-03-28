@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
 
@@ -41,3 +43,36 @@ def get_current_hospital(
         return uuid.UUID(hospital_id_str)
     except (JWTError, ValueError):
         raise exc
+
+
+async def get_current_superadmin(
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+    db: AsyncSession = Depends(None),  # placeholder, overridden below
+) -> uuid.UUID:
+    """is_superadmin=True の病院のみ許可する dependency。
+    使用時は router で db dependency を注入すること:
+        Depends(get_current_superadmin_dep(get_db))
+    """
+    raise NotImplementedError("Use get_current_superadmin_dep instead")
+
+
+def get_current_superadmin_dep(get_db):
+    """get_db を注入して superadmin チェック dependency を生成する。"""
+    from models.hospital import Hospital
+
+    async def _dep(
+        hospital_id: uuid.UUID = Depends(get_current_hospital),
+        db: AsyncSession = Depends(get_db),
+    ) -> uuid.UUID:
+        result = await db.execute(
+            select(Hospital.is_superadmin).where(Hospital.id == hospital_id)
+        )
+        row = result.scalar_one_or_none()
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="アクセス権限がありません",
+            )
+        return hospital_id
+
+    return _dep

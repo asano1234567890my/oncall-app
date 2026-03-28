@@ -87,6 +87,7 @@ import models.hospital  # noqa: F401,E402
 import models.doctor  # noqa: F401,E402
 import models.shift  # noqa: F401,E402
 import models.weight_preset  # noqa: F401,E402
+import models.usage_event  # noqa: F401,E402
 
 target_metadata = Base.metadata
 

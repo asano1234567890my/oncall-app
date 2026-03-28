@@ -16,6 +16,7 @@ from schemas.optimize import (
 from services.optimizer import OnCallOptimizer
 from services.optimizer_history import build_past_total_scores
 from services.settings_service import get_optimizer_config
+from services.usage_service import log_event
 
 router = APIRouter(prefix="/api/optimize", tags=["Optimize"])
 
@@ -272,6 +273,11 @@ async def generate_schedule(
             diagnostics = DiagnosticInfo(
                 pre_check_errors=[ConstraintDiagnostic(**e) for e in pre_errors]
             )
+            await log_event(db, hospital_id, "generate", {
+                "year": req.year, "month": req.month,
+                "doctor_count": len(doctors), "status": "pre_check_failed",
+            })
+            await db.commit()
             return OptimizeResponse(
                 success=False,
                 message="制約の設定に問題があります",
@@ -282,6 +288,11 @@ async def generate_schedule(
         solve_result = optimizer.solve()
 
         if not solve_result.get("success"):
+            await log_event(db, hospital_id, "generate", {
+                "year": req.year, "month": req.month,
+                "doctor_count": len(doctors), "status": "infeasible",
+            })
+            await db.commit()
             return OptimizeResponse(
                 success=False,
                 message=solve_result.get("message", "スケジュールを生成できませんでした"),
@@ -327,6 +338,11 @@ async def generate_schedule(
                 })
             solve_result["soft_unavail_violations"] = mapped
 
+        await log_event(db, hospital_id, "generate", {
+            "year": req.year, "month": req.month,
+            "doctor_count": len(doctors), "status": "success",
+        })
+        await db.commit()
         return solve_result
 
     except HTTPException:
@@ -520,6 +536,11 @@ async def diagnose_constraints(
         #         phase_completed = 3
         #     except Exception:
         #         pass
+
+        await log_event(db, hospital_id, "diagnose", {
+            "year": req.year, "month": req.month,
+        })
+        await db.commit()
 
         return DiagnoseResponse(
             success=True,

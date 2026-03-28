@@ -11,6 +11,7 @@ from core.db import get_db
 from core.auth import get_current_hospital
 from models.doctor import Doctor
 from services.settings_service import get_system_setting, upsert_system_setting
+from services.usage_service import log_event
 
 router = APIRouter(prefix="/api/shared-entry", tags=["SharedEntry"])
 
@@ -96,6 +97,9 @@ async def get_doctors_by_shared_token(
                 unavail_day_limit = int(unavail_day_limit_raw)
             except (TypeError, ValueError):
                 pass
+
+        await log_event(db, hospital_id, "shared_entry_access")
+        await db.commit()
 
         return {
             "doctors": [

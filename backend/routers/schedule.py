@@ -27,6 +27,7 @@ from services.settings_service import (
 )
 
 from fastapi.responses import Response
+from services.usage_service import log_event
 from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/api/schedule", tags=["Schedule"])
@@ -161,6 +162,9 @@ async def get_ical_feed(
     hospital_name = doctor.hospital.name if doctor.hospital else "病院"
     ics_content = _build_ics(doctor.name, hospital_name, assignments, doctor_id=str(doctor.id))
 
+    await log_event(db, doctor.hospital_id, "ical_subscribe")
+    await db.commit()
+
     return Response(
         content=ics_content,
         media_type="text/calendar; charset=utf-8",
@@ -234,6 +238,11 @@ async def get_public_schedule(
     raw = await get_system_setting(db, doctor.hospital_id, f"publish_comment_{month_key}")
     if raw and isinstance(raw, str):
         publish_comment = raw
+
+    await log_event(db, doctor.hospital_id, "public_schedule_view", {
+        "year": year, "month": month,
+    })
+    await db.commit()
 
     return {
         "published": True,
@@ -356,6 +365,9 @@ async def save_schedule(
                 )
 
         db.add_all(new_assignments)
+        await log_event(db, hospital_id, "schedule_save", {
+            "year": req.year, "month": req.month,
+        })
         await db.commit()
 
         return {
@@ -480,6 +492,8 @@ async def save_draft(
         for item in req.schedule
     ]
     saved_at = await upsert_draft_schedule(db, hospital_id, year, month, schedule_data)
+    await log_event(db, hospital_id, "draft_save", {"year": year, "month": month})
+    await db.commit()
     return {"success": True, "saved_at": saved_at}
 
 
@@ -1141,6 +1155,10 @@ async def export_schedule(
         content = _build_pdf(year, month, hospital_name, doctor_map, rows, holiday_dates)
         ext = "pdf"
         media = "application/pdf"
+
+    event_type = "export_pdf" if format == "pdf" else "export_xlsx"
+    await log_event(db, hospital_id, event_type, {"year": year, "month": month})
+    await db.commit()
 
     return Response(
         content=content,

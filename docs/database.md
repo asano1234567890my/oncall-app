@@ -22,7 +22,11 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 |-------|-----|------|
 | `id` | UUID (PK) | 病院ID |
 | `name` | String (unique) | 病院名 |
+| `email` | String (unique, nullable) | メールアドレス |
 | `password_hash` | String | bcryptハッシュ |
+| `is_superadmin` | Boolean | 開発者管理フラグ（default: false） |
+| `created_at` | DateTime(tz) | アカウント作成日時 |
+| `last_login_at` | DateTime(tz, nullable) | 最終ログイン日時 |
 
 ---
 
@@ -104,6 +108,20 @@ description: PostgreSQL Neon のテーブル設計・リレーション・マイ
 
 ---
 
+### `usage_events`（利用イベントログ）
+
+| カラム | 型 | 説明 |
+|-------|-----|------|
+| `id` | UUID (PK) | イベントID |
+| `hospital_id` | UUID (FK → hospitals) | 操作アカウント |
+| `event_type` | String(50) | イベント種別（generate, diagnose, schedule_save, draft_save, export_pdf, export_xlsx, ai_parse_image, ai_parse_doctors, login, register, public_schedule_view, ical_subscribe, shared_entry_access） |
+| `created_at` | DateTime(tz) | 発生日時 |
+| `metadata` | JSONB (nullable) | 付加情報（year, month, doctor_count, status等） |
+
+- インデックス: `(hospital_id, event_type, created_at)`, `(created_at)`
+
+---
+
 ## リレーション
 
 ```
@@ -111,7 +129,8 @@ hospitals
   ├── doctors (cascade delete)
   │     ├── shift_assignments (cascade delete)
   │     └── unavailable_days  (cascade delete)
-  └── system_settings (cascade delete)
+  ├── system_settings (cascade delete)
+  └── usage_events (cascade delete)
 ```
 
 ---
@@ -132,6 +151,8 @@ hospitals
 | `a1b2c3d4e5f6` | hospitalsテーブル追加・doctors/system_settingsにhospital_id FK追加・Ebina Hospitalシード |
 | `a5c81cf5d030` | transfer_codesテーブル追加 |
 | `27efd28f6bd1` | doctors.is_external追加（外部医師ダミー方式） |
+| `d17de90b0197` | hospitals.email追加 |
+| (P1-19) | hospitals.is_superadmin/created_at/last_login_at追加・usage_eventsテーブル新設 |
 
 ---
 
