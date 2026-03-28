@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -16,6 +17,44 @@ from models.doctor import Doctor
 from services.settings_service import get_optimizer_config
 
 logger = logging.getLogger(__name__)
+
+# ── Metadata parsing ──
+
+GUIDE_META_PATTERN = re.compile(
+    r"\[GUIDE_META\]\s*\n"
+    r"category:\s*(.+)\s*\n"
+    r"summary:\s*(.+)\s*\n"
+    r"feature_request:\s*(.+)\s*\n"
+    r"\[/GUIDE_META\]\s*$",
+    re.DOTALL,
+)
+
+VALID_CATEGORIES = {"usage_question", "troubleshooting", "feature_request", "workflow_advice", "general"}
+
+
+def _parse_guide_meta(text: str) -> tuple[str, dict | None]:
+    """回答テキストからGUIDE_METAタグをパースし、除去した回答とメタデータを返す"""
+    match = GUIDE_META_PATTERN.search(text)
+    if not match:
+        return text.strip(), None
+
+    category = match.group(1).strip()
+    summary = match.group(2).strip()
+    feature_request_raw = match.group(3).strip()
+
+    if category not in VALID_CATEGORIES:
+        category = "general"
+
+    feature_request = None if feature_request_raw.lower() in ("null", "none", "なし", "") else feature_request_raw
+
+    clean_text = text[:match.start()].strip()
+
+    return clean_text, {
+        "category": category,
+        "summary": summary,
+        "feature_request": feature_request,
+    }
+
 
 # ── Knowledge base cache (read once) ──
 
@@ -104,7 +143,15 @@ def _build_system_prompt(spec: str, recipes: str, context_json: str) -> str:
 {recipes}
 
 ## このユーザーの現在の設定
-{context_json}"""
+{context_json}
+
+## 質問分類（内部用・ユーザーには見えません）
+回答の最後に必ず以下のメタデータブロックを1つだけ追加してください:
+[GUIDE_META]
+category: （usage_question / troubleshooting / feature_request / workflow_advice / general のいずれか1つ）
+summary: （ユーザーの質問を20-30字で要約）
+feature_request: （feature_requestカテゴリの場合のみ、要望内容を簡潔に記載。それ以外はnull）
+[/GUIDE_META]"""
 
 
 async def chat(
@@ -112,8 +159,12 @@ async def chat(
     hospital_id: uuid.UUID,
     message: str,
     history: list[dict],
-) -> str:
-    """Claude APIを呼び出してAIガイドの返答を生成する"""
+) -> tuple[str, dict | None]:
+    """Claude APIを呼び出してAIガイドの返答を生成する。
+
+    Returns:
+        tuple of (reply_text, metadata_dict_or_None)
+    """
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -144,7 +195,9 @@ async def chat(
             system=system_prompt,
             messages=messages,
         )
-        return response.content[0].text
+        raw_text = response.content[0].text
+        reply, meta = _parse_guide_meta(raw_text)
+        return reply, meta
     except Exception:
         logger.exception("Claude API call failed")
-        return "申し訳ありません、一時的にエラーが発生しました。もう一度お試しください。"
+        return "申し訳ありません、一時的にエラーが発生しました。もう一度お試しください。", None

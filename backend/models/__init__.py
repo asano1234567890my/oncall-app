@@ -13,6 +13,7 @@ from .holiday import Holiday
 from .system_setting import SystemSetting
 from .transfer_code import TransferCode
 from .unavailable_day import UnavailableDay
+from .guide_insight import GuideInsight
 from .usage_event import UsageEvent
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "Holiday",
     "SystemSetting",
     "TransferCode",
+    "GuideInsight",
     "UsageEvent",
 ]
