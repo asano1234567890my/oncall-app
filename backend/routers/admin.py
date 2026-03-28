@@ -77,6 +77,8 @@ async def list_hospitals(
             Hospital.is_superadmin,
             Hospital.created_at,
             Hospital.last_login_at,
+            Hospital.plan,
+            Hospital.plan_expires_at,
             func.coalesce(internal_count.c.internal_count, 0).label("internal_doctors"),
             func.coalesce(external_count.c.external_count, 0).label("external_doctors"),
             func.coalesce(monthly_generate.c.generate_count, 0).label("monthly_generates"),
@@ -96,6 +98,8 @@ async def list_hospitals(
             "name": row.name,
             "email": row.email,
             "is_superadmin": row.is_superadmin,
+            "plan": row.plan,
+            "plan_expires_at": row.plan_expires_at.isoformat() if row.plan_expires_at else None,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "last_login_at": row.last_login_at.isoformat() if row.last_login_at else None,
             "internal_doctors": row.internal_doctors,
@@ -104,6 +108,29 @@ async def list_hospitals(
         }
         for row in rows
     ]
+
+
+@router.put("/hospitals/{hospital_id}/plan")
+async def update_hospital_plan(
+    hospital_id: uuid.UUID,
+    plan: str = Query(..., regex="^(free|pro|pro_max)$"),
+    beta_months: int | None = Query(None, ge=1, le=24),
+    _: uuid.UUID = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+):
+    """管理者によるプラン変更。beta_months指定でβ特典（N ヶ月無料Pro）"""
+    result = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
+    hospital = result.scalar_one_or_none()
+    if not hospital:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="アカウントが見つかりません")
+    hospital.plan = plan
+    if beta_months and plan != "free":
+        hospital.plan_expires_at = datetime.now(timezone.utc) + timedelta(days=30 * beta_months)
+    elif plan == "free":
+        hospital.plan_expires_at = None
+    await db.commit()
+    return {"ok": True, "plan": hospital.plan, "plan_expires_at": hospital.plan_expires_at.isoformat() if hospital.plan_expires_at else None}
 
 
 @router.get("/usage/summary")

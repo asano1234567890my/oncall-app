@@ -15,6 +15,8 @@ type HospitalRow = {
   is_superadmin: boolean;
   created_at: string | null;
   last_login_at: string | null;
+  plan: string;
+  plan_expires_at: string | null;
   internal_doctors: number;
   external_doctors: number;
   monthly_generates: number;
@@ -448,6 +450,7 @@ export default function AdminDevPage() {
                   <th className="px-4 py-2">登録日</th>
                   <th className="px-4 py-2 text-center">医師数</th>
                   <th className="px-4 py-2">最終ログイン</th>
+                  <th className="px-4 py-2 text-center">プラン</th>
                   <th className="px-4 py-2 text-center">月間生成</th>
                 </tr>
               </thead>
@@ -464,7 +467,7 @@ export default function AdminDevPage() {
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
                       該当するアカウントがありません
                     </td>
                   </tr>
@@ -537,6 +540,34 @@ function HospitalTableRow({
           )}
         </td>
         <td className="px-4 py-2 text-gray-500">{fmtDateTime(h.last_login_at)}</td>
+        <td className="px-4 py-2 text-center">
+          <select
+            value={h.plan}
+            onClick={(e) => e.stopPropagation()}
+            onChange={async (e) => {
+              const newPlan = e.target.value;
+              const beta = newPlan !== "free" ? prompt("β特典: 無料期間（月数）を入力（不要なら空欄）") : null;
+              const params = new URLSearchParams({ plan: newPlan });
+              if (beta && Number(beta) > 0) params.set("beta_months", beta);
+              await fetch(`${API()}/api/admin/hospitals/${h.id}/plan?${params}`, {
+                method: "PUT", headers: getAuthHeaders(),
+              });
+              location.reload();
+            }}
+            className={`text-xs rounded px-1.5 py-0.5 font-medium ${
+              h.plan === "free" ? "bg-gray-100 text-gray-600" :
+              h.plan === "pro" ? "bg-indigo-100 text-indigo-700" :
+              "bg-purple-100 text-purple-700"
+            }`}
+          >
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="pro_max">Pro Max</option>
+          </select>
+          {h.plan_expires_at && (
+            <div className="text-[10px] text-gray-400 mt-0.5">〜{fmtDate(h.plan_expires_at)}</div>
+          )}
+        </td>
         <td className="px-4 py-2 text-center font-mono font-semibold text-gray-700">
           {h.monthly_generates}
         </td>
@@ -545,7 +576,7 @@ function HospitalTableRow({
       {/* Expanded detail */}
       {isExpanded && (
         <tr>
-          <td colSpan={6} className="bg-gray-50 px-4 py-4">
+          <td colSpan={7} className="bg-gray-50 px-4 py-4">
             {detailLoading ? (
               <p className="text-gray-400 text-sm">読み込み中...</p>
             ) : detail ? (
