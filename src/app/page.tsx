@@ -185,6 +185,8 @@ export default function LandingPage() {
             <Link href="/privacy" className="hover:text-gray-600 transition-colors">プライバシーポリシー</Link>
             <span>|</span>
             <Link href="/terms" className="hover:text-gray-600 transition-colors">利用規約</Link>
+            <span>|</span>
+            <Link href="/tokushoho" className="hover:text-gray-600 transition-colors">特定商取引法に基づく表記</Link>
           </div>
           &copy; {new Date().getFullYear()} シフらく. All rights reserved.
         </div>

@@ -89,6 +89,8 @@ export default function PrivacyPolicyPage() {
             <span className="font-medium text-gray-500">プライバシーポリシー</span>
             <span>|</span>
             <Link href="/terms" className="hover:text-gray-600 transition-colors">利用規約</Link>
+            <span>|</span>
+            <Link href="/tokushoho" className="hover:text-gray-600 transition-colors">特定商取引法に基づく表記</Link>
           </div>
           &copy; {new Date().getFullYear()} シフらく. All rights reserved.
         </div>

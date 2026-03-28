@@ -99,6 +99,8 @@ export default function TermsPage() {
             <Link href="/privacy" className="hover:text-gray-600 transition-colors">プライバシーポリシー</Link>
             <span>|</span>
             <span className="font-medium text-gray-500">利用規約</span>
+            <span>|</span>
+            <Link href="/tokushoho" className="hover:text-gray-600 transition-colors">特定商取引法に基づく表記</Link>
           </div>
           &copy; {new Date().getFullYear()} シフらく. All rights reserved.
         </div>
