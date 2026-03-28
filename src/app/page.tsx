@@ -7,7 +7,7 @@ import { Hospital, Scale, Calendar, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import InlineDemo from "./components/InlineDemo";
-import { useAuth, getAuthHeaders } from "./hooks/useAuth";
+import { useAuth } from "./hooks/useAuth";
 
 export default function LandingPage() {
   const router = useRouter();
@@ -17,15 +17,8 @@ export default function LandingPage() {
   useEffect(() => {
     if (isLoading) return;
     if (auth.isAuthenticated) {
-      // Check user's default page preference
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
-        .then((res) => res.json())
-        .then((data: unknown) => {
-          const value = (data as Record<string, unknown>)?.value;
-          router.replace(value === "/dashboard" ? "/dashboard" : "/app");
-        })
-        .catch(() => router.replace("/app"));
+      const dest = window.innerWidth >= 768 ? "/dashboard" : "/app";
+      router.replace(dest);
     } else {
       setReady(true);
     }

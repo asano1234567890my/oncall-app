@@ -7,12 +7,14 @@ import type { LucideIcon } from "lucide-react";
 import { Loader2, Settings, ChevronRight, ChevronDown, X, UserCog, BarChart3, Calendar, Scale, Ban, AlertTriangle, ImagePlus, LogOut, Sparkles } from "lucide-react";
 // Shared
 import AppHeader from "../components/AppHeader";
+import EmailPromptBanner from "../components/EmailPromptBanner";
 import OnboardingModal from "../components/OnboardingModal";
 import SetupWizard from "../components/SetupWizard";
 // Mobile
 import MobileScheduleBoard from "../components/MobileScheduleBoard";
 import DoctorUnavailableDetail from "../components/DoctorUnavailableDetail";
 // Settings modals
+import EmailSetting from "../components/settings/EmailSetting";
 import RulesConfig from "../components/settings/RulesConfig";
 import WeightsConfig from "../components/settings/WeightsConfig";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
@@ -21,7 +23,6 @@ import UnavailableDaysInput from "../components/settings/UnavailableDaysInput";
 import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
-import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
 import ImageImportModal from "../components/ImageImportModal";
 import InfeasibleGuideModal from "../components/InfeasibleGuideModal";
@@ -196,6 +197,11 @@ export default function AppPage() {
         }
       />
 
+      {/* メアド登録バナー */}
+      <div className="px-4 pt-2">
+        <EmailPromptBanner hasEmail={core.auth.hasEmail} />
+      </div>
+
       {/* ━━━━━━━━━━ メインレイアウト ━━━━━━━━━━ */}
       {/* 年月バー */}
           <div className="flex items-center justify-between border-b bg-white px-4 py-2">
@@ -333,7 +339,7 @@ export default function AppPage() {
             </button>
           </div>
           <div className="mx-auto max-w-md p-4 space-y-6">
-            <DefaultPageSetting />
+            <EmailSetting />
             <hr className="border-gray-200" />
             <div>
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>

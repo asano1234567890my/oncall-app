@@ -89,6 +89,7 @@ uvicorn main:app --reload   # http://localhost:8000
 | `docs/development.md` | 開発環境セットアップ・よく使うコマンド |
 | `docs/product_strategy.md` | プロダクト戦略・ロードマップ・価格・GTM |
 | `docs/system_spec_for_ai_guide.md` | **AIガイド用システム仕様書**（機能実装時に必ず追記すること） |
+| `docs/future_schedule_requirements.md` | 将来対応したいシフト生成要件（現仕様では不可能なニーズの記録） |
 
 ---
 

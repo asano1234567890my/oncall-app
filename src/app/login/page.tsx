@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Hospital } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useAuth, getAuthHeaders } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,18 +14,12 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // ログイン済みならリダイレクト
+  // ログイン済みならリダイレクト（画面幅で自動判定）
   useEffect(() => {
     if (isAuthLoading) return;
     if (auth.isAuthenticated) {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() })
-        .then((res) => res.json())
-        .then((data: unknown) => {
-          const value = (data as Record<string, unknown>)?.value;
-          router.replace(value === "/dashboard" ? "/dashboard" : "/app");
-        })
-        .catch(() => router.replace("/app"));
+      const dest = window.innerWidth >= 768 ? "/dashboard" : "/app";
+      router.replace(dest);
     }
   }, [auth.isAuthenticated, isAuthLoading, router]);
 
@@ -36,15 +30,7 @@ export default function LoginPage() {
 
     try {
       await login(name, password);
-      // Check user's default page preference
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      let dest = "/app";
-      try {
-        const res = await fetch(`${apiUrl}/api/settings/kv/default_page`, { headers: getAuthHeaders() });
-        const data: unknown = await res.json();
-        const value = (data as Record<string, unknown>)?.value;
-        if (value === "/dashboard") dest = "/dashboard";
-      } catch { /* default to /app */ }
+      const dest = window.innerWidth >= 768 ? "/dashboard" : "/app";
       router.push(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "ログインに失敗しました");
@@ -83,11 +69,11 @@ export default function LoginPage() {
 
       {/* ログインカード */}
       <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-8">
-        <p className="text-sm text-gray-500 text-center mb-6">病院名とパスワードでログイン</p>
+        <p className="text-sm text-gray-500 text-center mb-6">病院名またはメールアドレスでログイン</p>
 
         <form onSubmit={(e) => { void handleSubmit(e); }} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">病院名</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">病院名 / メールアドレス</label>
             <input
               type="text"
               value={name}
@@ -95,7 +81,7 @@ export default function LoginPage() {
               required
               autoFocus
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Hospital name"
+              placeholder="病院名 or メールアドレス"
             />
           </div>
 

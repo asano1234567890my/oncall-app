@@ -20,8 +20,10 @@ from models.transfer_code import TransferCode
 from models.unavailable_day import UnavailableDay
 from services.auth_service import (
     create_hospital,
+    get_hospital_by_email,
     get_hospital_by_id,
     get_hospital_by_name,
+    get_hospital_by_name_or_email,
     update_password,
     verify_password,
 )
@@ -30,12 +32,13 @@ router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
 
 class LoginRequest(BaseModel):
-    name: str
+    name: str  # 施設名 or メールアドレス
     password: str
 
 
 class RegisterRequest(BaseModel):
     name: str
+    email: str
     password: str
 
 
@@ -44,6 +47,15 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     hospital_id: str
     hospital_name: str
+    has_email: bool = False
+
+
+class UpdateEmailRequest(BaseModel):
+    email: str
+
+
+class UpdateNameRequest(BaseModel):
+    name: str
 
 
 class ChangePasswordRequest(BaseModel):
@@ -53,17 +65,18 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    hospital = await get_hospital_by_name(db, body.name)
+    hospital = await get_hospital_by_name_or_email(db, body.name)
     if hospital is None or not verify_password(body.password, hospital.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="病院名またはパスワードが正しくありません",
+            detail="病院名（またはメールアドレス）かパスワードが正しくありません",
         )
     token = create_access_token(hospital.id)
     return TokenResponse(
         access_token=token,
         hospital_id=str(hospital.id),
         hospital_name=hospital.name,
+        has_email=hospital.email is not None,
     )
 
 
@@ -74,16 +87,25 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     if len(body.password) < 8:
         raise HTTPException(status_code=400, detail="パスワードは8文字以上必要です")
 
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="有効なメールアドレスを入力してください")
+
     existing = await get_hospital_by_name(db, body.name)
     if existing is not None:
         raise HTTPException(status_code=409, detail="その病院名はすでに登録されています")
 
-    hospital = await create_hospital(db, body.name, body.password)
+    existing_email = await get_hospital_by_email(db, email)
+    if existing_email is not None:
+        raise HTTPException(status_code=409, detail="そのメールアドレスはすでに登録されています")
+
+    hospital = await create_hospital(db, body.name, body.password, email=email)
     token = create_access_token(hospital.id)
     return TokenResponse(
         access_token=token,
         hospital_id=str(hospital.id),
         hospital_name=hospital.name,
+        has_email=True,
     )
 
 
@@ -102,6 +124,74 @@ async def change_password(
 
     await update_password(db, hospital_id, body.new_password)
     return {"message": "パスワードを変更しました"}
+
+
+# ── アカウント情報 ──
+
+
+@router.get("/me")
+async def get_me(
+    db: AsyncSession = Depends(get_db),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+):
+    hospital = await get_hospital_by_id(db, hospital_id)
+    if hospital is None:
+        raise HTTPException(status_code=404, detail="病院が見つかりません")
+    return {
+        "hospital_id": str(hospital.id),
+        "hospital_name": hospital.name,
+        "email": hospital.email,
+        "has_email": hospital.email is not None,
+    }
+
+
+@router.put("/email", status_code=200)
+async def update_email(
+    body: UpdateEmailRequest,
+    db: AsyncSession = Depends(get_db),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+):
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="有効なメールアドレスを入力してください")
+
+    existing = await get_hospital_by_email(db, email)
+    if existing is not None and existing.id != hospital_id:
+        raise HTTPException(status_code=409, detail="そのメールアドレスはすでに登録されています")
+
+    hospital = await get_hospital_by_id(db, hospital_id)
+    if hospital is None:
+        raise HTTPException(status_code=404, detail="病院が見つかりません")
+
+    hospital.email = email
+    await db.commit()
+    return {"message": "メールアドレスを登録しました", "email": email}
+
+
+@router.put("/name", status_code=200)
+async def update_name(
+    body: UpdateNameRequest,
+    db: AsyncSession = Depends(get_db),
+    hospital_id: uuid.UUID = Depends(get_current_hospital),
+):
+    name = body.name.strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=400, detail="病院名は2文字以上必要です")
+
+    hospital = await get_hospital_by_id(db, hospital_id)
+    if hospital is None:
+        raise HTTPException(status_code=404, detail="病院が見つかりません")
+
+    if hospital.email is None:
+        raise HTTPException(status_code=400, detail="メールアドレスを先に登録してください（病院名変更にはメアド登録が必要です）")
+
+    existing = await get_hospital_by_name(db, name)
+    if existing is not None and existing.id != hospital_id:
+        raise HTTPException(status_code=409, detail="その病院名はすでに使用されています")
+
+    hospital.name = name
+    await db.commit()
+    return {"message": "病院名を変更しました", "hospital_name": name}
 
 
 # ── データエクスポート ──

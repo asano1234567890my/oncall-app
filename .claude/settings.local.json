@@ -130,7 +130,15 @@
       "Bash(backend/.venv/Scripts/python -m alembic revision --autogenerate -m \"add_is_external_to_doctors\" 2>&1)",
       "Bash(backend/.venv/Scripts/python -m alembic upgrade head 2>&1)",
       "Bash(find /c/Users/user/oncall-app -maxdepth 2 -type f \\\\\\(-name render.yaml -o -name Procfile -o -name docker-compose.yml -o -name .github -o -name *.yml \\\\\\))",
-      "Bash(find /c/Users/user/oncall-app -maxdepth 3 -name *development* -o -name *database* -o -name *deploy*)"
+      "Bash(find /c/Users/user/oncall-app -maxdepth 3 -name *development* -o -name *database* -o -name *deploy*)",
+      "Bash(backend/.venv/Scripts/python -m alembic current 2>&1)",
+      "Bash(find /c/Users/user/oncall-app/src/app -name \"page.tsx\" -exec wc -l {} +)",
+      "Bash(alembic heads:*)",
+      "Bash(/c/Users/user/oncall-app/backend/.venv/Scripts/python.exe -m alembic -c /c/Users/user/oncall-app/alembic.ini heads 2>&1)",
+      "Bash(/c/Users/user/oncall-app/backend/.venv/Scripts/python.exe -m alembic -c /c/Users/user/oncall-app/alembic.ini revision --autogenerate -m \"add email column to hospitals\" 2>&1)",
+      "Bash(/c/Users/user/oncall-app/backend/.venv/Scripts/python.exe -m alembic -c /c/Users/user/oncall-app/alembic.ini upgrade head 2>&1)",
+      "Bash(/c/Users/user/oncall-app/backend/.venv/Scripts/python.exe -c \"import py_compile; py_compile.compile\\('backend/routers/auth.py', doraise=True\\); py_compile.compile\\('backend/services/auth_service.py', doraise=True\\); py_compile.compile\\('backend/models/hospital.py', doraise=True\\); py_compile.compile\\('backend/main.py', doraise=True\\); print\\('All OK'\\)\" 2>&1)",
+      "Bash(/c/Users/user/oncall-app/backend/.venv/Scripts/python.exe -c \"import py_compile; py_compile.compile\\('backend/routers/auth.py', doraise=True\\); print\\('OK'\\)\" 2>&1)"
     ]
   }
 }

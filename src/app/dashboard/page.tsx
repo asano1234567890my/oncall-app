@@ -5,13 +5,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Settings, X, ImagePlus } from "lucide-react";
 import AppHeader from "../components/AppHeader";
+import EmailPromptBanner from "../components/EmailPromptBanner";
 import DashboardScheduleTable from "../components/DashboardScheduleTable";
 import DashboardToolbar from "../components/DashboardToolbar";
 import DoctorPalette from "../components/DoctorPalette";
 import SettingsSlidePanel from "../components/SettingsSlidePanel";
 import DashboardSettingsPanel from "../components/DashboardSettingsPanel";
+import EmailSetting from "../components/settings/EmailSetting";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
-import DefaultPageSetting from "../components/settings/DefaultPageSetting";
 import AccountActions from "../components/settings/AccountActions";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
 import ImageImportModal from "../components/ImageImportModal";
@@ -118,6 +119,7 @@ export default function DashboardPage() {
 
       {/* Schedule area */}
       <main className="p-4">
+          <EmailPromptBanner hasEmail={core.auth.hasEmail} />
           {/* Loading overlay */}
           {core.isLoading && <DashboardLoadingOverlay viewportZoom={viewportZoom} />}
 
@@ -302,7 +304,7 @@ export default function DashboardPage() {
               医師管理（追加・編集・共有・ロック）
             </button>
             <hr className="border-gray-200" />
-            <DefaultPageSetting />
+            <EmailSetting />
             <hr className="border-gray-200" />
             <div>
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>

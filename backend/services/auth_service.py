@@ -22,13 +22,27 @@ async def get_hospital_by_name(db: AsyncSession, name: str) -> Hospital | None:
     return result.scalar_one_or_none()
 
 
+async def get_hospital_by_email(db: AsyncSession, email: str) -> Hospital | None:
+    result = await db.execute(select(Hospital).where(Hospital.email == email))
+    return result.scalar_one_or_none()
+
+
+async def get_hospital_by_name_or_email(db: AsyncSession, identifier: str) -> Hospital | None:
+    """施設名またはメールアドレスで検索。@を含む場合はメアド優先。"""
+    if "@" in identifier:
+        hospital = await get_hospital_by_email(db, identifier)
+        if hospital:
+            return hospital
+    return await get_hospital_by_name(db, identifier)
+
+
 async def get_hospital_by_id(db: AsyncSession, hospital_id: uuid.UUID) -> Hospital | None:
     result = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
     return result.scalar_one_or_none()
 
 
-async def create_hospital(db: AsyncSession, name: str, password: str) -> Hospital:
-    hospital = Hospital(name=name, password_hash=hash_password(password))
+async def create_hospital(db: AsyncSession, name: str, password: str, email: str | None = None) -> Hospital:
+    hospital = Hospital(name=name, email=email, password_hash=hash_password(password))
     db.add(hospital)
     await db.commit()
     await db.refresh(hospital)

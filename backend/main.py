@@ -31,10 +31,12 @@ if hasattr(settings, "backend_cors_origins") and settings.backend_cors_origins:
     origins.extend(settings.backend_cors_origins)
 
 frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url == "*":
-    origins = ["*"]
-elif frontend_url:
-    origins.append(frontend_url.strip("/"))
+if frontend_url:
+    # カンマ区切りで複数ドメインを指定可能（例: "https://example.vercel.app,https://example.com"）
+    for url in frontend_url.split(","):
+        url = url.strip().strip("/")
+        if url and url != "*":
+            origins.append(url)
 
 origins = list(set(origins))
 
