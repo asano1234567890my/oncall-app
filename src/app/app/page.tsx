@@ -24,6 +24,7 @@ import ShiftScoresConfig from "../components/settings/ShiftScoresConfig";
 import SettingsModalPortal from "../components/settings/SettingsModalPortal";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import AccountActions from "../components/settings/AccountActions";
+import BillingSection from "../components/BillingSection";
 import ImageImportModal from "../components/ImageImportModal";
 import InfeasibleGuideModal from "../components/InfeasibleGuideModal";
 import AiGuideChat from "../components/AiGuideChat";
@@ -346,6 +347,8 @@ export default function AppPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
               <PasswordChangeForm />
             </div>
+            <hr className="border-gray-200" />
+            <BillingSection />
             <hr className="border-gray-200" />
             <button
               onClick={() => { setIsAccountSettingsOpen(false); handleRedoSetup(); }}

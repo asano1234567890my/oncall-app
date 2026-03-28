@@ -14,6 +14,7 @@ import DashboardSettingsPanel from "../components/DashboardSettingsPanel";
 import EmailSetting from "../components/settings/EmailSetting";
 import PasswordChangeForm from "../components/settings/PasswordChangeForm";
 import AccountActions from "../components/settings/AccountActions";
+import BillingSection from "../components/BillingSection";
 import DoctorManageDrawer from "../components/settings/DoctorManageDrawer";
 import ImageImportModal from "../components/ImageImportModal";
 import HolidayMismatchBanner from "../components/HolidayMismatchBanner";
@@ -311,6 +312,8 @@ export default function DashboardPage() {
               <h3 className="text-sm font-bold text-gray-800 mb-3">パスワード変更</h3>
               <PasswordChangeForm />
             </div>
+            <hr className="border-gray-200" />
+            <BillingSection />
             <hr className="border-gray-200" />
             <button
               onClick={() => { if (window.confirm("ログアウトしますか？")) { setIsSettingsOpen(false); core.logout(); } }}
