@@ -7,6 +7,9 @@ import { getAuthHeaders } from "../hooks/useAuth";
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  insightId?: string;
+  category?: string;
+  submitted?: boolean;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -83,10 +86,10 @@ export default function AiGuideChat() {
 
       if (!res.ok) throw new Error("API error");
 
-      const data = (await res.json()) as { reply: string };
+      const data = (await res.json()) as { reply: string; insight_id?: string; category?: string };
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: data.reply },
+        { role: "assistant", content: data.reply, insightId: data.insight_id, category: data.category },
       ]);
     } catch {
       setMessages((prev) => [
@@ -99,6 +102,18 @@ export default function AiGuideChat() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleSubmitTodev = async (insightId: string, msgIndex: number) => {
+    try {
+      await fetch(`${API_URL}/api/guide/${insightId}/submit`, {
+        method: "PATCH",
+        headers: { ...getAuthHeaders() },
+      });
+      setMessages((prev) =>
+        prev.map((m, i) => (i === msgIndex ? { ...m, submitted: true } : m))
+      );
+    } catch { /* ignore */ }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -161,21 +176,37 @@ export default function AiGuideChat() {
 
           {/* Conversation */}
           {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex ${
-                msg.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+            <div key={i}>
               <div
-                className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
-                  msg.role === "user"
-                    ? "bg-indigo-600 text-white rounded-br-sm"
-                    : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                className={`flex ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
                 }`}
               >
-                {msg.content}
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+                    msg.role === "user"
+                      ? "bg-indigo-600 text-white rounded-br-sm"
+                      : "bg-gray-100 text-gray-800 rounded-bl-sm"
+                  }`}
+                >
+                  {msg.content}
+                </div>
               </div>
+              {msg.role === "assistant" && msg.category === "feature_request" && msg.insightId && (
+                <div className="flex justify-start mt-1.5 ml-1">
+                  {msg.submitted ? (
+                    <span className="text-xs text-green-600">開発者に送信しました</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleSubmitTodev(msg.insightId!, i)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                    >
+                      この内容を開発者に送信する
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 

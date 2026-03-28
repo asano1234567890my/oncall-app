@@ -11,8 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.auth import get_current_superadmin_dep
 from core.db import get_db
 from models.doctor import Doctor
+from models.guide_insight import GuideInsight
 from models.hospital import Hospital
 from models.usage_event import UsageEvent
+from schemas.guide_insight import (
+    CategoryCount,
+    FeatureRequestRanking,
+    GuideInsightWithHospital,
+    GuideInsightsSummary,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -388,3 +395,88 @@ async def hospital_usage_detail(
             for row in recent_rows
         ],
     }
+
+
+# ── Guide Insights ──
+
+
+@router.get("/guide-insights", response_model=list[GuideInsightWithHospital])
+async def list_guide_insights(
+    _: uuid.UUID = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+    category: str | None = None,
+    days: int = 30,
+    limit: int = 200,
+):
+    """AIガイド質問インサイト一覧"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    stmt = (
+        select(GuideInsight, Hospital.name.label("hospital_name"))
+        .join(Hospital, GuideInsight.hospital_id == Hospital.id)
+        .where(GuideInsight.created_at >= cutoff)
+        .order_by(GuideInsight.created_at.desc())
+        .limit(limit)
+    )
+    if category:
+        stmt = stmt.where(GuideInsight.category == category)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+    return [
+        GuideInsightWithHospital(
+            id=row.GuideInsight.id,
+            hospital_id=row.GuideInsight.hospital_id,
+            category=row.GuideInsight.category,
+            summary=row.GuideInsight.summary,
+            feature_request=row.GuideInsight.feature_request,
+            user_message=row.GuideInsight.user_message,
+            created_at=row.GuideInsight.created_at,
+            hospital_name=row.hospital_name,
+        )
+        for row in rows
+    ]
+
+
+@router.get("/guide-insights/summary", response_model=GuideInsightsSummary)
+async def guide_insights_summary(
+    _: uuid.UUID = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+    days: int = 90,
+):
+    """AIガイド質問インサイト サマリー"""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+    # Total count
+    total_result = await db.execute(
+        select(func.count()).select_from(GuideInsight).where(GuideInsight.created_at >= cutoff)
+    )
+    total = total_result.scalar() or 0
+
+    # By category
+    cat_result = await db.execute(
+        select(GuideInsight.category, func.count().label("count"))
+        .where(GuideInsight.created_at >= cutoff)
+        .group_by(GuideInsight.category)
+        .order_by(func.count().desc())
+    )
+    by_category = [CategoryCount(category=row.category, count=row.count) for row in cat_result.all()]
+
+    # Feature request ranking (group by summary similarity — simple exact match for now)
+    fr_result = await db.execute(
+        select(
+            GuideInsight.summary,
+            func.count().label("count"),
+            func.max(GuideInsight.created_at).label("latest"),
+        )
+        .where(GuideInsight.created_at >= cutoff)
+        .where(GuideInsight.category == "feature_request")
+        .group_by(GuideInsight.summary)
+        .order_by(func.count().desc())
+        .limit(20)
+    )
+    feature_requests = [
+        FeatureRequestRanking(summary=row.summary, count=row.count, latest=row.latest)
+        for row in fr_result.all()
+    ]
+
+    return GuideInsightsSummary(total=total, by_category=by_category, feature_requests=feature_requests)
