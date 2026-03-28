@@ -21,12 +21,11 @@ logger = logging.getLogger(__name__)
 # ── Metadata parsing ──
 
 GUIDE_META_PATTERN = re.compile(
-    r"\[GUIDE_META\]\s*\n"
-    r"category:\s*(.+)\s*\n"
-    r"summary:\s*(.+)\s*\n"
-    r"feature_request:\s*(.+)\s*\n"
-    r"\[/GUIDE_META\]\s*$",
-    re.DOTALL,
+    r"\[GUIDE_META\]\s*\n?"
+    r"\s*category:\s*(.+?)\s*\n"
+    r"\s*summary:\s*(.+?)\s*\n"
+    r"\s*feature_request:\s*(.+?)\s*\n?"
+    r"\s*\[/GUIDE_META\]",
 )
 
 VALID_CATEGORIES = {"usage_question", "troubleshooting", "feature_request", "workflow_advice", "general"}
@@ -36,6 +35,7 @@ def _parse_guide_meta(text: str) -> tuple[str, dict | None]:
     """回答テキストからGUIDE_METAタグをパースし、除去した回答とメタデータを返す"""
     match = GUIDE_META_PATTERN.search(text)
     if not match:
+        logger.info("GUIDE_META not found in response")
         return text.strip(), None
 
     category = match.group(1).strip()

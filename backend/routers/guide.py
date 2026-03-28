@@ -37,7 +37,7 @@ async def guide_chat(
         [m.model_dump() for m in req.history],
     )
 
-    # Record insight (fire-and-forget)
+    # Record insight
     insight_id = None
     category = None
     if meta:
@@ -55,6 +55,7 @@ async def guide_chat(
             await db.flush()
             insight_id = str(insight.id)
             category = meta["category"]
+            pass
         except Exception:
             pass  # Don't break chat for analytics failure
 
